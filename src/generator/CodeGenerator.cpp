@@ -1172,7 +1172,7 @@ namespace mockfakegen
 			files.push_back(GenerateFakeSource(simple_class));
 		}
 
-		files.push_back(MakeThreadLocalRuntimeHeader());
+		files.push_back(MakeRuntimeHeader(options.registry_mode));
 		if (options.emit_all_mocks)
 		{
 			files.push_back(GenerateAllMocksHeader(files));

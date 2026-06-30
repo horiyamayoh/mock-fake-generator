@@ -488,7 +488,11 @@ namespace mockfakegen
 				{
 					config.registry_mode = RegistryMode::ThreadLocal;
 				}
-				else if (*value == "global-mutex" || *value == "shared-owner")
+				else if (*value == "global-mutex")
+				{
+					config.registry_mode = RegistryMode::GlobalMutex;
+				}
+				else if (*value == "shared-owner")
 				{
 					AddDeferredError(result.errors,
 									 kRegistryModeOption,
@@ -791,7 +795,7 @@ namespace mockfakegen
 			"  --std <value>           c++23 only.\n"
 			"  --header-extension <ext> .h only.\n"
 			"  --access <policy>       public only; protected/private are deferred.\n"
-			"  --registry-mode <mode>  thread-local; global-mutex/shared-owner are deferred.\n"
+			"  --registry-mode <mode>  thread-local or global-mutex; shared-owner is deferred.\n"
 			"  --fallback-policy <p>   abort; other policies are deferred.\n"
 			"  --mock-namespace-mode <mode> same-as-product.\n"
 			"  --collision-policy <policy> qualified-filename.\n"

@@ -274,10 +274,22 @@ namespace
 			   "duplicate option diagnostic should be deterministic");
 	}
 
-	void ReportsDeferredOptions()
+	void ParsesGlobalMutexRegistryMode()
 	{
 		auto args = ValidArgs();
 		args.push_back("--registry-mode=global-mutex");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "global-mutex registry mode should parse");
+		Expect(result.config->registry_mode == mockfakegen::RegistryMode::GlobalMutex,
+			   "registry mode should be global-mutex");
+	}
+
+	void ReportsDeferredOptions()
+	{
+		auto args = ValidArgs();
+		args.push_back("--registry-mode=shared-owner");
 
 		const auto result = mockfakegen::ParseConfig(args);
 
@@ -288,7 +300,7 @@ namespace
 		Expect(result.errors[0].option == "--registry-mode",
 			   "deferred option should identify option");
 		Expect(result.errors[0].message ==
-				   "--registry-mode is deferred: registry mode 'global-mutex' is deferred.",
+				   "--registry-mode is deferred: registry mode 'shared-owner' is deferred.",
 			   "deferred option diagnostic should be deterministic");
 	}
 
@@ -385,6 +397,7 @@ int main()
 	ReportsInvalidValidate();
 	ReportsStrictBestEffortConflict();
 	ReportsDuplicateOptions();
+	ParsesGlobalMutexRegistryMode();
 	ReportsDeferredOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();

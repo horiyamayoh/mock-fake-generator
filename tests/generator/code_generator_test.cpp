@@ -391,6 +391,23 @@ namespace
 			   "manifest should omit collision section when filenames are unique");
 	}
 
+	void ProjectOptionsSelectGlobalMutexRuntime()
+	{
+		const std::vector classes = {ReportBetaModel()};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(
+			classes,
+			mockfakegen::ProjectGenerationOptions{
+				.registry_mode = mockfakegen::RegistryMode::GlobalMutex,
+			});
+
+		const auto& runtime = FindFile(files, "MockFakeRuntime.h");
+		Expect(Contains(runtime.content, "#include <mutex>"),
+			   "global-mutex project should generate mutex runtime");
+		Expect(!Contains(runtime.content, "thread_local"),
+			   "global-mutex project should not generate thread-local runtime");
+	}
+
 	void CMakeFragmentUsesOnlyLinkReadyFakeSources()
 	{
 		const auto files = mockfakegen::GenerateMockFakeProject(
@@ -450,6 +467,7 @@ int main()
 	GeneratesManifestJson();
 	ResolvesQualifiedFilenameCollisions();
 	KeepsShortFilenamesWithoutCollision();
+	ProjectOptionsSelectGlobalMutexRuntime();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();

@@ -446,7 +446,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--class-filter <regex>` | value | none | deferred | ClassExtractor | 使用時は `DeferredOption` |
 | `--access <policy>` | value | `public` | `public` implemented, `protected` / `private` deferred | ClassExtractor / PolicyEngine | unknown value invalid。deferred value は `DeferredOption` |
 | `--include-struct <bool>` | bool value | `false` | `false` implemented, `true` deferred | ClassExtractor | `true` は `DeferredOption` |
-| `--registry-mode <mode>` | value | `thread-local` | `thread-local` implemented, `global-mutex` / `shared-owner` deferred | runtime template | unknown value invalid。deferred value は `DeferredOption` |
+| `--registry-mode <mode>` | value | `thread-local` | `thread-local` / `global-mutex` implemented, `shared-owner` deferred | runtime template | unknown value invalid。deferred value は `DeferredOption` |
 | `--fallback-policy <policy>` | value | `abort` | `abort` implemented, `default-return` / `throw` / `compile-error` deferred | PolicyEngine / runtime template | unknown value invalid。deferred value は `DeferredOption` |
 | `--mock-namespace-mode <mode>` | value | `same-as-product` | `same-as-product` only | CodeGenerator | 他値は invalid |
 | `--collision-policy <policy>` | value | `qualified-filename` | `qualified-filename` only | CodeGenerator | 他値は invalid |

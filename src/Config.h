@@ -33,6 +33,7 @@ namespace mockfakegen
 	enum class RegistryMode
 	{
 		ThreadLocal,
+		GlobalMutex,
 	};
 
 	enum class FallbackPolicy

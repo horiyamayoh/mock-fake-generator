@@ -56,6 +56,38 @@ namespace
 			   "runtime should not include ket angle headers");
 	}
 
+	void BuildsGlobalMutexRuntimeGeneratedFile()
+	{
+		const auto file = mockfakegen::MakeGlobalMutexRuntimeHeader();
+		Expect(file.relative_path == "MockFakeRuntime.h",
+			   "global runtime path should be deterministic");
+		Expect(file.kind == mockfakegen::GeneratedFileKind::RuntimeHeader,
+			   "global runtime generated file should have runtime kind");
+		Expect(!file.source_class.has_value(),
+			   "global runtime generated file should not have source class");
+		Expect(Contains(file.content, "#include <mutex>"), "global runtime should include mutex");
+		Expect(Contains(file.content, "static std::mutex mutex;"),
+			   "global runtime should use a static mutex");
+		Expect(Contains(file.content, "static std::vector<Mock*> stack;"),
+			   "global runtime should use a process-global stack");
+		Expect(!Contains(file.content, "thread_local"),
+			   "global runtime should not use thread-local storage");
+		Expect(!Contains(file.content, "ket::"), "global runtime should not contain ket namespace");
+		Expect(!Contains(file.content, "#include \"ket_"),
+			   "global runtime should not include ket quoted headers");
+		Expect(!Contains(file.content, "#include <ket_"),
+			   "global runtime should not include ket angle headers");
+	}
+
+	void RuntimeModeSelectionUsesGlobalMutex()
+	{
+		const auto file = mockfakegen::MakeRuntimeHeader(mockfakegen::RegistryMode::GlobalMutex);
+		Expect(Contains(file.content, "#include <mutex>"),
+			   "runtime mode selection should produce global-mutex runtime");
+		Expect(!Contains(file.content, "thread_local"),
+			   "runtime mode selection should not produce thread-local runtime");
+	}
+
 	void MatchesGeneratedFixture()
 	{
 		const auto expected = ReadText(std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) /
@@ -63,11 +95,24 @@ namespace
 		const auto file = mockfakegen::MakeThreadLocalRuntimeHeader();
 		Expect(file.content == expected, "runtime template output should match generated fixture");
 	}
+
+	void MatchesGlobalMutexGeneratedFixture()
+	{
+		const auto expected =
+			ReadText(std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) /
+					 "tests/fixtures/generated_runtime_global_mutex/MockFakeRuntime.h");
+		const auto file = mockfakegen::MakeGlobalMutexRuntimeHeader();
+		Expect(file.content == expected,
+			   "global runtime template output should match generated fixture");
+	}
 } // namespace
 
 int main()
 {
 	BuildsRuntimeGeneratedFile();
+	BuildsGlobalMutexRuntimeGeneratedFile();
+	RuntimeModeSelectionUsesGlobalMutex();
 	MatchesGeneratedFixture();
+	MatchesGlobalMutexGeneratedFixture();
 	return 0;
 }

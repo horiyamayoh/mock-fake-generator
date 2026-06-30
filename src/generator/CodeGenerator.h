@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Config.h"
 #include "model/GeneratedFile.h"
 #include "model/ProjectModel.h"
 
@@ -41,6 +42,7 @@ namespace mockfakegen
 
 	struct ProjectGenerationOptions
 	{
+		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		bool emit_all_mocks = true;
 		bool emit_cmake_fragment = true;
 		bool emit_manifest = true;
