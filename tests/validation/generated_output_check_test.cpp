@@ -132,10 +132,11 @@ namespace
 			source_dir / "tests/fixtures/hoge/generated",
 			source_dir / "tests/fixtures/namespaced/generated",
 			source_dir / "tests/fixtures/overload/generated",
+			source_dir / "tests/fixtures/qualifier/generated",
 		});
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 9U, "generated fixtures should be included");
+		Expect(result.checked_file_count == 12U, "generated fixtures should be included");
 	}
 } // namespace
 

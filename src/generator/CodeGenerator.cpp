@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "runtime_template/RuntimeTemplate.h"
 
@@ -137,6 +138,100 @@ namespace mockfakegen
 			return text;
 		}
 
+		[[nodiscard]] std::string MethodQualifiers(const SimpleMethodModel& method)
+		{
+			std::string text;
+			if (method.is_const)
+			{
+				text += " const";
+			}
+
+			switch (method.ref_qualifier)
+			{
+				case RefQualifierKind::None:
+					break;
+				case RefQualifierKind::LValue:
+					text += method.is_const ? "&" : " &";
+					break;
+				case RefQualifierKind::RValue:
+					text += method.is_const ? "&&" : " &&";
+					break;
+			}
+
+			if (method.is_noexcept)
+			{
+				text += " noexcept";
+			}
+			return text;
+		}
+
+		[[nodiscard]] std::string GMockMethodSpecs(const SimpleMethodModel& method)
+		{
+			std::vector<std::string> specs;
+			if (method.is_const)
+			{
+				specs.push_back("const");
+			}
+			if (method.is_noexcept)
+			{
+				specs.push_back("noexcept");
+			}
+
+			switch (method.ref_qualifier)
+			{
+				case RefQualifierKind::None:
+					break;
+				case RefQualifierKind::LValue:
+					specs.push_back("ref(&)");
+					break;
+				case RefQualifierKind::RValue:
+					specs.push_back("ref(&&)");
+					break;
+			}
+
+			std::string text;
+			for (std::size_t index = 0U; index < specs.size(); ++index)
+			{
+				if (index != 0U)
+				{
+					text += ", ";
+				}
+				text += specs[index];
+			}
+			return text;
+		}
+
+		[[nodiscard]] bool NeedsUtilityInclude(const SimpleClassModel& class_model)
+		{
+			for (const auto& method : class_model.methods)
+			{
+				if (method.ref_qualifier == RefQualifierKind::RValue)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		[[nodiscard]] std::string MockCallExpression(const SimpleMethodModel& method,
+													 const std::string& parameter_names)
+		{
+			std::string text;
+			if (method.ref_qualifier == RefQualifierKind::RValue)
+			{
+				text += "std::move(*mock).";
+			}
+			else
+			{
+				text += "mock->";
+			}
+			text += method.name;
+			text += '(';
+			text += parameter_names;
+			text += ')';
+			return text;
+		}
+
 		[[nodiscard]] std::string DiagnosticSignature(const SimpleClassModel& class_model,
 													  const SimpleMethodModel& method)
 		{
@@ -146,6 +241,7 @@ namespace mockfakegen
 			text += '(';
 			text += JoinParameterTypes(method.parameters);
 			text += ')';
+			text += MethodQualifiers(method);
 			return text;
 		}
 
@@ -171,7 +267,8 @@ namespace mockfakegen
 			for (const auto& method : class_model.methods)
 			{
 				out << member_indent << "MOCK_METHOD(" << method.return_type << ", " << method.name
-					<< ", (" << JoinParameterTypes(method.parameters) << "), ());\n";
+					<< ", (" << JoinParameterTypes(method.parameters) << "), ("
+					<< GMockMethodSpecs(method) << "));\n";
 			}
 
 			out << indent << "};\n\n"
@@ -186,6 +283,10 @@ namespace mockfakegen
 		{
 			const auto mock_class_name = MockClassName(class_model);
 			std::ostringstream out;
+			if (NeedsUtilityInclude(class_model))
+			{
+				out << "#include <utility>\n\n";
+			}
 			out << "#include \"" << class_model.header_include << "\"\n"
 				<< "#include \"" << mock_class_name << ".h\"\n\n";
 
@@ -198,11 +299,13 @@ namespace mockfakegen
 			{
 				const auto parameter_declarations = JoinParameterDeclarations(method.parameters);
 				const auto parameter_names = JoinParameterNames(method.parameters);
+				const auto mock_call = MockCallExpression(method, parameter_names);
 				const auto signature = DiagnosticSignature(class_model, method);
 				const auto is_void_return = method.return_type == "void";
 
 				out << indent << method.return_type << ' ' << class_model.name
-					<< "::" << method.name << '(' << parameter_declarations << ")\n"
+					<< "::" << method.name << '(' << parameter_declarations << ')'
+					<< MethodQualifiers(method) << "\n"
 					<< indent << "{\n"
 					<< body_indent << "if (auto* mock = ::mockfake::CurrentMock<" << mock_class_name
 					<< ">())\n"
@@ -210,14 +313,12 @@ namespace mockfakegen
 
 				if (is_void_return)
 				{
-					out << nested_body_indent << "mock->" << method.name << '(' << parameter_names
-						<< ");\n"
+					out << nested_body_indent << mock_call << ";\n"
 						<< nested_body_indent << "return;\n";
 				}
 				else
 				{
-					out << nested_body_indent << "return mock->" << method.name << '('
-						<< parameter_names << ");\n";
+					out << nested_body_indent << "return " << mock_call << ";\n";
 				}
 
 				out << body_indent << "}\n\n"
@@ -277,6 +378,9 @@ namespace mockfakegen
 				.return_type = method.return_type_spelling,
 				.name = method.name,
 				.parameters = {},
+				.is_const = method.is_const,
+				.is_noexcept = method.is_noexcept,
+				.ref_qualifier = method.ref_qualifier,
 			};
 			simple_method.parameters.reserve(method.parameters.size());
 

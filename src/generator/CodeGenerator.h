@@ -19,6 +19,9 @@ namespace mockfakegen
 		std::string return_type;
 		std::string name;
 		std::vector<SimpleParameterModel> parameters;
+		bool is_const = false;
+		bool is_noexcept = false;
+		RefQualifierKind ref_qualifier = RefQualifierKind::None;
 	};
 
 	struct SimpleClassModel
