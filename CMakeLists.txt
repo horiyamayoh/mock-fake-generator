@@ -54,6 +54,7 @@ add_library(
 		src/output/OutputWriter.cpp
 		src/runtime_template/RuntimeTemplate.cpp
 		src/support/CliSupport.cpp
+		src/validation/GeneratedOutputCheck.cpp
 )
 target_include_directories(mockfakegen_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(mockfakegen_core PRIVATE mockfakegen_ket)
@@ -230,6 +231,33 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_hoge_generated_smoke)
 
 	add_test(NAME mockfakegen_hoge_generated_smoke COMMAND mockfakegen_hoge_generated_smoke)
+
+	add_executable(
+		mockfakegen_generated_output_check_test
+		tests/validation/generated_output_check_test.cpp
+	)
+	target_link_libraries(mockfakegen_generated_output_check_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_generated_output_check_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_generated_output_check_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_generated_output_check_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_generated_output_check_test)
+	mockfakegen_apply_sanitizers(mockfakegen_generated_output_check_test)
+
+	add_test(NAME mockfakegen_generated_output_check_test COMMAND mockfakegen_generated_output_check_test)
+	add_custom_target(
+		check-generated-output
+		COMMAND mockfakegen_generated_output_check_test
+		DEPENDS mockfakegen_generated_output_check_test
+		COMMENT "Checking generated-output fixtures for forbidden ket tokens"
+	)
 
 	add_executable(mockfakegen_runtime_template_test tests/runtime/runtime_template_test.cpp)
 	target_link_libraries(mockfakegen_runtime_template_test PRIVATE mockfakegen_core)
