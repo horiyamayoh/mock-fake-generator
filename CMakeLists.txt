@@ -125,6 +125,7 @@ add_library(
 	mockfakegen_core
 		src/Config.cpp
 		src/FormatStyle.cpp
+		src/ValidationMode.cpp
 		src/clang/ClassExtractor.cpp
 		src/clang/SyntheticTuParser.cpp
 		src/clang/TypeSpellingService.cpp
@@ -136,6 +137,7 @@ add_library(
 		src/output/OutputWriter.cpp
 		src/runtime_template/RuntimeTemplate.cpp
 		src/support/CliSupport.cpp
+		src/validation/GeneratedCompileValidator.cpp
 		src/validation/GeneratedOutputCheck.cpp
 )
 target_include_directories(mockfakegen_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -201,6 +203,18 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	else()
 		message(FATAL_ERROR "gMock is required for generated-output smoke tests.")
 	endif()
+
+	set(MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS "")
+	if(DEFINED googletest_SOURCE_DIR)
+		list(
+			APPEND
+			MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS
+				"${googletest_SOURCE_DIR}/googlemock/include"
+				"${googletest_SOURCE_DIR}/googletest/include"
+		)
+	endif()
+	list(REMOVE_DUPLICATES MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS)
+	string(JOIN "|" MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS_TEXT ${MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS})
 
 	add_executable(mockfakegen_config_cli_test tests/config/config_cli_test.cpp)
 	target_link_libraries(mockfakegen_config_cli_test PRIVATE mockfakegen_core)
@@ -684,6 +698,32 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_all_mocks_generated_smoke)
 
 	add_test(NAME mockfakegen_all_mocks_generated_smoke COMMAND mockfakegen_all_mocks_generated_smoke)
+
+	add_executable(
+		mockfakegen_generated_compile_validator_test
+		tests/validation/generated_compile_validator_test.cpp
+	)
+	target_link_libraries(mockfakegen_generated_compile_validator_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_generated_compile_validator_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+			MOCKFAKEGEN_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
+			MOCKFAKEGEN_GMOCK_INCLUDE_DIRS="${MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS_TEXT}"
+	)
+	target_compile_features(mockfakegen_generated_compile_validator_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_generated_compile_validator_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_generated_compile_validator_test)
+	mockfakegen_apply_sanitizers(mockfakegen_generated_compile_validator_test)
+
+	add_test(
+		NAME mockfakegen_generated_compile_validator_test
+		COMMAND mockfakegen_generated_compile_validator_test
+	)
 
 	add_executable(
 		mockfakegen_reporting_generation_test

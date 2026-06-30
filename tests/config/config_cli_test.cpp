@@ -48,6 +48,8 @@ namespace
 		Expect(result.config->emit_all_mocks, "emit-all-mocks should default true");
 		Expect(result.config->format_style == mockfakegen::FormatStyleKind::File,
 			   "format style should default to file");
+		Expect(result.config->validate == mockfakegen::ValidationMode::Compile,
+			   "validate should default to compile");
 		Expect(result.config->jobs == 3, "jobs should parse as integer");
 	}
 
@@ -72,6 +74,18 @@ namespace
 		Expect(result.ok(), "format-style google config should parse");
 		Expect(result.config->format_style == mockfakegen::FormatStyleKind::Google,
 			   "format-style should parse google");
+	}
+
+	void ParsesValidateNone()
+	{
+		auto args = ValidArgs();
+		args.push_back("--validate=none");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "validate none config should parse");
+		Expect(result.config->validate == mockfakegen::ValidationMode::None,
+			   "validate should parse none");
 	}
 
 	void ReportsMissingRequiredOptions()
@@ -133,6 +147,20 @@ namespace
 			   "invalid format-style diagnostic should be deterministic");
 	}
 
+	void ReportsInvalidValidate()
+	{
+		auto args = ValidArgs();
+		args.push_back("--validate=link");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "invalid validate should fail");
+		Expect(result.errors.size() == 1U, "invalid validate should produce one error");
+		Expect(result.errors[0].option == "--validate", "invalid validate should identify option");
+		Expect(result.errors[0].message == "--validate must be none, syntax, or compile.",
+			   "invalid validate diagnostic should be deterministic");
+	}
+
 	void ReportsStrictBestEffortConflict()
 	{
 		auto args = ValidArgs();
@@ -185,10 +213,12 @@ int main()
 	ParsesValidConfig();
 	ParsesEmitAllMocksFalse();
 	ParsesFormatStyleGoogle();
+	ParsesValidateNone();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();
 	ReportsInvalidEmitAllMocks();
 	ReportsInvalidFormatStyle();
+	ReportsInvalidValidate();
 	ReportsStrictBestEffortConflict();
 	HelpDoesNotRequirePaths();
 	RunCliReturnsDeterministicExitCodes();

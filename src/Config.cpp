@@ -24,6 +24,7 @@ namespace mockfakegen
 		constexpr std::string_view kBestEffortOption = "--best-effort";
 		constexpr std::string_view kEmitAllMocksOption = "--emit-all-mocks";
 		constexpr std::string_view kFormatStyleOption = "--format-style";
+		constexpr std::string_view kValidateOption = "--validate";
 		constexpr std::string_view kJobsOption = "--jobs";
 
 		[[nodiscard]] int DefaultJobs() noexcept
@@ -61,7 +62,7 @@ namespace mockfakegen
 				option == kOutputDirOption || option == kProjectRootOption ||
 				option == kDryRunOption || option == kOverwriteOption || option == kStrictOption ||
 				option == kBestEffortOption || option == kEmitAllMocksOption ||
-				option == kFormatStyleOption || option == kJobsOption;
+				option == kFormatStyleOption || option == kValidateOption || option == kJobsOption;
 		}
 
 		[[nodiscard]] bool IsFlagOption(std::string_view option) noexcept
@@ -295,6 +296,20 @@ namespace mockfakegen
 
 				config.format_style = *parsed_format_style;
 			}
+			else if (option == kValidateOption)
+			{
+				const auto parsed_validate = ParseValidationMode(*value);
+				if (!parsed_validate.has_value())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kValidateOption,
+							 "--validate must be none, syntax, or compile.");
+					continue;
+				}
+
+				config.validate = *parsed_validate;
+			}
 		}
 
 		if (strict_seen && best_effort_seen)
@@ -375,6 +390,7 @@ namespace mockfakegen
 			"  --best-effort          Generate supported output and report unsupported input.\n"
 			"  --emit-all-mocks <bool> Generate AllMocks.h when true.\n"
 			"  --format-style <style> file, llvm, google, or none.\n"
+			"  --validate <mode>      none, syntax, or compile.\n"
 			"  --jobs <N>             Positive worker count.\n";
 	}
 

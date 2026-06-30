@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "FormatStyle.h"
+#include "ValidationMode.h"
 
 namespace mockfakegen
 {
@@ -40,6 +41,7 @@ namespace mockfakegen
 		bool best_effort = true;
 		bool emit_all_mocks = true;
 		FormatStyleKind format_style = FormatStyleKind::File;
+		ValidationMode validate = ValidationMode::Compile;
 		int jobs = 1;
 	};
 
