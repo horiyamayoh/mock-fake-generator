@@ -49,6 +49,7 @@ add_library(
 	mockfakegen_core
 		src/Config.cpp
 		src/HeaderScanner.cpp
+		src/model/GeneratedFile.cpp
 		src/support/CliSupport.cpp
 )
 target_include_directories(mockfakegen_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -119,6 +120,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_header_scanner_test)
 
 	add_test(NAME mockfakegen_header_scanner_test COMMAND mockfakegen_header_scanner_test)
+
+	add_executable(mockfakegen_generated_file_test tests/model/generated_file_test.cpp)
+	target_link_libraries(mockfakegen_generated_file_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_generated_file_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_generated_file_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_generated_file_test)
+	mockfakegen_apply_sanitizers(mockfakegen_generated_file_test)
+
+	add_test(NAME mockfakegen_generated_file_test COMMAND mockfakegen_generated_file_test)
 
 	add_executable(mockfakegen_foundation_smoke tests/foundation/foundation_smoke.cpp)
 	target_link_libraries(mockfakegen_foundation_smoke PRIVATE mockfakegen_ket)
