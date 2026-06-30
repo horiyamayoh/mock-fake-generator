@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -135,6 +136,14 @@ namespace mockfakegen
 				exception_spec == clang::EST_NoexceptTrue;
 		}
 
+		[[nodiscard]] bool
+		HasUnsupportedSpecialMemberExceptionSpec(const clang::CXXMethodDecl& method)
+		{
+			const auto exception_spec = method.getExceptionSpecType();
+			return exception_spec == clang::EST_DependentNoexcept ||
+				exception_spec == clang::EST_NoexceptFalse;
+		}
+
 		[[nodiscard]] bool HasAccessibleDefaultConstructor(const clang::CXXRecordDecl& record)
 		{
 			if (!record.hasDefinition())
@@ -172,6 +181,15 @@ namespace mockfakegen
 			}
 
 			return HasAccessibleDefaultConstructor(*record);
+		}
+
+		[[nodiscard]] bool IsDefaultConstructibleField(clang::QualType type)
+		{
+			if (type->isReferenceType() || type->isArrayType())
+			{
+				return false;
+			}
+			return IsDefaultConstructibleReturn(type);
 		}
 
 		[[nodiscard]] std::string UnsupportedMethodName(const clang::NamedDecl& declaration)
@@ -246,10 +264,11 @@ namespace mockfakegen
 		  public:
 			ClassExtractorVisitor(const HeaderModel& target_header,
 								  const clang::ASTContext& ast_context,
-								  const clang::SourceManager& source_manager)
+								  const clang::SourceManager& source_manager,
+								  ClassExtractionOptions options)
 				: target_header_(target_header), ast_context_(ast_context),
 				  type_spelling_(ast_context), source_manager_(source_manager),
-				  target_path_(AbsoluteNormalized(target_header.absolute_path))
+				  target_path_(AbsoluteNormalized(target_header.absolute_path)), options_(options)
 			{
 			}
 
@@ -306,6 +325,8 @@ namespace mockfakegen
 					.source_header = target_header_,
 					.mock_methods = {},
 					.fake_methods = {},
+					.fake_constructors = {},
+					.fake_destructors = {},
 					.unsupported_items = {},
 				};
 				ExtractMethods(*declaration, class_model);
@@ -403,20 +424,14 @@ namespace mockfakegen
 
 					if (llvm::isa<clang::CXXConstructorDecl>(method))
 					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::Constructor,
-												"constructor",
-												"constructor fake generation is not supported");
+						const auto* constructor = llvm::cast<clang::CXXConstructorDecl>(method);
+						RecordConstructor(*constructor, declaration, class_model);
 						continue;
 					}
 					if (llvm::isa<clang::CXXDestructorDecl>(method))
 					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::Destructor,
-												"destructor",
-												"destructor fake generation is not supported");
+						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
+						RecordDestructor(*destructor, class_model);
 						continue;
 					}
 					if (llvm::isa<clang::CXXConversionDecl>(method))
@@ -507,6 +522,187 @@ namespace mockfakegen
 				}
 			}
 
+			[[nodiscard]] std::vector<ParameterModel>
+			BuildParameters(const clang::FunctionDecl& function) const
+			{
+				std::vector<ParameterModel> parameters;
+				parameters.reserve(function.parameters().size());
+				for (std::size_t index = 0U; index < function.parameters().size(); ++index)
+				{
+					const auto* parameter = function.parameters()[index];
+					parameters.push_back(type_spelling_.SpellParameter(*parameter, index));
+				}
+				return parameters;
+			}
+
+			[[nodiscard]] std::string
+			UnsupportedConstructorReason(const clang::CXXRecordDecl& declaration,
+										 std::vector<std::string>& member_initializers)
+			{
+				for (const auto& base : declaration.bases())
+				{
+					const auto type = base.getType();
+					const auto type_spelling = type_spelling_.SpellType(type).spelling;
+					const auto* record = type->getAsCXXRecordDecl();
+					if (record == nullptr)
+					{
+						return "base class '" + type_spelling + "' cannot be safely inspected";
+					}
+					if (!HasAccessibleDefaultConstructor(*record))
+					{
+						return "base class '" + type_spelling + "' is not default-constructible";
+					}
+				}
+
+				for (const auto* field : declaration.fields())
+				{
+					if (field == nullptr || field->hasInClassInitializer())
+					{
+						continue;
+					}
+
+					const auto field_name = field->getNameAsString();
+					if (field_name.empty())
+					{
+						return "anonymous data member cannot be safely initialized";
+					}
+					if (field->getType()->isReferenceType())
+					{
+						return "reference member '" + field_name +
+							"' cannot be safely default-initialized";
+					}
+					if (!IsDefaultConstructibleField(field->getType()))
+					{
+						const auto type = type_spelling_.SpellType(field->getType());
+						return "member '" + field_name + "' of type '" + type.spelling +
+							"' is not default-constructible";
+					}
+
+					member_initializers.push_back(field_name + "{}");
+				}
+				return {};
+			}
+
+			void RecordConstructor(const clang::CXXConstructorDecl& constructor,
+								   const clang::CXXRecordDecl& declaration,
+								   ClassModel& class_model)
+			{
+				if (!options_.fake_special_members)
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::Constructor,
+											"constructor",
+											"constructor fake generation is not supported");
+					return;
+				}
+				if (constructor.isDeleted())
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::Constructor,
+											"constructor",
+											"deleted constructor cannot be faked");
+					return;
+				}
+				if (constructor.getAccess() != clang::AS_public)
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::Constructor,
+											"constructor",
+											"only public constructors are generated");
+					return;
+				}
+				if (HasUnsupportedSpecialMemberExceptionSpec(constructor))
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::Constructor,
+											"constructor",
+											"constructor exception specification is not supported");
+					return;
+				}
+				if (constructor.isDefaulted() || constructor.doesThisDeclarationHaveABody())
+				{
+					return;
+				}
+
+				std::vector<std::string> member_initializers;
+				const auto unsupported_reason =
+					UnsupportedConstructorReason(declaration, member_initializers);
+				if (!unsupported_reason.empty())
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::Constructor,
+											"constructor",
+											unsupported_reason);
+					return;
+				}
+
+				const auto parameters = BuildParameters(constructor);
+				class_model.fake_constructors.push_back(ConstructorModel{
+					.parameters = parameters,
+					.member_initializers = std::move(member_initializers),
+					.signature_for_report =
+						SignatureForReport(class_model, constructor, parameters),
+					.is_noexcept = IsNoexcept(constructor),
+					.source_range = ToSourceRange(source_manager_, constructor.getSourceRange()),
+				});
+			}
+
+			void RecordDestructor(const clang::CXXDestructorDecl& destructor,
+								  ClassModel& class_model)
+			{
+				if (!options_.fake_special_members)
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::Destructor,
+											"destructor",
+											"destructor fake generation is not supported");
+					return;
+				}
+				if (destructor.isDeleted())
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::Destructor,
+											"destructor",
+											"deleted destructor cannot be faked");
+					return;
+				}
+				if (destructor.getAccess() != clang::AS_public)
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::Destructor,
+											"destructor",
+											"only public destructors are generated");
+					return;
+				}
+				if (HasUnsupportedSpecialMemberExceptionSpec(destructor))
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::Destructor,
+											"destructor",
+											"destructor exception specification is not supported");
+					return;
+				}
+				if (destructor.isDefaulted() || destructor.doesThisDeclarationHaveABody())
+				{
+					return;
+				}
+
+				class_model.fake_destructors.push_back(DestructorModel{
+					.signature_for_report = SignatureForReport(class_model, destructor, {}),
+					.is_noexcept = IsNoexcept(destructor),
+					.source_range = ToSourceRange(source_manager_, destructor.getSourceRange()),
+				});
+			}
+
 			void RecordUnsupportedMethod(ClassModel& class_model,
 										 const clang::NamedDecl& declaration,
 										 UnsupportedReasonCode reason_code,
@@ -526,13 +722,7 @@ namespace mockfakegen
 			[[nodiscard]] MethodModel BuildMethodModel(const clang::CXXMethodDecl& method,
 													   const ClassModel& class_model) const
 			{
-				std::vector<ParameterModel> parameters;
-				parameters.reserve(method.parameters().size());
-				for (std::size_t index = 0U; index < method.parameters().size(); ++index)
-				{
-					const auto* parameter = method.parameters()[index];
-					parameters.push_back(type_spelling_.SpellParameter(*parameter, index));
-				}
+				auto parameters = BuildParameters(method);
 
 				const auto return_type = type_spelling_.SpellType(method.getReturnType());
 				const auto raw_return_type = method.getReturnType();
@@ -568,14 +758,17 @@ namespace mockfakegen
 			TypeSpellingService type_spelling_;
 			const clang::SourceManager& source_manager_;
 			std::filesystem::path target_path_;
+			ClassExtractionOptions options_;
 			ClassExtractionResult result_;
 		};
 	} // namespace
 
 	ClassExtractionResult ExtractClassDefinitionsFromAst(const clang::ASTUnit& ast,
-														 const HeaderModel& target_header)
+														 const HeaderModel& target_header,
+														 ClassExtractionOptions options)
 	{
-		ClassExtractorVisitor visitor(target_header, ast.getASTContext(), ast.getSourceManager());
+		ClassExtractorVisitor visitor(
+			target_header, ast.getASTContext(), ast.getSourceManager(), options);
 		visitor.TraverseDecl(ast.getASTContext().getTranslationUnitDecl());
 		return visitor.TakeResult();
 	}

@@ -41,6 +41,18 @@ namespace mockfakegen
 							 {
 								 return MethodSortKey(lhs) < MethodSortKey(rhs);
 							 });
+			std::stable_sort(class_model.fake_constructors.begin(),
+							 class_model.fake_constructors.end(),
+							 [](const auto& lhs, const auto& rhs)
+							 {
+								 return lhs.signature_for_report < rhs.signature_for_report;
+							 });
+			std::stable_sort(class_model.fake_destructors.begin(),
+							 class_model.fake_destructors.end(),
+							 [](const auto& lhs, const auto& rhs)
+							 {
+								 return lhs.signature_for_report < rhs.signature_for_report;
+							 });
 			std::stable_sort(class_model.unsupported_items.begin(),
 							 class_model.unsupported_items.end(),
 							 [](const auto& lhs, const auto& rhs)

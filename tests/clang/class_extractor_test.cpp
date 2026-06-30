@@ -64,7 +64,9 @@ namespace
 	};
 
 	[[nodiscard]] mockfakegen::ClassExtractionResult
-	ParseAndExtract(const TempTree& tree, std::string_view relative_header)
+	ParseAndExtract(const TempTree& tree,
+					std::string_view relative_header,
+					mockfakegen::ClassExtractionOptions options = {})
 	{
 		const auto parse_result = mockfakegen::ParseHeaderWithSyntheticTu({
 			.header_path = tree.root() / std::filesystem::path(relative_header),
@@ -78,7 +80,7 @@ namespace
 			.parsed_by_real_tu = false,
 			.parsed_by_synthetic_tu = parse_result.header.parsed_by_synthetic_tu,
 		};
-		return mockfakegen::ExtractClassDefinitionsFromAst(*parse_result.ast, header);
+		return mockfakegen::ExtractClassDefinitionsFromAst(*parse_result.ast, header, options);
 	}
 
 	void ExtractsGlobalClass()
@@ -264,6 +266,100 @@ namespace
 		Expect(result.diagnostics[0].code == mockfakegen::DiagnosticCode::UnsupportedConstruct,
 			   "unsupported diagnostics should be distinct from parse diagnostics");
 	}
+
+	void ExtractsSpecialMembersWhenEnabled()
+	{
+		TempTree tree;
+		tree.Write("include/Special.h",
+				   "#pragma once\n"
+				   "class Special {\n"
+				   "public:\n"
+				   "  explicit Special(int value);\n"
+				   "  ~Special();\n"
+				   "  bool Touch();\n"
+				   "private:\n"
+				   "  int value_;\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/Special.h",
+							mockfakegen::ClassExtractionOptions{.fake_special_members = true});
+
+		Expect(result.classes.size() == 1U, "special member fixture class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.fake_constructors.size() == 1U,
+			   "safe constructor should be generated as fake constructor");
+		Expect(class_model.fake_constructors[0].member_initializers.size() == 1U,
+			   "constructor should initialize default-constructible field");
+		Expect(class_model.fake_constructors[0].member_initializers[0] == "value_{}",
+			   "constructor initializer should be deterministic");
+		Expect(class_model.fake_destructors.size() == 1U,
+			   "out-of-line destructor should be generated as fake destructor");
+		Expect(class_model.unsupported_items.empty(),
+			   "safe special members should not be reported unsupported");
+	}
+
+	void ReportsUnsafeSpecialMemberConstructor()
+	{
+		TempTree tree;
+		tree.Write("include/UnsafeSpecial.h",
+				   "#pragma once\n"
+				   "class UnsafeSpecial {\n"
+				   "public:\n"
+				   "  UnsafeSpecial();\n"
+				   "  bool Touch();\n"
+				   "private:\n"
+				   "  int& ref_;\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/UnsafeSpecial.h",
+							mockfakegen::ClassExtractionOptions{.fake_special_members = true});
+
+		Expect(result.classes.size() == 1U, "unsafe special fixture class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.fake_constructors.empty(), "unsafe constructor should not be generated");
+		Expect(HasUnsupportedKind(class_model, "constructor"),
+			   "unsafe constructor should be reported unsupported");
+		Expect(!class_model.unsupported_items.empty(), "unsafe constructor should keep reason");
+		Expect(class_model.unsupported_items[0].reason.find("reference member") !=
+				   std::string::npos,
+			   "unsafe constructor diagnostic should explain reference member");
+	}
+
+	void ReportsUnsafeSpecialMemberBaseConstructor()
+	{
+		TempTree tree;
+		tree.Write("include/UnsafeBase.h",
+				   "#pragma once\n"
+				   "class Base {\n"
+				   "public:\n"
+				   "  explicit Base(int value);\n"
+				   "};\n"
+				   "class Derived : public Base {\n"
+				   "public:\n"
+				   "  Derived();\n"
+				   "  bool Touch();\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/UnsafeBase.h",
+							mockfakegen::ClassExtractionOptions{.fake_special_members = true});
+
+		Expect(result.classes.size() == 2U, "base and derived classes should be extracted");
+		const auto& derived_model = result.classes[1];
+		Expect(derived_model.name == "Derived", "derived class should be checked");
+		Expect(derived_model.fake_constructors.empty(),
+			   "unsafe derived constructor should not be generated");
+		Expect(HasUnsupportedKind(derived_model, "constructor"),
+			   "unsafe base initialization should be reported unsupported");
+		Expect(!derived_model.unsupported_items.empty(), "unsafe base should keep reason");
+		Expect(derived_model.unsupported_items[0].reason.find("base class") != std::string::npos,
+			   "unsafe constructor diagnostic should explain base class");
+	}
 } // namespace
 
 int main()
@@ -274,5 +370,8 @@ int main()
 	RecordsClassTemplateAsUnsupported();
 	ExtractsPublicMethodsAndQualifiersInDeclarationOrder();
 	RecordsUnsupportedMethodConstructs();
+	ExtractsSpecialMembersWhenEnabled();
+	ReportsUnsafeSpecialMemberConstructor();
+	ReportsUnsafeSpecialMemberBaseConstructor();
 	return 0;
 }

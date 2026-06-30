@@ -16,6 +16,13 @@ namespace mockfakegen
 		std::vector<Diagnostic> diagnostics;
 	};
 
+	struct ClassExtractionOptions
+	{
+		bool fake_special_members = false;
+	};
+
 	[[nodiscard]] ClassExtractionResult
-	ExtractClassDefinitionsFromAst(const clang::ASTUnit& ast, const HeaderModel& target_header);
+	ExtractClassDefinitionsFromAst(const clang::ASTUnit& ast,
+								   const HeaderModel& target_header,
+								   ClassExtractionOptions options = {});
 } // namespace mockfakegen

@@ -28,6 +28,18 @@ namespace mockfakegen
 		RefQualifierKind ref_qualifier = RefQualifierKind::None;
 	};
 
+	struct SimpleConstructorModel
+	{
+		std::vector<SimpleParameterModel> parameters = {};
+		std::vector<std::string> member_initializers = {};
+		bool is_noexcept = false;
+	};
+
+	struct SimpleDestructorModel
+	{
+		bool is_noexcept = false;
+	};
+
 	struct SimpleClassModel
 	{
 		std::string name;
@@ -36,6 +48,8 @@ namespace mockfakegen
 		std::string mock_header_name;
 		std::string fake_source_name;
 		std::vector<SimpleMethodModel> methods;
+		std::vector<SimpleConstructorModel> fake_constructors = {};
+		std::vector<SimpleDestructorModel> fake_destructors = {};
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;

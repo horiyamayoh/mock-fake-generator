@@ -450,7 +450,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--fallback-policy <policy>` | value | `abort` | `abort` implemented, `default-return` / `throw` / `compile-error` deferred | PolicyEngine / runtime template | unknown value invalid。deferred value は `DeferredOption` |
 | `--mock-namespace-mode <mode>` | value | `same-as-product` | `same-as-product` only | CodeGenerator | 他値は invalid |
 | `--collision-policy <policy>` | value | `qualified-filename` | `qualified-filename` only | CodeGenerator | 他値は invalid |
-| `--fake-special-members <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator / Validator | `true` は `DeferredOption` |
+| `--fake-special-members <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な constructor/destructor fake のみ生成し、unsafe case は unsupported |
 | `--fake-static-data <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator / Validator | `true` は `DeferredOption` |
 | `--interface-mock <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator | `true` は `DeferredOption` |
 | `--include-dir <path>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |

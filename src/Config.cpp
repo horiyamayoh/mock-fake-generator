@@ -566,9 +566,7 @@ namespace mockfakegen
 				}
 				if (*parsed)
 				{
-					AddDeferredError(result.errors,
-									 kFakeSpecialMembersOption,
-									 "special member fake generation is deferred.");
+					config.fake_special_members = true;
 				}
 			}
 			else if (option == kFakeStaticDataOption)
@@ -797,6 +795,7 @@ namespace mockfakegen
 			"  --fallback-policy <p>   abort; other policies are deferred.\n"
 			"  --mock-namespace-mode <mode> same-as-product.\n"
 			"  --collision-policy <policy> qualified-filename.\n"
+			"  --fake-special-members <bool> Generate safe constructor/destructor fakes.\n"
 			"  --dry-run               Resolve config without writing generated files.\n"
 			"  --overwrite             Allow replacing existing generated files.\n"
 			"  --strict                Fail when unsupported input is encountered.\n"

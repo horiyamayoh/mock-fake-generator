@@ -634,6 +634,26 @@ namespace mockfakegen
 			return text;
 		}
 
+		[[nodiscard]] std::string NoexceptSuffix(const bool is_noexcept)
+		{
+			return is_noexcept ? " noexcept" : "";
+		}
+
+		[[nodiscard]] std::string
+		JoinConstructorInitializers(const std::vector<std::string>& member_initializers)
+		{
+			std::string text;
+			for (std::size_t index = 0U; index < member_initializers.size(); ++index)
+			{
+				if (index != 0U)
+				{
+					text += ", ";
+				}
+				text += member_initializers[index];
+			}
+			return text;
+		}
+
 		[[nodiscard]] std::string MethodQualifiers(const SimpleMethodModel& method)
 		{
 			std::string text;
@@ -809,8 +829,49 @@ namespace mockfakegen
 			const auto indent = LocalIndent(class_model, 0U);
 			const auto body_indent = LocalIndent(class_model, 1U);
 			const auto nested_body_indent = LocalIndent(class_model, 2U);
+			bool emitted_definition = false;
+			const auto separate_definition = [&]()
+			{
+				if (emitted_definition)
+				{
+					out << "\n";
+				}
+				emitted_definition = true;
+			};
+			for (const auto& constructor : class_model.fake_constructors)
+			{
+				separate_definition();
+				const auto parameter_declarations =
+					JoinParameterDeclarations(constructor.parameters);
+				out << indent << class_model.name << "::" << class_model.name << '('
+					<< parameter_declarations << ')' << NoexceptSuffix(constructor.is_noexcept)
+					<< "\n";
+				if (!constructor.member_initializers.empty())
+				{
+					out << indent
+						<< "\t: " << JoinConstructorInitializers(constructor.member_initializers)
+						<< "\n";
+				}
+				out << indent << "{\n";
+				for (const auto& parameter : constructor.parameters)
+				{
+					out << body_indent << "(void)" << parameter.name << ";\n";
+				}
+				out << indent << "}\n";
+			}
+
+			for (const auto& destructor : class_model.fake_destructors)
+			{
+				separate_definition();
+				out << indent << class_model.name << "::~" << class_model.name << "()"
+					<< NoexceptSuffix(destructor.is_noexcept) << "\n"
+					<< indent << "{\n"
+					<< indent << "}\n";
+			}
+
 			for (const auto& method : class_model.methods)
 			{
+				separate_definition();
 				const auto parameter_declarations = JoinParameterDeclarations(method.parameters);
 				const auto parameter_names = JoinParameterNames(method.parameters);
 				const auto mock_call = MockCallExpression(method, parameter_names);
@@ -842,11 +903,6 @@ namespace mockfakegen
 					<< body_indent << "return ::mockfake::MissingMockReturn<" << method.return_type
 					<< ">(\"" << signature << "\");\n"
 					<< indent << "}\n";
-
-				if (&method != &class_model.methods.back())
-				{
-					out << '\n';
-				}
 			}
 
 			CloseNamespace(out, class_model);
@@ -888,6 +944,8 @@ namespace mockfakegen
 				.mock_header_name = MockHeaderName(class_model),
 				.fake_source_name = FakeSourceName(class_model),
 				.methods = {},
+				.fake_constructors = {},
+				.fake_destructors = {},
 				.link_ready = IsLinkReady(class_model),
 				.link_readiness_reasons = LinkReadinessReasons(class_model),
 			};
@@ -916,6 +974,34 @@ namespace mockfakegen
 				}
 
 				simple_class.methods.push_back(std::move(simple_method));
+			}
+
+			simple_class.fake_constructors.reserve(class_model.fake_constructors.size());
+			for (const auto& constructor : class_model.fake_constructors)
+			{
+				SimpleConstructorModel simple_constructor{
+					.parameters = {},
+					.member_initializers = constructor.member_initializers,
+					.is_noexcept = constructor.is_noexcept,
+				};
+				simple_constructor.parameters.reserve(constructor.parameters.size());
+				for (const auto& parameter : constructor.parameters)
+				{
+					simple_constructor.parameters.push_back(SimpleParameterModel{
+						.type = parameter.type_spelling,
+						.gmock_type = parameter.gmock_type_spelling,
+						.name = parameter.generated_name,
+					});
+				}
+				simple_class.fake_constructors.push_back(std::move(simple_constructor));
+			}
+
+			simple_class.fake_destructors.reserve(class_model.fake_destructors.size());
+			for (const auto& destructor : class_model.fake_destructors)
+			{
+				simple_class.fake_destructors.push_back(SimpleDestructorModel{
+					.is_noexcept = destructor.is_noexcept,
+				});
 			}
 
 			return simple_class;

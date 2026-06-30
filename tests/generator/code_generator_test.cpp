@@ -163,6 +163,47 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::ClassModel SpecialMemberModel()
+	{
+		mockfakegen::ParameterModel value;
+		value.type_spelling = "int";
+		value.gmock_type_spelling = "int";
+		value.generated_name = "value";
+
+		return mockfakegen::ClassModel{
+			.name = "Special",
+			.qualified_name = "sample::Special",
+			.namespaces = {"sample"},
+			.mock_name = "MockSpecial",
+			.mock_header_name = "MockSpecial.h",
+			.fake_source_name = "FakeSpecial.cpp",
+			.source_header = HeaderNamed("Special.h"),
+			.mock_methods =
+				{
+					MethodNamed("Touch"),
+				},
+			.fake_methods =
+				{
+					MethodNamed("Touch"),
+				},
+			.fake_constructors =
+				{
+					mockfakegen::ConstructorModel{
+						.parameters = {value},
+						.member_initializers = {"value_{}"},
+						.signature_for_report = "sample::Special::Special(int)",
+					},
+				},
+			.fake_destructors =
+				{
+					mockfakegen::DestructorModel{
+						.signature_for_report = "sample::Special::~Special()",
+					},
+				},
+			.unsupported_items = {},
+		};
+	}
+
 	[[nodiscard]] mockfakegen::ClassModel EscapingReportModel()
 	{
 		auto unsupported = UnsupportedFunctionTemplate();
@@ -436,6 +477,23 @@ namespace
 			   "shared-owner fake should not expect a raw pointer registry");
 	}
 
+	void GeneratesSpecialMemberFakes()
+	{
+		const std::vector classes = {SpecialMemberModel()};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
+
+		const auto& fake = FindFile(files, "FakeSpecial.cpp");
+		Expect(Contains(fake.content, "Special::Special(int value)\n\t\t: value_{}"),
+			   "constructor fake should initialize safe members");
+		Expect(Contains(fake.content, "(void)value;"),
+			   "constructor fake should mark ignored parameters");
+		Expect(Contains(fake.content, "Special::~Special()"),
+			   "destructor fake should be generated");
+		Expect(Contains(fake.content, "void Special::Touch()"),
+			   "normal fake methods should still be generated");
+	}
+
 	void CMakeFragmentUsesOnlyLinkReadyFakeSources()
 	{
 		const auto files = mockfakegen::GenerateMockFakeProject(
@@ -497,6 +555,7 @@ int main()
 	KeepsShortFilenamesWithoutCollision();
 	ProjectOptionsSelectGlobalMutexRuntime();
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
+	GeneratesSpecialMemberFakes();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();

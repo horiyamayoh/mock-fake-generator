@@ -773,6 +773,37 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_static_method_generated_smoke COMMAND mockfakegen_static_method_generated_smoke)
 
 	add_executable(
+		mockfakegen_special_member_generated_smoke
+		tests/fixtures/special_member/special_member_generated_smoke.cpp
+		tests/fixtures/special_member/generated/FakeSpecial.cpp
+	)
+	target_include_directories(
+		mockfakegen_special_member_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/special_member/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/special_member/generated"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime"
+	)
+	target_link_libraries(
+		mockfakegen_special_member_generated_smoke
+		PRIVATE
+			${MOCKFAKEGEN_GMOCK_MAIN_TARGET}
+	)
+	target_compile_features(mockfakegen_special_member_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_special_member_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_special_member_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_special_member_generated_smoke)
+
+	add_test(
+		NAME mockfakegen_special_member_generated_smoke
+		COMMAND mockfakegen_special_member_generated_smoke
+	)
+
+	add_executable(
 		mockfakegen_all_mocks_generation_test
 		tests/fixtures/all_mocks/all_mocks_generation_test.cpp
 	)

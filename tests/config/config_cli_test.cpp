@@ -298,6 +298,17 @@ namespace
 			   "registry mode should be shared-owner");
 	}
 
+	void ParsesFakeSpecialMembersTrue()
+	{
+		auto args = ValidArgs();
+		args.push_back("--fake-special-members=true");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "fake-special-members true should parse");
+		Expect(result.config->fake_special_members, "fake-special-members should parse true");
+	}
+
 	void ReportsDeferredOptions()
 	{
 		auto args = ValidArgs();
@@ -411,6 +422,7 @@ int main()
 	ReportsDuplicateOptions();
 	ParsesGlobalMutexRegistryMode();
 	ParsesSharedOwnerRegistryMode();
+	ParsesFakeSpecialMembersTrue();
 	ReportsDeferredOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();

@@ -121,6 +121,22 @@ namespace mockfakegen
 		SourceRange source_range;
 	};
 
+	struct ConstructorModel
+	{
+		std::vector<ParameterModel> parameters = {};
+		std::vector<std::string> member_initializers = {};
+		std::string signature_for_report;
+		bool is_noexcept = false;
+		SourceRange source_range = {};
+	};
+
+	struct DestructorModel
+	{
+		std::string signature_for_report;
+		bool is_noexcept = false;
+		SourceRange source_range = {};
+	};
+
 	struct UnsupportedItem
 	{
 		UnsupportedReasonCode reason_code = UnsupportedReasonCode::Unknown;
@@ -144,6 +160,8 @@ namespace mockfakegen
 		HeaderModel source_header;
 		std::vector<MethodModel> mock_methods;
 		std::vector<MethodModel> fake_methods;
+		std::vector<ConstructorModel> fake_constructors = {};
+		std::vector<DestructorModel> fake_destructors = {};
 		std::vector<UnsupportedItem> unsupported_items;
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};

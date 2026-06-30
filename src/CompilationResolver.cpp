@@ -491,7 +491,12 @@ namespace mockfakegen
 			{
 				auto real_header = header;
 				real_header.parsed_by_real_tu = true;
-				const auto extraction = ExtractClassDefinitionsFromAst(*parsed.ast, real_header);
+				const auto extraction = ExtractClassDefinitionsFromAst(
+					*parsed.ast,
+					real_header,
+					ClassExtractionOptions{
+						.fake_special_members = options.fake_special_members,
+					});
 				if (!HasExtractedContent(extraction))
 				{
 					continue;
@@ -552,8 +557,12 @@ namespace mockfakegen
 				continue;
 			}
 
-			const auto extraction =
-				ExtractClassDefinitionsFromAst(*synthetic.ast, synthetic_header);
+			const auto extraction = ExtractClassDefinitionsFromAst(
+				*synthetic.ast,
+				synthetic_header,
+				ClassExtractionOptions{
+					.fake_special_members = options.fake_special_members,
+				});
 			MergeExtraction(result, observations, synthetic_header, std::move(attempt), extraction);
 		}
 
