@@ -141,7 +141,7 @@ namespace
 		});
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 35U, "generated fixtures should be included");
+		Expect(result.checked_file_count == 37U, "generated fixtures should be included");
 	}
 } // namespace
 

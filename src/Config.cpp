@@ -23,6 +23,7 @@ namespace mockfakegen
 		constexpr std::string_view kStrictOption = "--strict";
 		constexpr std::string_view kBestEffortOption = "--best-effort";
 		constexpr std::string_view kEmitAllMocksOption = "--emit-all-mocks";
+		constexpr std::string_view kEmitCMakeFragmentOption = "--emit-cmake-fragment";
 		constexpr std::string_view kFormatStyleOption = "--format-style";
 		constexpr std::string_view kValidateOption = "--validate";
 		constexpr std::string_view kJobsOption = "--jobs";
@@ -62,7 +63,8 @@ namespace mockfakegen
 				option == kOutputDirOption || option == kProjectRootOption ||
 				option == kDryRunOption || option == kOverwriteOption || option == kStrictOption ||
 				option == kBestEffortOption || option == kEmitAllMocksOption ||
-				option == kFormatStyleOption || option == kValidateOption || option == kJobsOption;
+				option == kEmitCMakeFragmentOption || option == kFormatStyleOption ||
+				option == kValidateOption || option == kJobsOption;
 		}
 
 		[[nodiscard]] bool IsFlagOption(std::string_view option) noexcept
@@ -282,6 +284,20 @@ namespace mockfakegen
 
 				config.emit_all_mocks = *parsed_emit_all_mocks;
 			}
+			else if (option == kEmitCMakeFragmentOption)
+			{
+				const auto parsed_emit_cmake_fragment = ParseBoolValue(*value);
+				if (!parsed_emit_cmake_fragment.has_value())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kEmitCMakeFragmentOption,
+							 "--emit-cmake-fragment must be true or false.");
+					continue;
+				}
+
+				config.emit_cmake_fragment = *parsed_emit_cmake_fragment;
+			}
 			else if (option == kFormatStyleOption)
 			{
 				const auto parsed_format_style = ParseFormatStyleKind(*value);
@@ -389,6 +405,7 @@ namespace mockfakegen
 			"  --strict               Fail when unsupported input is encountered.\n"
 			"  --best-effort          Generate supported output and report unsupported input.\n"
 			"  --emit-all-mocks <bool> Generate AllMocks.h when true.\n"
+			"  --emit-cmake-fragment <bool> Generate CMakeLists.fragment.cmake when true.\n"
 			"  --format-style <style> file, llvm, google, or none.\n"
 			"  --validate <mode>      none, syntax, or compile.\n"
 			"  --jobs <N>             Positive worker count.\n";

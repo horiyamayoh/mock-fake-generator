@@ -102,6 +102,15 @@ namespace
 			classes, mockfakegen::ProjectGenerationOptions{.emit_all_mocks = false});
 		Expect(!HasFile(generated_without_all_mocks, "AllMocks.h"),
 			   "AllMocks.h should be suppressed when disabled");
+
+		const auto generated_without_cmake_fragment =
+			mockfakegen::GenerateMockFakeProject(classes,
+												 mockfakegen::ProjectGenerationOptions{
+													 .emit_all_mocks = true,
+													 .emit_cmake_fragment = false,
+												 });
+		Expect(!HasFile(generated_without_cmake_fragment, "CMakeLists.fragment.cmake"),
+			   "CMake fragment should be suppressed when disabled");
 	}
 } // namespace
 

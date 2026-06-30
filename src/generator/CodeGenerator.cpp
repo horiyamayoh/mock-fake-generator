@@ -737,6 +737,44 @@ namespace mockfakegen
 			"AllMocks.h", out.str(), GeneratedFileKind::AllMocksHeader, std::nullopt);
 	}
 
+	GeneratedFile GenerateCMakeFragment(std::span<const GeneratedFile> files)
+	{
+		std::vector<std::filesystem::path> fake_sources;
+		for (const auto& file : files)
+		{
+			if (file.kind == GeneratedFileKind::FakeSource)
+			{
+				fake_sources.push_back(file.relative_path);
+			}
+		}
+
+		std::sort(fake_sources.begin(),
+				  fake_sources.end(),
+				  [](const auto& lhs, const auto& rhs)
+				  {
+					  return lhs.generic_string() < rhs.generic_string();
+				  });
+		fake_sources.erase(std::unique(fake_sources.begin(), fake_sources.end()),
+						   fake_sources.end());
+
+		std::ostringstream out;
+		out << "# Link generated FakeXXX.cpp files instead of the corresponding product .cpp "
+			   "files.\n"
+			<< "# Do not link both implementations in the same target.\n\n"
+			<< "set(MOCKFAKE_GENERATED_SOURCES\n";
+		for (const auto& fake_source : fake_sources)
+		{
+			out << "\t\"${CMAKE_CURRENT_LIST_DIR}/" << fake_source.generic_string() << "\"\n";
+		}
+		out << ")\n\n"
+			<< "set(MOCKFAKE_GENERATED_INCLUDE_DIR\n"
+			<< "\t\"${CMAKE_CURRENT_LIST_DIR}\"\n"
+			<< ")\n";
+
+		return MakeGeneratedFile(
+			"CMakeLists.fragment.cmake", out.str(), GeneratedFileKind::CMakeFragment, std::nullopt);
+	}
+
 	GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models)
 	{
 		const auto entries = SortedClassReportEntries(class_models);
@@ -854,6 +892,10 @@ namespace mockfakegen
 		if (options.emit_all_mocks)
 		{
 			files.push_back(GenerateAllMocksHeader(files));
+		}
+		if (options.emit_cmake_fragment)
+		{
+			files.push_back(GenerateCMakeFragment(files));
 		}
 		if (options.emit_manifest)
 		{

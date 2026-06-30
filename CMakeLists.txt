@@ -744,6 +744,33 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 
 	add_test(NAME mockfakegen_all_mocks_generated_smoke COMMAND mockfakegen_all_mocks_generated_smoke)
 
+	include("${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/all_mocks/generated/CMakeLists.fragment.cmake")
+	add_executable(
+		mockfakegen_cmake_fragment_generated_smoke
+		tests/fixtures/all_mocks/all_mocks_generated_smoke_test.cpp
+		${MOCKFAKE_GENERATED_SOURCES}
+	)
+	target_include_directories(
+		mockfakegen_cmake_fragment_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/all_mocks/product"
+			${MOCKFAKE_GENERATED_INCLUDE_DIR}
+	)
+	target_link_libraries(mockfakegen_cmake_fragment_generated_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
+	target_compile_features(mockfakegen_cmake_fragment_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_cmake_fragment_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_cmake_fragment_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_cmake_fragment_generated_smoke)
+
+	add_test(
+		NAME mockfakegen_cmake_fragment_generated_smoke
+		COMMAND mockfakegen_cmake_fragment_generated_smoke
+	)
+
 	add_executable(
 		mockfakegen_generated_compile_validator_test
 		tests/validation/generated_compile_validator_test.cpp

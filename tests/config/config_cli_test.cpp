@@ -46,6 +46,7 @@ namespace
 		Expect(!result.config->strict, "strict should default false");
 		Expect(result.config->best_effort, "best-effort should default true");
 		Expect(result.config->emit_all_mocks, "emit-all-mocks should default true");
+		Expect(result.config->emit_cmake_fragment, "emit-cmake-fragment should default true");
 		Expect(result.config->format_style == mockfakegen::FormatStyleKind::File,
 			   "format style should default to file");
 		Expect(result.config->validate == mockfakegen::ValidationMode::Compile,
@@ -62,6 +63,17 @@ namespace
 
 		Expect(result.ok(), "emit-all-mocks false config should parse");
 		Expect(!result.config->emit_all_mocks, "emit-all-mocks should parse false");
+	}
+
+	void ParsesEmitCMakeFragmentFalse()
+	{
+		auto args = ValidArgs();
+		args.push_back("--emit-cmake-fragment=false");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "emit-cmake-fragment false config should parse");
+		Expect(!result.config->emit_cmake_fragment, "emit-cmake-fragment should parse false");
 	}
 
 	void ParsesFormatStyleGoogle()
@@ -130,6 +142,21 @@ namespace
 			   "invalid emit-all-mocks should identify option");
 		Expect(result.errors[0].message == "--emit-all-mocks must be true or false.",
 			   "invalid emit-all-mocks diagnostic should be deterministic");
+	}
+
+	void ReportsInvalidEmitCMakeFragment()
+	{
+		auto args = ValidArgs();
+		args.push_back("--emit-cmake-fragment=maybe");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "invalid emit-cmake-fragment should fail");
+		Expect(result.errors.size() == 1U, "invalid emit-cmake-fragment should produce one error");
+		Expect(result.errors[0].option == "--emit-cmake-fragment",
+			   "invalid emit-cmake-fragment should identify option");
+		Expect(result.errors[0].message == "--emit-cmake-fragment must be true or false.",
+			   "invalid emit-cmake-fragment diagnostic should be deterministic");
 	}
 
 	void ReportsInvalidFormatStyle()
@@ -212,11 +239,13 @@ int main()
 {
 	ParsesValidConfig();
 	ParsesEmitAllMocksFalse();
+	ParsesEmitCMakeFragmentFalse();
 	ParsesFormatStyleGoogle();
 	ParsesValidateNone();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();
 	ReportsInvalidEmitAllMocks();
+	ReportsInvalidEmitCMakeFragment();
 	ReportsInvalidFormatStyle();
 	ReportsInvalidValidate();
 	ReportsStrictBestEffortConflict();

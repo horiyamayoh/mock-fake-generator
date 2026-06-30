@@ -40,6 +40,7 @@ namespace mockfakegen
 		bool strict = false;
 		bool best_effort = true;
 		bool emit_all_mocks = true;
+		bool emit_cmake_fragment = true;
 		FormatStyleKind format_style = FormatStyleKind::File;
 		ValidationMode validate = ValidationMode::Compile;
 		int jobs = 1;

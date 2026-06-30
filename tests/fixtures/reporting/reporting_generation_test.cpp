@@ -79,7 +79,7 @@ namespace
 		const auto classes = ExtractClasses(product_dir);
 
 		const auto generated = mockfakegen::GenerateMockFakeProject(classes);
-		Expect(generated.size() == 6U, "reporting fixture should generate six files");
+		Expect(generated.size() == 7U, "reporting fixture should generate seven files");
 		for (const auto& file : generated)
 		{
 			const auto path = generated_dir / file.relative_path;
