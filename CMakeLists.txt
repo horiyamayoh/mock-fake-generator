@@ -98,6 +98,27 @@ if(MOCKFAKEGEN_ENABLE_FORMAT_TARGETS)
 endif()
 
 if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
+	find_package(GTest QUIET)
+	if(NOT TARGET GTest::gmock_main AND NOT TARGET gmock_main)
+		include(FetchContent)
+		set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+		set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+		FetchContent_Declare(
+			googletest
+			GIT_REPOSITORY https://github.com/google/googletest.git
+			GIT_TAG v1.14.0
+		)
+		FetchContent_MakeAvailable(googletest)
+	endif()
+
+	if(TARGET GTest::gmock_main)
+		set(MOCKFAKEGEN_GMOCK_MAIN_TARGET GTest::gmock_main)
+	elseif(TARGET gmock_main)
+		set(MOCKFAKEGEN_GMOCK_MAIN_TARGET gmock_main)
+	else()
+		message(FATAL_ERROR "gMock is required for generated-output smoke tests.")
+	endif()
+
 	add_executable(mockfakegen_config_cli_test tests/config/config_cli_test.cpp)
 	target_link_libraries(mockfakegen_config_cli_test PRIVATE mockfakegen_core)
 	target_compile_features(mockfakegen_config_cli_test PRIVATE cxx_std_23)
@@ -162,6 +183,53 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_output_writer_test)
 
 	add_test(NAME mockfakegen_output_writer_test COMMAND mockfakegen_output_writer_test)
+
+	add_executable(
+		mockfakegen_hoge_fixture_generation_test
+		tests/fixtures/hoge/hoge_fixture_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_hoge_fixture_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_hoge_fixture_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_hoge_fixture_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_hoge_fixture_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_hoge_fixture_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_hoge_fixture_generation_test)
+
+	add_test(
+		NAME mockfakegen_hoge_fixture_generation_test
+		COMMAND mockfakegen_hoge_fixture_generation_test
+	)
+
+	add_executable(
+		mockfakegen_hoge_generated_smoke
+		tests/fixtures/hoge/hoge_generated_smoke_test.cpp
+		tests/fixtures/hoge/generated/FakeHoge.cpp
+	)
+	target_include_directories(
+		mockfakegen_hoge_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hoge/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hoge/generated"
+	)
+	target_link_libraries(mockfakegen_hoge_generated_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
+	target_compile_features(mockfakegen_hoge_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_hoge_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_hoge_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_hoge_generated_smoke)
+
+	add_test(NAME mockfakegen_hoge_generated_smoke COMMAND mockfakegen_hoge_generated_smoke)
 
 	add_executable(mockfakegen_runtime_template_test tests/runtime/runtime_template_test.cpp)
 	target_link_libraries(mockfakegen_runtime_template_test PRIVATE mockfakegen_core)

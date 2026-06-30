@@ -103,13 +103,13 @@ namespace mockfakegen
 				<< "#include \"MockFakeRuntime.h\"\n\n"
 				<< "class " << mock_class_name << "\n"
 				<< "{\n"
-				<< "public:\n"
-				<< "    " << mock_class_name << "() = default;\n"
-				<< "    ~" << mock_class_name << "() = default;\n\n";
+				<< "  public:\n"
+				<< "\t" << mock_class_name << "() = default;\n"
+				<< "\t~" << mock_class_name << "() = default;\n\n";
 
 			for (const auto& method : class_model.methods)
 			{
-				out << "    MOCK_METHOD(" << method.return_type << ", " << method.name << ", ("
+				out << "\tMOCK_METHOD(" << method.return_type << ", " << method.name << ", ("
 					<< JoinParameterTypes(method.parameters) << "), ());\n";
 			}
 
@@ -137,23 +137,21 @@ namespace mockfakegen
 				out << method.return_type << ' ' << class_model.name << "::" << method.name << '('
 					<< parameter_declarations << ")\n"
 					<< "{\n"
-					<< "    if (auto* mock = ::mockfake::CurrentMock<" << mock_class_name
-					<< ">())\n"
-					<< "    {\n";
+					<< "\tif (auto* mock = ::mockfake::CurrentMock<" << mock_class_name << ">())\n"
+					<< "\t{\n";
 
 				if (is_void_return)
 				{
-					out << "        mock->" << method.name << '(' << parameter_names << ");\n"
-						<< "        return;\n";
+					out << "\t\tmock->" << method.name << '(' << parameter_names << ");\n"
+						<< "\t\treturn;\n";
 				}
 				else
 				{
-					out << "        return mock->" << method.name << '(' << parameter_names
-						<< ");\n";
+					out << "\t\treturn mock->" << method.name << '(' << parameter_names << ");\n";
 				}
 
-				out << "    }\n\n"
-					<< "    return ::mockfake::MissingMockReturn<" << method.return_type << ">(\""
+				out << "\t}\n\n"
+					<< "\treturn ::mockfake::MissingMockReturn<" << method.return_type << ">(\""
 					<< signature << "\");\n"
 					<< "}\n";
 

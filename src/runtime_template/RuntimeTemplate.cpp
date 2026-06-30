@@ -15,14 +15,14 @@ namespace mockfake
 {
 	namespace detail
 	{
-		inline void AbortWithMessage(std::string_view message)
+		[[noreturn]] inline void AbortWithMessage(std::string_view message)
 		{
 			(void)std::fwrite(message.data(), 1U, message.size(), stderr);
 			(void)std::fputc('\n', stderr);
 			std::abort();
 		}
 
-		inline void AbortMissingMock(std::string_view function_name)
+		[[noreturn]] inline void AbortMissingMock(std::string_view function_name)
 		{
 			(void)std::fputs("mockfake: missing mock", stderr);
 			if (!function_name.empty())
