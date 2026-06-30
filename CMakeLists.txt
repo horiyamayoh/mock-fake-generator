@@ -95,6 +95,10 @@ endforeach()
 
 set(MOCKFAKEGEN_KET_MODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ket/modules")
 
+# third_party/ket is a full Git submodule, but it is not built as a CMake
+# subdirectory. Keep ket behind this explicit adapter target: select only the
+# module include directories and .cpp files used by tool-side support code.
+# Generated-output targets intentionally do not receive these include paths.
 add_library(
 	mockfakegen_ket STATIC
 	"${MOCKFAKEGEN_KET_MODULE_DIR}/ascii/ket_ascii.cpp"
