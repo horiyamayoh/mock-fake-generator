@@ -1,5 +1,7 @@
-#include <cstdlib>
-#include <iostream>
+#include <optional>
+#include <thread>
+
+#include <gtest/gtest.h>
 
 #include "MockFakeRuntime.h"
 
@@ -10,38 +12,81 @@ namespace
 		int id = 0;
 	};
 
-	void Expect(bool condition, const char* message)
-	{
-		if (!condition)
-		{
-			std::cerr << "EXPECTATION FAILED: " << message << '\n';
-			std::exit(1);
-		}
-	}
-
-	void ScopedMockPushesAndPops()
+	TEST(MockFakeRuntimeHeaderSmoke, ScopedMockPushesAndPops)
 	{
 		MockThing outer{1};
 		MockThing inner{2};
 
-		Expect(mockfake::CurrentMock<MockThing>() == nullptr, "registry should start empty");
+		EXPECT_EQ(mockfake::CurrentMock<MockThing>(), nullptr);
 		{
 			const mockfake::ScopedMock<MockThing> outer_scope(outer);
-			Expect(mockfake::CurrentMock<MockThing>() == &outer, "outer mock should be current");
+			EXPECT_EQ(mockfake::CurrentMock<MockThing>(), &outer);
 			{
 				const mockfake::ScopedMock<MockThing> inner_scope(inner);
-				Expect(mockfake::CurrentMock<MockThing>() == &inner,
-					   "inner mock should shadow outer");
+				EXPECT_EQ(mockfake::CurrentMock<MockThing>(), &inner);
 			}
-			Expect(mockfake::CurrentMock<MockThing>() == &outer, "outer mock should be restored");
+			EXPECT_EQ(mockfake::CurrentMock<MockThing>(), &outer);
 		}
-		Expect(mockfake::CurrentMock<MockThing>() == nullptr,
-			   "registry should be empty after scopes");
+		EXPECT_EQ(mockfake::CurrentMock<MockThing>(), nullptr);
+	}
+
+	TEST(MockFakeRuntimeHeaderSmoke, DestructionOrderMismatchAborts)
+	{
+		::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+		MockThing outer{1};
+		MockThing inner{2};
+		std::optional<mockfake::ScopedMock<MockThing>> outer_scope;
+		std::optional<mockfake::ScopedMock<MockThing>> inner_scope;
+		outer_scope.emplace(outer);
+		inner_scope.emplace(inner);
+
+		EXPECT_DEATH(outer_scope.reset(), "ScopedMock destruction order mismatch");
+
+		inner_scope.reset();
+		outer_scope.reset();
+		EXPECT_EQ(mockfake::CurrentMock<MockThing>(), nullptr);
+	}
+
+	TEST(MockFakeRuntimeHeaderSmoke, MissingMockReturnAborts)
+	{
+		::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+		EXPECT_DEATH(
+			{ (void)mockfake::MissingMockReturn<int>("MockThing::Run()"); },
+			"mockfake: missing mock for MockThing::Run");
+		EXPECT_DEATH(
+			{ mockfake::MissingMockReturn<void>("MockThing::Notify()"); },
+			"mockfake: missing mock for MockThing::Notify");
+	}
+
+	TEST(MockFakeRuntimeHeaderSmoke, RegistryIsThreadLocal)
+	{
+		MockThing main_mock{1};
+		const mockfake::ScopedMock<MockThing> main_scope(main_mock);
+		bool worker_started_without_main_mock = false;
+		bool worker_scope_used_worker_mock = false;
+		bool worker_scope_popped = false;
+
+		std::thread worker(
+			[&]
+			{
+				worker_started_without_main_mock = mockfake::CurrentMock<MockThing>() == nullptr;
+
+				MockThing worker_mock{2};
+				{
+					const mockfake::ScopedMock<MockThing> worker_scope(worker_mock);
+					worker_scope_used_worker_mock =
+						mockfake::CurrentMock<MockThing>() == &worker_mock;
+				}
+
+				worker_scope_popped = mockfake::CurrentMock<MockThing>() == nullptr;
+			});
+		worker.join();
+
+		EXPECT_TRUE(worker_started_without_main_mock);
+		EXPECT_TRUE(worker_scope_used_worker_mock);
+		EXPECT_TRUE(worker_scope_popped);
+		EXPECT_EQ(mockfake::CurrentMock<MockThing>(), &main_mock);
 	}
 } // namespace
-
-int main()
-{
-	ScopedMockPushesAndPops();
-	return 0;
-}

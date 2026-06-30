@@ -960,6 +960,7 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 		PRIVATE
 			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime"
 	)
+	target_link_libraries(mockfakegen_runtime_header_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
 	target_compile_features(mockfakegen_runtime_header_smoke PRIVATE cxx_std_23)
 	set_target_properties(
 		mockfakegen_runtime_header_smoke
