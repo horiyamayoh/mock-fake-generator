@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "runtime_template/RuntimeTemplate.h"
 
@@ -187,5 +188,37 @@ namespace mockfakegen
 		files.push_back(MakeThreadLocalRuntimeHeader());
 		SortGeneratedFiles(files);
 		return files;
+	}
+
+	std::vector<GeneratedFile> GenerateMinimalMockFake(const ClassModel& class_model)
+	{
+		SimpleClassModel simple_class{
+			.name = class_model.name,
+			.header_include = class_model.source_header.include_spelling,
+			.methods = {},
+		};
+		simple_class.methods.reserve(class_model.mock_methods.size());
+
+		for (const auto& method : class_model.mock_methods)
+		{
+			SimpleMethodModel simple_method{
+				.return_type = method.return_type_spelling,
+				.name = method.name,
+				.parameters = {},
+			};
+			simple_method.parameters.reserve(method.parameters.size());
+
+			for (const auto& parameter : method.parameters)
+			{
+				simple_method.parameters.push_back(SimpleParameterModel{
+					.type = parameter.type_spelling,
+					.name = parameter.generated_name,
+				});
+			}
+
+			simple_class.methods.push_back(std::move(simple_method));
+		}
+
+		return GenerateMinimalMockFake(simple_class);
 	}
 } // namespace mockfakegen

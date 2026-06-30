@@ -127,6 +127,7 @@ add_library(
 		src/generator/CodeGenerator.cpp
 		src/HeaderScanner.cpp
 		src/model/GeneratedFile.cpp
+		src/model/ProjectModel.cpp
 		src/output/OutputWriter.cpp
 		src/runtime_template/RuntimeTemplate.cpp
 		src/support/CliSupport.cpp
@@ -260,6 +261,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_generated_file_test)
 
 	add_test(NAME mockfakegen_generated_file_test COMMAND mockfakegen_generated_file_test)
+
+	add_executable(mockfakegen_project_model_test tests/model/project_model_test.cpp)
+	target_link_libraries(mockfakegen_project_model_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_project_model_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_project_model_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_project_model_test)
+	mockfakegen_apply_sanitizers(mockfakegen_project_model_test)
+
+	add_test(NAME mockfakegen_project_model_test COMMAND mockfakegen_project_model_test)
 
 	add_executable(mockfakegen_code_generator_test tests/generator/code_generator_test.cpp)
 	target_link_libraries(mockfakegen_code_generator_test PRIVATE mockfakegen_core)

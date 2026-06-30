@@ -1,0 +1,139 @@
+#pragma once
+
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
+
+namespace mockfakegen
+{
+	enum class AccessKind
+	{
+		Unknown,
+		Public,
+		Protected,
+		Private,
+	};
+
+	enum class DiagnosticSeverity
+	{
+		Info,
+		Warning,
+		Error,
+	};
+
+	enum class DiagnosticCode
+	{
+		ParseError,
+		UnsupportedConstruct,
+		ExtractionError,
+	};
+
+	struct SourceLocation
+	{
+		std::filesystem::path file;
+		std::uint32_t line = 0U;
+		std::uint32_t column = 0U;
+	};
+
+	struct SourceRange
+	{
+		SourceLocation begin;
+		SourceLocation end;
+	};
+
+	struct Diagnostic
+	{
+		DiagnosticSeverity severity = DiagnosticSeverity::Error;
+		DiagnosticCode code = DiagnosticCode::ExtractionError;
+		SourceRange source_range;
+		std::string message;
+	};
+
+	struct HeaderModel
+	{
+		std::filesystem::path absolute_path;
+		std::filesystem::path project_relative_path;
+		std::string include_spelling;
+		bool parsed_by_real_tu = false;
+		bool parsed_by_synthetic_tu = false;
+	};
+
+	struct ParameterModel
+	{
+		std::string type_spelling;
+		std::string gmock_type_spelling;
+		std::string original_name;
+		std::string generated_name;
+		bool has_default_argument = false;
+		bool is_rvalue_ref = false;
+		bool is_nonconst_by_value = false;
+	};
+
+	enum class RefQualifierKind
+	{
+		None,
+		LValue,
+		RValue,
+	};
+
+	struct MethodModel
+	{
+		std::string name;
+		std::string qualified_owner_name;
+		std::string return_type_spelling;
+		std::string gmock_return_type_spelling;
+		std::vector<ParameterModel> parameters;
+		std::string signature_for_report;
+		bool is_static = false;
+		bool is_const = false;
+		bool is_volatile = false;
+		bool is_noexcept = false;
+		bool has_conditional_noexcept = false;
+		bool is_virtual = false;
+		bool is_pure_virtual = false;
+		bool is_inline = false;
+		bool is_deleted = false;
+		bool is_defaulted = false;
+		RefQualifierKind ref_qualifier = RefQualifierKind::None;
+		AccessKind access = AccessKind::Unknown;
+		SourceRange source_range;
+	};
+
+	struct UnsupportedItem
+	{
+		std::string kind;
+		std::string name;
+		std::string reason;
+		std::string suggested_action;
+		SourceRange source_range;
+	};
+
+	struct ClassModel
+	{
+		std::string name;
+		std::string qualified_name;
+		std::vector<std::string> namespaces;
+		std::string mock_name;
+		std::string mock_header_name;
+		std::string fake_source_name;
+		HeaderModel source_header;
+		std::vector<MethodModel> mock_methods;
+		std::vector<MethodModel> fake_methods;
+		std::vector<UnsupportedItem> unsupported_items;
+	};
+
+	struct ProjectModel
+	{
+		std::vector<HeaderModel> headers;
+		std::vector<ClassModel> classes;
+		std::vector<Diagnostic> diagnostics;
+	};
+
+	[[nodiscard]] std::string BuildQualifiedName(const std::vector<std::string>& namespaces,
+												 const std::string& name);
+	[[nodiscard]] std::string DefaultMockName(const std::string& class_name);
+	[[nodiscard]] std::string DefaultMockHeaderName(const std::string& class_name);
+	[[nodiscard]] std::string DefaultFakeSourceName(const std::string& class_name);
+	void SortProjectModel(ProjectModel& project);
+} // namespace mockfakegen

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "model/GeneratedFile.h"
+#include "model/ProjectModel.h"
 
 namespace mockfakegen
 {
@@ -29,4 +30,5 @@ namespace mockfakegen
 
 	[[nodiscard]] std::vector<GeneratedFile>
 	GenerateMinimalMockFake(const SimpleClassModel& class_model);
+	[[nodiscard]] std::vector<GeneratedFile> GenerateMinimalMockFake(const ClassModel& class_model);
 } // namespace mockfakegen
