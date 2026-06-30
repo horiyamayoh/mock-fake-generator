@@ -1,0 +1,4 @@
+[submodule "third_party/ket"]
+	path = third_party/ket
+	url = https://github.com/horiyamayoh/ket.git
+	branch = main
