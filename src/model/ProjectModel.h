@@ -29,6 +29,24 @@ namespace mockfakegen
 		ExtractionError,
 	};
 
+	enum class UnsupportedReasonCode
+	{
+		Unknown,
+		ClassTemplate,
+		FunctionTemplate,
+		Constructor,
+		Destructor,
+		ConversionOperator,
+		OverloadedOperator,
+		NonPublicMethod,
+		DeletedMethod,
+		DefaultedMethod,
+		InlineBody,
+		ConstexprMethod,
+		ConditionalNoexcept,
+		VolatileMethod,
+	};
+
 	struct SourceLocation
 	{
 		std::filesystem::path file;
@@ -102,8 +120,11 @@ namespace mockfakegen
 
 	struct UnsupportedItem
 	{
+		UnsupportedReasonCode reason_code = UnsupportedReasonCode::Unknown;
 		std::string kind;
+		std::string class_name;
 		std::string name;
+		std::string member_signature;
 		std::string reason;
 		std::string suggested_action;
 		SourceRange source_range;

@@ -149,15 +149,36 @@ namespace mockfakegen
 		[[nodiscard]] UnsupportedItem
 		MakeUnsupportedMethod(const clang::NamedDecl& declaration,
 							  const clang::SourceManager& source_manager,
+							  UnsupportedReasonCode reason_code,
+							  std::string class_name,
 							  std::string kind,
 							  std::string reason)
 		{
+			auto member_signature = class_name;
+			if (!member_signature.empty())
+			{
+				member_signature += "::";
+			}
+			member_signature += UnsupportedMethodName(declaration);
 			return UnsupportedItem{
+				.reason_code = reason_code,
 				.kind = std::move(kind),
+				.class_name = std::move(class_name),
 				.name = UnsupportedMethodName(declaration),
+				.member_signature = std::move(member_signature),
 				.reason = std::move(reason),
 				.suggested_action = "exclude this member or provide a hand-authored mock",
 				.source_range = ToSourceRange(source_manager, declaration.getSourceRange()),
+			};
+		}
+
+		[[nodiscard]] Diagnostic UnsupportedDiagnostic(const UnsupportedItem& item)
+		{
+			return Diagnostic{
+				.severity = DiagnosticSeverity::Warning,
+				.code = DiagnosticCode::UnsupportedConstruct,
+				.source_range = item.source_range,
+				.message = item.kind + ": " + item.reason,
 			};
 		}
 
@@ -212,13 +233,18 @@ namespace mockfakegen
 					return true;
 				}
 
-				result_.unsupported_items.push_back(UnsupportedItem{
+				auto item = UnsupportedItem{
+					.reason_code = UnsupportedReasonCode::ClassTemplate,
 					.kind = "class_template",
+					.class_name = name,
 					.name = name,
+					.member_signature = name,
 					.reason = "class template is not supported by link replacement fake generation",
 					.suggested_action = "exclude it or provide a hand-authored mock",
 					.source_range = ToSourceRange(source_manager_, declaration->getSourceRange()),
-				});
+				};
+				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
+				result_.unsupported_items.push_back(std::move(item));
 				return true;
 			}
 
@@ -321,11 +347,11 @@ namespace mockfakegen
 						const auto* templated = function_template->getTemplatedDecl();
 						if (templated != nullptr)
 						{
-							class_model.unsupported_items.push_back(
-								MakeUnsupportedMethod(*templated,
-													  source_manager_,
-													  "function_template",
-													  "function template member is not supported"));
+							RecordUnsupportedMethod(class_model,
+													*templated,
+													UnsupportedReasonCode::FunctionTemplate,
+													"function_template",
+													"function template member is not supported");
 						}
 						continue;
 					}
@@ -338,83 +364,101 @@ namespace mockfakegen
 
 					if (llvm::isa<clang::CXXConstructorDecl>(method))
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "constructor",
-												  "constructor fake generation is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::Constructor,
+												"constructor",
+												"constructor fake generation is not supported");
 						continue;
 					}
 					if (llvm::isa<clang::CXXDestructorDecl>(method))
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "destructor",
-												  "destructor fake generation is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::Destructor,
+												"destructor",
+												"destructor fake generation is not supported");
 						continue;
 					}
 					if (llvm::isa<clang::CXXConversionDecl>(method))
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "conversion_operator",
-												  "conversion operator is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConversionOperator,
+												"conversion_operator",
+												"conversion operator is not supported");
 						continue;
 					}
 					if (method->isOverloadedOperator())
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "overloaded_operator",
-												  "overloaded operator is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::OverloadedOperator,
+												"overloaded_operator",
+												"overloaded operator is not supported");
 						continue;
 					}
 					if (method->getAccess() != clang::AS_public)
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "non_public_method",
-												  "only public methods are generated"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::NonPublicMethod,
+												"non_public_method",
+												"only public methods are generated");
 						continue;
 					}
 					if (method->isDeleted())
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "deleted_method",
-												  "deleted method is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::DeletedMethod,
+												"deleted_method",
+												"deleted method is not supported");
 						continue;
 					}
 					if (method->isDefaulted())
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "defaulted_method",
-												  "defaulted method is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::DefaultedMethod,
+												"defaulted_method",
+												"defaulted method is not supported");
 						continue;
 					}
 					if (method->isConstexpr())
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "constexpr_method",
-												  "constexpr method is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConstexprMethod,
+												"constexpr_method",
+												"constexpr method is not supported");
 						continue;
 					}
 					if (method->doesThisDeclarationHaveABody())
 					{
-						class_model.unsupported_items.push_back(
-							MakeUnsupportedMethod(*method,
-												  source_manager_,
-												  "inline_body",
-												  "inline method body is not supported"));
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::InlineBody,
+												"inline_body",
+												"inline method body is not supported");
+						continue;
+					}
+					if (HasConditionalNoexcept(*method))
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConditionalNoexcept,
+												"conditional_noexcept",
+												"conditional noexcept is not supported");
+						continue;
+					}
+					if (method->isVolatile())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::VolatileMethod,
+												"volatile_method",
+												"volatile method is not supported");
 						continue;
 					}
 
@@ -422,6 +466,22 @@ namespace mockfakegen
 					class_model.mock_methods.push_back(method_model);
 					class_model.fake_methods.push_back(std::move(method_model));
 				}
+			}
+
+			void RecordUnsupportedMethod(ClassModel& class_model,
+										 const clang::NamedDecl& declaration,
+										 UnsupportedReasonCode reason_code,
+										 std::string kind,
+										 std::string reason)
+			{
+				auto item = MakeUnsupportedMethod(declaration,
+												  source_manager_,
+												  reason_code,
+												  class_model.qualified_name,
+												  std::move(kind),
+												  std::move(reason));
+				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
+				class_model.unsupported_items.push_back(std::move(item));
 			}
 
 			[[nodiscard]] MethodModel BuildMethodModel(const clang::CXXMethodDecl& method,

@@ -55,8 +55,11 @@ namespace
 			.unsupported_items =
 				{
 					mockfakegen::UnsupportedItem{
+						.reason_code = mockfakegen::UnsupportedReasonCode::FunctionTemplate,
 						.kind = "function_template",
+						.class_name = "app::Hoge",
 						.name = "Get",
+						.member_signature = "app::Hoge::Get()",
 						.reason = "function template is not supported",
 						.suggested_action = "write a hand-authored mock",
 						.source_range = {},

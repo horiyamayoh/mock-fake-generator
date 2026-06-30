@@ -231,6 +231,8 @@ namespace
 				   "  void Deleted() = delete;\n"
 				   "  void Inline() {}\n"
 				   "  constexpr int Value() const { return 0; }\n"
+				   "  void Conditional() noexcept(sizeof(int) == 4);\n"
+				   "  void Volatile() volatile;\n"
 				   "  bool Supported();\n"
 				   "};\n");
 
@@ -254,6 +256,13 @@ namespace
 		Expect(HasUnsupportedKind(class_model, "inline_body"), "inline body should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "constexpr_method"),
 			   "constexpr method should be unsupported");
+		Expect(HasUnsupportedKind(class_model, "conditional_noexcept"),
+			   "conditional noexcept should be unsupported");
+		Expect(HasUnsupportedKind(class_model, "volatile_method"),
+			   "volatile method should be unsupported");
+		Expect(!result.diagnostics.empty(), "unsupported methods should emit diagnostics");
+		Expect(result.diagnostics[0].code == mockfakegen::DiagnosticCode::UnsupportedConstruct,
+			   "unsupported diagnostics should be distinct from parse diagnostics");
 	}
 } // namespace
 
