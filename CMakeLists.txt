@@ -50,6 +50,7 @@ add_library(
 		src/Config.cpp
 		src/HeaderScanner.cpp
 		src/model/GeneratedFile.cpp
+		src/runtime_template/RuntimeTemplate.cpp
 		src/support/CliSupport.cpp
 )
 target_include_directories(mockfakegen_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -133,6 +134,41 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_generated_file_test)
 
 	add_test(NAME mockfakegen_generated_file_test COMMAND mockfakegen_generated_file_test)
+
+	add_executable(mockfakegen_runtime_template_test tests/runtime/runtime_template_test.cpp)
+	target_link_libraries(mockfakegen_runtime_template_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_runtime_template_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_runtime_template_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_runtime_template_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_runtime_template_test)
+	mockfakegen_apply_sanitizers(mockfakegen_runtime_template_test)
+
+	add_test(NAME mockfakegen_runtime_template_test COMMAND mockfakegen_runtime_template_test)
+
+	add_executable(mockfakegen_runtime_header_smoke tests/runtime/mock_fake_runtime_header_smoke.cpp)
+	target_include_directories(
+		mockfakegen_runtime_header_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime"
+	)
+	target_compile_features(mockfakegen_runtime_header_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_runtime_header_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_runtime_header_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_runtime_header_smoke)
+
+	add_test(NAME mockfakegen_runtime_header_smoke COMMAND mockfakegen_runtime_header_smoke)
 
 	add_executable(mockfakegen_foundation_smoke tests/foundation/foundation_smoke.cpp)
 	target_link_libraries(mockfakegen_foundation_smoke PRIVATE mockfakegen_ket)
