@@ -33,6 +33,7 @@ namespace
 	{
 		return mockfakegen::SimpleClassModel{
 			.name = "Hoge",
+			.namespaces = {},
 			.header_include = "Hoge.h",
 			.methods =
 				{

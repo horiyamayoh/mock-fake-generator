@@ -24,6 +24,7 @@ namespace mockfakegen
 	struct SimpleClassModel
 	{
 		std::string name;
+		std::vector<std::string> namespaces;
 		std::string header_include;
 		std::vector<SimpleMethodModel> methods;
 	};

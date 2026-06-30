@@ -20,6 +20,61 @@ namespace mockfakegen
 			return "ScopedMock" + class_model.name;
 		}
 
+		[[nodiscard]] std::string NamespaceName(const std::vector<std::string>& namespaces)
+		{
+			std::string text;
+			for (const auto& namespace_part : namespaces)
+			{
+				if (!text.empty())
+				{
+					text += "::";
+				}
+				text += namespace_part;
+			}
+			return text;
+		}
+
+		[[nodiscard]] std::string QualifiedClassName(const SimpleClassModel& class_model)
+		{
+			const auto namespace_name = NamespaceName(class_model.namespaces);
+			if (namespace_name.empty())
+			{
+				return class_model.name;
+			}
+			return namespace_name + "::" + class_model.name;
+		}
+
+		void OpenNamespace(std::ostringstream& out, const SimpleClassModel& class_model)
+		{
+			const auto namespace_name = NamespaceName(class_model.namespaces);
+			if (!namespace_name.empty())
+			{
+				out << "namespace " << namespace_name << "\n"
+					<< "{\n\n";
+			}
+		}
+
+		void CloseNamespace(std::ostringstream& out, const SimpleClassModel& class_model)
+		{
+			const auto namespace_name = NamespaceName(class_model.namespaces);
+			if (!namespace_name.empty())
+			{
+				out << "\n} // namespace " << namespace_name << "\n";
+			}
+		}
+
+		[[nodiscard]] std::string LocalIndent(const SimpleClassModel& class_model,
+											  const std::size_t level)
+		{
+			std::string indent;
+			if (!class_model.namespaces.empty())
+			{
+				indent += '\t';
+			}
+			indent.append(level, '\t');
+			return indent;
+		}
+
 		[[nodiscard]] std::string
 		JoinParameterTypes(const std::vector<SimpleParameterModel>& parameters)
 		{
@@ -85,7 +140,7 @@ namespace mockfakegen
 		[[nodiscard]] std::string DiagnosticSignature(const SimpleClassModel& class_model,
 													  const SimpleMethodModel& method)
 		{
-			std::string text = class_model.name;
+			std::string text = QualifiedClassName(class_model);
 			text += "::";
 			text += method.name;
 			text += '(';
@@ -101,22 +156,28 @@ namespace mockfakegen
 			out << "#pragma once\n\n"
 				<< "#include <gmock/gmock.h>\n\n"
 				<< "#include \"" << class_model.header_include << "\"\n"
-				<< "#include \"MockFakeRuntime.h\"\n\n"
-				<< "class " << mock_class_name << "\n"
-				<< "{\n"
-				<< "  public:\n"
-				<< "\t" << mock_class_name << "() = default;\n"
-				<< "\t~" << mock_class_name << "() = default;\n\n";
+				<< "#include \"MockFakeRuntime.h\"\n\n";
+
+			OpenNamespace(out, class_model);
+
+			const auto indent = LocalIndent(class_model, 0U);
+			const auto member_indent = LocalIndent(class_model, 1U);
+			out << indent << "class " << mock_class_name << "\n"
+				<< indent << "{\n"
+				<< indent << "  public:\n"
+				<< member_indent << mock_class_name << "() = default;\n"
+				<< member_indent << "~" << mock_class_name << "() = default;\n\n";
 
 			for (const auto& method : class_model.methods)
 			{
-				out << "\tMOCK_METHOD(" << method.return_type << ", " << method.name << ", ("
-					<< JoinParameterTypes(method.parameters) << "), ());\n";
+				out << member_indent << "MOCK_METHOD(" << method.return_type << ", " << method.name
+					<< ", (" << JoinParameterTypes(method.parameters) << "), ());\n";
 			}
 
-			out << "};\n\n"
-				<< "using " << ScopedMockAliasName(class_model) << " = ::mockfake::ScopedMock<"
-				<< mock_class_name << ">;\n";
+			out << indent << "};\n\n"
+				<< indent << "using " << ScopedMockAliasName(class_model)
+				<< " = ::mockfake::ScopedMock<" << mock_class_name << ">;\n";
+			CloseNamespace(out, class_model);
 
 			return out.str();
 		}
@@ -128,6 +189,11 @@ namespace mockfakegen
 			out << "#include \"" << class_model.header_include << "\"\n"
 				<< "#include \"" << mock_class_name << ".h\"\n\n";
 
+			OpenNamespace(out, class_model);
+
+			const auto indent = LocalIndent(class_model, 0U);
+			const auto body_indent = LocalIndent(class_model, 1U);
+			const auto nested_body_indent = LocalIndent(class_model, 2U);
 			for (const auto& method : class_model.methods)
 			{
 				const auto parameter_declarations = JoinParameterDeclarations(method.parameters);
@@ -135,26 +201,29 @@ namespace mockfakegen
 				const auto signature = DiagnosticSignature(class_model, method);
 				const auto is_void_return = method.return_type == "void";
 
-				out << method.return_type << ' ' << class_model.name << "::" << method.name << '('
-					<< parameter_declarations << ")\n"
-					<< "{\n"
-					<< "\tif (auto* mock = ::mockfake::CurrentMock<" << mock_class_name << ">())\n"
-					<< "\t{\n";
+				out << indent << method.return_type << ' ' << class_model.name
+					<< "::" << method.name << '(' << parameter_declarations << ")\n"
+					<< indent << "{\n"
+					<< body_indent << "if (auto* mock = ::mockfake::CurrentMock<" << mock_class_name
+					<< ">())\n"
+					<< body_indent << "{\n";
 
 				if (is_void_return)
 				{
-					out << "\t\tmock->" << method.name << '(' << parameter_names << ");\n"
-						<< "\t\treturn;\n";
+					out << nested_body_indent << "mock->" << method.name << '(' << parameter_names
+						<< ");\n"
+						<< nested_body_indent << "return;\n";
 				}
 				else
 				{
-					out << "\t\treturn mock->" << method.name << '(' << parameter_names << ");\n";
+					out << nested_body_indent << "return mock->" << method.name << '('
+						<< parameter_names << ");\n";
 				}
 
-				out << "\t}\n\n"
-					<< "\treturn ::mockfake::MissingMockReturn<" << method.return_type << ">(\""
-					<< signature << "\");\n"
-					<< "}\n";
+				out << body_indent << "}\n\n"
+					<< body_indent << "return ::mockfake::MissingMockReturn<" << method.return_type
+					<< ">(\"" << signature << "\");\n"
+					<< indent << "}\n";
 
 				if (&method != &class_model.methods.back())
 				{
@@ -162,13 +231,14 @@ namespace mockfakegen
 				}
 			}
 
+			CloseNamespace(out, class_model);
 			return out.str();
 		}
 
 		[[nodiscard]] GeneratedSourceClass SourceClass(const SimpleClassModel& class_model)
 		{
 			return GeneratedSourceClass{
-				.qualified_name = class_model.name,
+				.qualified_name = QualifiedClassName(class_model),
 				.source_header = class_model.header_include,
 			};
 		}
@@ -194,6 +264,7 @@ namespace mockfakegen
 	{
 		SimpleClassModel simple_class{
 			.name = class_model.name,
+			.namespaces = class_model.namespaces,
 			.header_include = class_model.source_header.include_spelling,
 			.methods = {},
 		};
