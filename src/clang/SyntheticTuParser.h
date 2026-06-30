@@ -33,6 +33,7 @@ namespace mockfakegen
 	{
 		std::filesystem::path header_path;
 		std::filesystem::path project_root;
+		std::vector<std::string> compile_args = {};
 	};
 
 	struct SyntheticTuParseResult

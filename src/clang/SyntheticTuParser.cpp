@@ -94,7 +94,9 @@ namespace mockfakegen
 			.include_spelling = include_spelling,
 			.parsed_by_synthetic_tu = true,
 		};
-		result.compile_args = BuildSyntheticTuFallbackArgs(project_root);
+		result.compile_args = options.compile_args.empty()
+			? BuildSyntheticTuFallbackArgs(project_root)
+			: options.compile_args;
 		result.synthetic_code = BuildSyntheticTuCode(include_spelling);
 
 		clang::TextDiagnosticBuffer diagnostic_buffer;

@@ -127,6 +127,7 @@ mockfakegen_apply_sanitizers(mockfakegen_ket)
 
 add_library(
 	mockfakegen_core
+		src/CompilationResolver.cpp
 		src/Config.cpp
 		src/FormatStyle.cpp
 		src/ValidationMode.cpp
@@ -259,6 +260,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_synthetic_tu_parser_test)
 
 	add_test(NAME mockfakegen_synthetic_tu_parser_test COMMAND mockfakegen_synthetic_tu_parser_test)
+
+	add_executable(mockfakegen_compilation_resolver_test tests/clang/compilation_resolver_test.cpp)
+	target_link_libraries(mockfakegen_compilation_resolver_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_compilation_resolver_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_compilation_resolver_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_compilation_resolver_test)
+	mockfakegen_apply_sanitizers(mockfakegen_compilation_resolver_test)
+
+	add_test(NAME mockfakegen_compilation_resolver_test COMMAND mockfakegen_compilation_resolver_test)
 
 	add_executable(mockfakegen_class_extractor_test tests/clang/class_extractor_test.cpp)
 	target_link_libraries(mockfakegen_class_extractor_test PRIVATE mockfakegen_core)
