@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  dev:
+    name: Dev build, tests, and quality gates
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            clang-18 \
+            llvm-18-dev \
+            libclang-18-dev \
+            python3
+
+      - name: Configure dev preset
+        run: cmake --preset dev
+
+      - name: Build dev preset
+        run: cmake --build --preset dev
+
+      - name: Run dev tests
+        run: ctest --preset dev --output-on-failure
+
+      - name: Check generated output for ket contamination
+        run: cmake --build --preset dev --target check-generated-output
+
+      - name: Check source formatting
+        run: cmake --build --preset dev --target check-format
+
+      - name: Check whitespace errors
+        run: git diff --check
+
+  sanitize:
+    name: Sanitizer build and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            clang-18 \
+            llvm-18-dev \
+            libclang-18-dev \
+            python3
+
+      - name: Configure sanitize preset
+        run: cmake --preset sanitize
+
+      - name: Build sanitize preset
+        run: cmake --build --preset sanitize
+
+      - name: Run sanitize tests
+        run: ctest --preset sanitize --output-on-failure
