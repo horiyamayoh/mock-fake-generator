@@ -139,6 +139,7 @@ add_library(
 		src/support/CliSupport.cpp
 		src/validation/GeneratedCompileValidator.cpp
 		src/validation/GeneratedOutputCheck.cpp
+		src/validation/GenerationPolicy.cpp
 )
 target_include_directories(mockfakegen_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(mockfakegen_core PUBLIC mockfakegen_clang PRIVATE mockfakegen_ket)
@@ -724,6 +725,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 		NAME mockfakegen_generated_compile_validator_test
 		COMMAND mockfakegen_generated_compile_validator_test
 	)
+
+	add_executable(mockfakegen_generation_policy_test tests/validation/generation_policy_test.cpp)
+	target_link_libraries(mockfakegen_generation_policy_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_generation_policy_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_generation_policy_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_generation_policy_test)
+	mockfakegen_apply_sanitizers(mockfakegen_generation_policy_test)
+
+	add_test(NAME mockfakegen_generation_policy_test COMMAND mockfakegen_generation_policy_test)
 
 	add_executable(
 		mockfakegen_reporting_generation_test
