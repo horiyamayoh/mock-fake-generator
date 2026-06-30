@@ -178,6 +178,9 @@ namespace
 	{
 		Expect(mockfakegen::TypeSpellingService::NeedsGMockParens("std::pair<int, int>"),
 			   "template comma should need gMock wrapping");
+		Expect(mockfakegen::TypeSpellingService::NeedsGMockParens(
+				   "std::map<int, std::pair<int, double>>"),
+			   "nested template comma should need gMock wrapping");
 		Expect(!mockfakegen::TypeSpellingService::NeedsGMockParens("void (*)(int, int)"),
 			   "function pointer parameter comma is already parenthesized");
 	}

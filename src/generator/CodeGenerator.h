@@ -11,12 +11,14 @@ namespace mockfakegen
 	struct SimpleParameterModel
 	{
 		std::string type;
+		std::string gmock_type = {};
 		std::string name;
 	};
 
 	struct SimpleMethodModel
 	{
 		std::string return_type;
+		std::string gmock_return_type = {};
 		std::string name;
 		std::vector<SimpleParameterModel> parameters;
 		bool is_const = false;

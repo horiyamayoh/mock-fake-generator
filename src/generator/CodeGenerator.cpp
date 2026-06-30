@@ -96,6 +96,44 @@ namespace mockfakegen
 			return text;
 		}
 
+		[[nodiscard]] std::string GMockParameterType(const SimpleParameterModel& parameter)
+		{
+			if (!parameter.gmock_type.empty())
+			{
+				return parameter.gmock_type;
+			}
+			return parameter.type;
+		}
+
+		[[nodiscard]] std::string GMockReturnType(const SimpleMethodModel& method)
+		{
+			if (!method.gmock_return_type.empty())
+			{
+				return method.gmock_return_type;
+			}
+			return method.return_type;
+		}
+
+		[[nodiscard]] std::string
+		JoinGMockParameterTypes(const std::vector<SimpleParameterModel>& parameters)
+		{
+			if (parameters.empty())
+			{
+				return {};
+			}
+
+			std::string text;
+			for (std::size_t index = 0U; index < parameters.size(); ++index)
+			{
+				if (index != 0U)
+				{
+					text += ", ";
+				}
+				text += GMockParameterType(parameters[index]);
+			}
+			return text;
+		}
+
 		[[nodiscard]] std::string
 		JoinParameterDeclarations(const std::vector<SimpleParameterModel>& parameters)
 		{
@@ -266,8 +304,8 @@ namespace mockfakegen
 
 			for (const auto& method : class_model.methods)
 			{
-				out << member_indent << "MOCK_METHOD(" << method.return_type << ", " << method.name
-					<< ", (" << JoinParameterTypes(method.parameters) << "), ("
+				out << member_indent << "MOCK_METHOD(" << GMockReturnType(method) << ", "
+					<< method.name << ", (" << JoinGMockParameterTypes(method.parameters) << "), ("
 					<< GMockMethodSpecs(method) << "));\n";
 			}
 
@@ -376,6 +414,7 @@ namespace mockfakegen
 		{
 			SimpleMethodModel simple_method{
 				.return_type = method.return_type_spelling,
+				.gmock_return_type = method.gmock_return_type_spelling,
 				.name = method.name,
 				.parameters = {},
 				.is_const = method.is_const,
@@ -388,6 +427,7 @@ namespace mockfakegen
 			{
 				simple_method.parameters.push_back(SimpleParameterModel{
 					.type = parameter.type_spelling,
+					.gmock_type = parameter.gmock_type_spelling,
 					.name = parameter.generated_name,
 				});
 			}

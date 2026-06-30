@@ -129,6 +129,7 @@ namespace
 	{
 		const auto source_dir = std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR);
 		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens({
+			source_dir / "tests/fixtures/comma_type/generated",
 			source_dir / "tests/fixtures/default_argument/generated",
 			source_dir / "tests/fixtures/hoge/generated",
 			source_dir / "tests/fixtures/namespaced/generated",
@@ -137,7 +138,7 @@ namespace
 		});
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 15U, "generated fixtures should be included");
+		Expect(result.checked_file_count == 18U, "generated fixtures should be included");
 	}
 } // namespace
 
