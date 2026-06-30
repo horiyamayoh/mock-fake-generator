@@ -23,6 +23,18 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+The tool links against LLVM/Clang LibTooling through CMake package config files.
+If CMake cannot find a complete LLVM/Clang installation, pass an explicit root:
+
+```sh
+cmake --preset dev -DMOCKFAKEGEN_LLVM_ROOT=/usr/lib/llvm-18
+```
+
+The root must contain `lib/cmake/llvm/LLVMConfig.cmake`,
+`lib/cmake/clang/ClangConfig.cmake`, and Clang libraries such as
+`clangTooling`, `clangAST`, `clangASTMatchers`, `clangFrontend`, `clangBasic`,
+and `clangLex`.
+
 sanitize preset:
 
 ```sh

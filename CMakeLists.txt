@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(mockfakegen VERSION 0.1.0 LANGUAGES CXX)
+project(mockfakegen VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,6 +16,81 @@ option(MOCKFAKEGEN_WARNINGS_AS_ERRORS "Treat project warnings as errors." ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(MockFakeGenOptions)
+
+set(MOCKFAKEGEN_LLVM_ROOT "" CACHE PATH "LLVM/Clang installation root containing lib/cmake/llvm and lib/cmake/clang.")
+
+if(MOCKFAKEGEN_LLVM_ROOT)
+	set(MOCKFAKEGEN_LLVM_PACKAGE_ROOT "${MOCKFAKEGEN_LLVM_ROOT}")
+elseif(NOT LLVM_DIR AND NOT Clang_DIR)
+	foreach(candidate IN ITEMS /usr/lib/llvm-18 /usr/lib/llvm-19 /usr/lib/llvm-17 /usr/lib/llvm-20)
+		if(EXISTS "${candidate}/lib/libclangTooling.a"
+		   AND EXISTS "${candidate}/lib/cmake/llvm/LLVMConfig.cmake"
+		   AND EXISTS "${candidate}/lib/cmake/clang/ClangConfig.cmake"
+		)
+			set(MOCKFAKEGEN_LLVM_PACKAGE_ROOT "${candidate}")
+			break()
+		endif()
+	endforeach()
+endif()
+
+if(MOCKFAKEGEN_LLVM_PACKAGE_ROOT)
+	find_package(
+		LLVM
+		CONFIG
+		REQUIRED
+		PATHS "${MOCKFAKEGEN_LLVM_PACKAGE_ROOT}/lib/cmake/llvm"
+		NO_DEFAULT_PATH
+	)
+	find_package(
+		Clang
+		CONFIG
+		REQUIRED
+		PATHS "${MOCKFAKEGEN_LLVM_PACKAGE_ROOT}/lib/cmake/clang"
+		NO_DEFAULT_PATH
+	)
+else()
+	find_package(LLVM CONFIG REQUIRED)
+	find_package(Clang CONFIG REQUIRED)
+endif()
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}: ${LLVM_DIR}")
+message(STATUS "Found Clang package: ${Clang_DIR}")
+
+add_library(mockfakegen_clang INTERFACE)
+target_include_directories(
+	mockfakegen_clang
+	SYSTEM
+	INTERFACE
+		${LLVM_INCLUDE_DIRS}
+		${CLANG_INCLUDE_DIRS}
+)
+separate_arguments(MOCKFAKEGEN_LLVM_DEFINITION_OPTIONS UNIX_COMMAND "${LLVM_DEFINITIONS}")
+list(REMOVE_ITEM MOCKFAKEGEN_LLVM_DEFINITION_OPTIONS -D_GNU_SOURCE)
+target_compile_options(mockfakegen_clang INTERFACE ${MOCKFAKEGEN_LLVM_DEFINITION_OPTIONS})
+
+set(
+	MOCKFAKEGEN_CLANG_TARGETS
+	clangTooling
+	clangAST
+	clangASTMatchers
+	clangFrontend
+	clangBasic
+	clangLex
+	clangSerialization
+	clangDriver
+	clangParse
+	clangSema
+	clangAnalysis
+	clangEdit
+	clangToolingCore
+)
+
+foreach(clang_target IN LISTS MOCKFAKEGEN_CLANG_TARGETS)
+	if(NOT TARGET ${clang_target})
+		message(FATAL_ERROR "Required Clang target ${clang_target} was not provided by ClangConfig.cmake.")
+	endif()
+	target_link_libraries(mockfakegen_clang INTERFACE ${clang_target})
+endforeach()
 
 set(MOCKFAKEGEN_KET_MODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ket/modules")
 
@@ -68,7 +143,7 @@ mockfakegen_apply_strict_warnings(mockfakegen_core)
 mockfakegen_apply_sanitizers(mockfakegen_core)
 
 add_executable(mockfakegen src/main.cpp)
-target_link_libraries(mockfakegen PRIVATE mockfakegen_core)
+target_link_libraries(mockfakegen PRIVATE mockfakegen_core mockfakegen_clang)
 target_compile_features(mockfakegen PRIVATE cxx_std_23)
 set_target_properties(
 	mockfakegen
@@ -132,6 +207,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_config_cli_test)
 
 	add_test(NAME mockfakegen_config_cli_test COMMAND mockfakegen_config_cli_test)
+
+	add_executable(mockfakegen_clang_cmake_smoke tests/clang/clang_cmake_smoke.cpp)
+	target_link_libraries(mockfakegen_clang_cmake_smoke PRIVATE mockfakegen_clang)
+	target_compile_features(mockfakegen_clang_cmake_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_clang_cmake_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_clang_cmake_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_clang_cmake_smoke)
+
+	add_test(NAME mockfakegen_clang_cmake_smoke COMMAND mockfakegen_clang_cmake_smoke)
 
 	add_executable(mockfakegen_header_scanner_test tests/scanner/header_scanner_test.cpp)
 	target_link_libraries(mockfakegen_header_scanner_test PRIVATE mockfakegen_core)
