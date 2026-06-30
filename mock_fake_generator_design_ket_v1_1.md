@@ -405,46 +405,77 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 
 - `--key value` と `--key=value` を受け付ける。
 - bare `--` 以降は option として扱わない。
-- 重複 option は原則として先勝ちにする。
+- repeatable と明記された option 以外の重複 option は deterministic な `DuplicateOption` diagnostic にする。
 - 数値 option は完全消費 parse に失敗したらユーザー診断として扱う。
 - `ket::contract` は CLI 入力不正には使わない。contract は実装バグ検出用である。
+- 未実装の deferred option は unknown として扱わず、deterministic な `DeferredOption` diagnostic にする。
 
-### 6.1 必須オプション
+### 6.1 option spelling と共通エラー規則
 
-| オプション | 説明 |
-|---|---|
-| `--input-root <path>` | 再帰探索するルートフォルダ |
-| `--output-dir <path>` | 生成物を出力する単一フォルダ |
-| `--build-path <path>` | `compile_commands.json` のあるビルドディレクトリ |
-| `--project-root <path>` | include path 表記や相対パス解決の基準 |
+- presence flag は `--dry-run` のように値を取らない。`--dry-run=true` は invalid。
+- bool value option は `--emit-manifest true` または `--emit-manifest=true` の形で `true` / `false` を必ず取る。
+- value option は値がない場合 `MissingOptionValue` にする。次の token が `--` で始まる場合は値ではなく option とみなす。
+- singleton option の 2 回目以降は `DuplicateOption` にし、後勝ち・先勝ちの暗黙解決をしない。
+- `--strict` と `--best-effort` は mutually exclusive とし、同時指定は `ConflictingOption` にする。
+- unknown option は `UnknownOption` にする。ただしこの表にある deferred option は unknown ではなく `DeferredOption` にする。
+- path option は `std::filesystem::absolute(path).lexically_normal()` 相当で正規化する。存在チェックは scanner / resolver / writer 側の責務とし、Config では行わない。
 
-### 6.2 主要オプション
+### 6.2 path option の関係
 
-| オプション | 既定値 | 説明 |
-|---|---:|---|
-| `--std c++23` | `c++23` | ツール自身および synthetic TU の標準。固定値扱いにしてもよい |
-| `--config <path>` | なし | CLI で表現しにくい per-class policy を読み込む設定ファイル |
-| `--header-extension .h` | `.h` | 対象拡張子。要件上 `.h` 固定だが将来 `.hpp`, `.hh` を許可可能 |
-| `--header-filter <regex>` | なし | 対象ヘッダの追加絞り込み |
-| `--exclude <glob>` | なし | 探索対象から除外する path pattern。複数指定可 |
-| `--class-filter <regex>` | なし | 対象クラスの追加絞り込み |
-| `--access public` | `public` | mock/fake 対象アクセス。`public,protected,private` も指定可能 |
-| `--registry-mode <mode>` | `thread-local` | mock 登録方式 |
-| `--fallback-policy <policy>` | `abort` | mock 未登録時の挙動 |
-| `--format-style <style>` | `file` | `file`, `llvm`, `google`, `none` |
-| `--validate <mode>` | `compile` | `none`, `syntax`, `compile` |
-| `--strict` | off | 未対応・診断ありで失敗 |
-| `--best-effort` | on | 可能な範囲で生成し、未対応を report に出す |
-| `--overwrite` | off | 既存ファイル上書きを許可 |
-| `--dry-run` | off | 生成予定と診断のみ出力 |
-| `--jobs <N>` | CPU 数 | 独立タスクの並列度 |
-| `--emit-all-mocks` | on | `AllMocks.h` を生成 |
-| `--emit-cmake-fragment` | on | `CMakeLists.fragment.cmake` を生成 |
-| `--emit-manifest` | on | `manifest.json` を生成 |
-| `--mock-namespace-mode <mode>` | `same-as-product` | mock の namespace 配置 |
-| `--collision-policy <policy>` | `qualified-filename` | ファイル名衝突時の処理 |
+| オプション | 必須 | 関係 | Config 時の診断 |
+|---|---:|---|---|
+| `--project-root <path>` | yes | 相対 include 表記、report、manifest の基準 | 空値は invalid |
+| `--input-root <path>` | yes | `project-root` と同一または配下。`.h` 探索の起点 | `project-root` 外は invalid |
+| `--output-dir <path>` | yes | 生成物の出力先。`input-root` 配下でもよいが scanner は生成物を再入力しない | 空値は invalid |
+| `--build-path <path>` | yes | `compile_commands.json` 探索の起点。out-of-tree build を許可するため `project-root` 外でもよい | 空値は invalid |
 
-### 6.3 registry mode
+### 6.3 complete Config option matrix
+
+| オプション | 型 / spelling | default | valid values / status | owner | エラー規則 |
+|---|---|---:|---|---|---|
+| `--help` | presence flag | off | implemented | CLI | 値付きは invalid。指定時は必須 path を要求しない |
+| `--input-root <path>` | path | required | implemented | HeaderScanner | 空値 invalid。`project-root` 外は invalid |
+| `--output-dir <path>` | path | required | implemented | OutputWriter | 空値 invalid |
+| `--build-path <path>` | path | required | implemented | CompilationResolver | 空値 invalid。`compile_commands.json` 不在は resolver diagnostic |
+| `--project-root <path>` | path | required | implemented | shared path policy | 空値 invalid |
+| `--std <value>` | value | `c++23` | `c++23` only | Clang parse / validation | 他値は invalid |
+| `--config <path>` | path | none | deferred | future config loader | 使用時は `DeferredOption` |
+| `--header-extension <ext>` | value | `.h` | `.h` only | HeaderScanner | 他値は invalid |
+| `--header-filter <regex>` | value | none | deferred | HeaderScanner | 使用時は `DeferredOption` |
+| `--exclude <glob>` | repeatable value | none | deferred | HeaderScanner | 使用時は `DeferredOption` |
+| `--class-filter <regex>` | value | none | deferred | ClassExtractor | 使用時は `DeferredOption` |
+| `--access <policy>` | value | `public` | `public` implemented, `protected` / `private` deferred | ClassExtractor / PolicyEngine | unknown value invalid。deferred value は `DeferredOption` |
+| `--include-struct <bool>` | bool value | `false` | `false` implemented, `true` deferred | ClassExtractor | `true` は `DeferredOption` |
+| `--registry-mode <mode>` | value | `thread-local` | `thread-local` implemented, `global-mutex` / `shared-owner` deferred | runtime template | unknown value invalid。deferred value は `DeferredOption` |
+| `--fallback-policy <policy>` | value | `abort` | `abort` implemented, `default-return` / `throw` / `compile-error` deferred | PolicyEngine / runtime template | unknown value invalid。deferred value は `DeferredOption` |
+| `--mock-namespace-mode <mode>` | value | `same-as-product` | `same-as-product` only | CodeGenerator | 他値は invalid |
+| `--collision-policy <policy>` | value | `qualified-filename` | `qualified-filename` only | CodeGenerator | 他値は invalid |
+| `--fake-special-members <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator / Validator | `true` は `DeferredOption` |
+| `--fake-static-data <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator / Validator | `true` は `DeferredOption` |
+| `--interface-mock <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator | `true` は `DeferredOption` |
+| `--include-dir <path>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
+| `--define <macro>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
+| `--extra-arg <arg>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
+| `--dry-run` | presence flag | off | implemented | OutputWriter / Runner | 値付きは invalid |
+| `--overwrite` | presence flag | off | implemented | OutputWriter | 値付きは invalid |
+| `--strict` | presence flag | off | implemented | PolicyEngine / Runner | `--best-effort` との同時指定は conflict |
+| `--best-effort` | presence flag | on | implemented | PolicyEngine / Runner | `--strict` との同時指定は conflict |
+| `--emit-all-mocks <bool>` | bool value | `true` | implemented | CodeGenerator | `true` / `false` 以外 invalid |
+| `--emit-manifest <bool>` | bool value | `true` | implemented | CodeGenerator / OutputWriter | `true` / `false` 以外 invalid |
+| `--emit-cmake-fragment <bool>` | bool value | `true` | implemented | CodeGenerator | `true` / `false` 以外 invalid |
+| `--format-style <style>` | value | `file` | `file`, `llvm`, `google`, `none` | Formatter | 他値は invalid |
+| `--validate <mode>` | value | `compile` | `none`, `syntax`, `compile` | Validator / Runner | 他値は invalid |
+| `--jobs <N>` | integer value | CPU 数 | positive integer | scheduler | 完全消費 parse 失敗、0、負数は invalid |
+
+### 6.4 mode option interaction
+
+- `--strict` は unsupported diagnostic、policy failure、compile validation failure を runner の非ゼロ終了条件に含める。
+- `--best-effort` は生成可能な範囲を出力し、unsupported は report に残す。`--strict` と同時指定しない。
+- `--validate none` は compile validation を実行しない。`--strict` と組み合わせても unsupported / config error は失敗条件のままである。
+- `--format-style none` は formatter を実行しない。manifest / report / validation の有無とは独立である。
+- `--emit-all-mocks false`、`--emit-manifest false`、`--emit-cmake-fragment false` は該当 artifact の生成だけを止める。生成しない artifact に対して validator が暗黙に依存してはいけない。
+
+### 6.5 registry mode
 
 | mode | 説明 | 推奨用途 |
 |---|---|---|
@@ -454,7 +485,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 
 標準は `thread-local` とする。単純なグローバルポインタと違い、並列テストで別スレッドの mock が混線しない。また stack 方式により、同一テスト内で一時的に mock を差し替えるネスト利用も可能になる。
 
-### 6.4 fallback policy
+### 6.6 fallback policy
 
 mock 未登録時の挙動を選べる。
 
@@ -1739,7 +1770,9 @@ target_link_libraries(HogeTest PRIVATE
 
 - `ket::cli::ArgvView` による CLI 引数の parse
 - `ket::parse` による `--jobs` などの数値 option parse
-- YAML/TOML config の読み込み
+- section 6 の complete Config option matrix に従う ownership / default / deferred 状態の固定
+- deferred option を unknown / silent ignore せず `DeferredOption` diagnostic にする
+- YAML/TOML config file support はこの段階では deferred として診断する
 - default 値の解決
 - path の canonical 化
 - option conflict の検出
