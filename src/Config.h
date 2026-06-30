@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "FormatStyle.h"
+
 namespace mockfakegen
 {
 	enum class ConfigErrorCode
@@ -37,6 +39,7 @@ namespace mockfakegen
 		bool strict = false;
 		bool best_effort = true;
 		bool emit_all_mocks = true;
+		FormatStyleKind format_style = FormatStyleKind::File;
 		int jobs = 1;
 	};
 

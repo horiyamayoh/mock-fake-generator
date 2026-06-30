@@ -1,6 +1,7 @@
 #include "model/GeneratedFile.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace mockfakegen
 {
@@ -84,6 +85,25 @@ namespace mockfakegen
 
 	std::string EnsureTrailingNewline(std::string content)
 	{
+		std::string normalized;
+		normalized.reserve(content.size() + 1U);
+		for (std::size_t index = 0U; index < content.size(); ++index)
+		{
+			if (content[index] == '\r')
+			{
+				if (index + 1U < content.size() && content[index + 1U] == '\n')
+				{
+					++index;
+				}
+				normalized.push_back('\n');
+			}
+			else
+			{
+				normalized.push_back(content[index]);
+			}
+		}
+
+		content = std::move(normalized);
 		if (content.empty() || content.back() != '\n')
 		{
 			content.push_back('\n');

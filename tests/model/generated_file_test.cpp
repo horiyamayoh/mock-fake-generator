@@ -101,6 +101,12 @@ namespace
 		const auto content = mockfakegen::EnsureTrailingNewline("line\n");
 		Expect(content == "line\n", "existing trailing LF should not be duplicated");
 	}
+
+	void NormalizesLineEndings()
+	{
+		const auto content = mockfakegen::EnsureTrailingNewline("one\r\ntwo\rthree");
+		Expect(content == "one\ntwo\nthree\n", "generated content should use LF endings");
+	}
 } // namespace
 
 int main()
@@ -109,5 +115,6 @@ int main()
 	ConvertsKindsToStableText();
 	SortsGeneratedFilesDeterministically();
 	KeepsAlreadyTerminatedContentStable();
+	NormalizesLineEndings();
 	return 0;
 }

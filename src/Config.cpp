@@ -23,6 +23,7 @@ namespace mockfakegen
 		constexpr std::string_view kStrictOption = "--strict";
 		constexpr std::string_view kBestEffortOption = "--best-effort";
 		constexpr std::string_view kEmitAllMocksOption = "--emit-all-mocks";
+		constexpr std::string_view kFormatStyleOption = "--format-style";
 		constexpr std::string_view kJobsOption = "--jobs";
 
 		[[nodiscard]] int DefaultJobs() noexcept
@@ -60,7 +61,7 @@ namespace mockfakegen
 				option == kOutputDirOption || option == kProjectRootOption ||
 				option == kDryRunOption || option == kOverwriteOption || option == kStrictOption ||
 				option == kBestEffortOption || option == kEmitAllMocksOption ||
-				option == kJobsOption;
+				option == kFormatStyleOption || option == kJobsOption;
 		}
 
 		[[nodiscard]] bool IsFlagOption(std::string_view option) noexcept
@@ -280,6 +281,20 @@ namespace mockfakegen
 
 				config.emit_all_mocks = *parsed_emit_all_mocks;
 			}
+			else if (option == kFormatStyleOption)
+			{
+				const auto parsed_format_style = ParseFormatStyleKind(*value);
+				if (!parsed_format_style.has_value())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kFormatStyleOption,
+							 "--format-style must be file, llvm, google, or none.");
+					continue;
+				}
+
+				config.format_style = *parsed_format_style;
+			}
 		}
 
 		if (strict_seen && best_effort_seen)
@@ -359,6 +374,7 @@ namespace mockfakegen
 			"  --strict               Fail when unsupported input is encountered.\n"
 			"  --best-effort          Generate supported output and report unsupported input.\n"
 			"  --emit-all-mocks <bool> Generate AllMocks.h when true.\n"
+			"  --format-style <style> file, llvm, google, or none.\n"
 			"  --jobs <N>             Positive worker count.\n";
 	}
 

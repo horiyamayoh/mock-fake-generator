@@ -82,6 +82,7 @@ set(
 	clangSema
 	clangAnalysis
 	clangEdit
+	clangFormat
 	clangToolingCore
 )
 
@@ -123,10 +124,12 @@ mockfakegen_apply_sanitizers(mockfakegen_ket)
 add_library(
 	mockfakegen_core
 		src/Config.cpp
+		src/FormatStyle.cpp
 		src/clang/ClassExtractor.cpp
 		src/clang/SyntheticTuParser.cpp
 		src/clang/TypeSpellingService.cpp
 		src/generator/CodeGenerator.cpp
+		src/generator/GeneratedFormatter.cpp
 		src/HeaderScanner.cpp
 		src/model/GeneratedFile.cpp
 		src/model/ProjectModel.cpp
@@ -315,6 +318,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_code_generator_test)
 
 	add_test(NAME mockfakegen_code_generator_test COMMAND mockfakegen_code_generator_test)
+
+	add_executable(mockfakegen_generated_formatter_test tests/generator/generated_formatter_test.cpp)
+	target_link_libraries(mockfakegen_generated_formatter_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_generated_formatter_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_generated_formatter_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_generated_formatter_test)
+	mockfakegen_apply_sanitizers(mockfakegen_generated_formatter_test)
+
+	add_test(NAME mockfakegen_generated_formatter_test COMMAND mockfakegen_generated_formatter_test)
 
 	add_executable(mockfakegen_output_writer_test tests/output/output_writer_test.cpp)
 	target_link_libraries(mockfakegen_output_writer_test PRIVATE mockfakegen_core)
