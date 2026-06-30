@@ -11,6 +11,7 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/Casting.h>
@@ -85,12 +86,120 @@ namespace mockfakegen
 			return std::vector<std::string>(reversed.rbegin(), reversed.rend());
 		}
 
+		[[nodiscard]] AccessKind ToAccessKind(clang::AccessSpecifier access)
+		{
+			switch (access)
+			{
+				case clang::AS_public:
+					return AccessKind::Public;
+				case clang::AS_protected:
+					return AccessKind::Protected;
+				case clang::AS_private:
+					return AccessKind::Private;
+				case clang::AS_none:
+					return AccessKind::Unknown;
+			}
+
+			return AccessKind::Unknown;
+		}
+
+		[[nodiscard]] RefQualifierKind ToRefQualifierKind(clang::RefQualifierKind qualifier)
+		{
+			switch (qualifier)
+			{
+				case clang::RQ_None:
+					return RefQualifierKind::None;
+				case clang::RQ_LValue:
+					return RefQualifierKind::LValue;
+				case clang::RQ_RValue:
+					return RefQualifierKind::RValue;
+			}
+
+			return RefQualifierKind::None;
+		}
+
+		[[nodiscard]] bool IsNoexcept(const clang::CXXMethodDecl& method)
+		{
+			const auto exception_spec = method.getExceptionSpecType();
+			return exception_spec == clang::EST_BasicNoexcept ||
+				exception_spec == clang::EST_NoexceptTrue || exception_spec == clang::EST_NoThrow;
+		}
+
+		[[nodiscard]] bool HasConditionalNoexcept(const clang::CXXMethodDecl& method)
+		{
+			const auto exception_spec = method.getExceptionSpecType();
+			return exception_spec == clang::EST_DependentNoexcept ||
+				exception_spec == clang::EST_NoexceptFalse ||
+				exception_spec == clang::EST_NoexceptTrue;
+		}
+
+		[[nodiscard]] std::string TypeSpelling(clang::QualType type,
+											   const clang::ASTContext& ast_context)
+		{
+			clang::PrintingPolicy policy(ast_context.getLangOpts());
+			policy.SuppressTagKeyword = true;
+			return type.getAsString(policy);
+		}
+
+		[[nodiscard]] bool IsNonConstByValue(clang::QualType type)
+		{
+			return !type->isReferenceType() && !type->isPointerType() && !type.isConstQualified();
+		}
+
+		[[nodiscard]] std::string UnsupportedMethodName(const clang::NamedDecl& declaration)
+		{
+			const auto name = declaration.getNameAsString();
+			if (!name.empty())
+			{
+				return name;
+			}
+
+			return declaration.getQualifiedNameAsString();
+		}
+
+		[[nodiscard]] UnsupportedItem
+		MakeUnsupportedMethod(const clang::NamedDecl& declaration,
+							  const clang::SourceManager& source_manager,
+							  std::string kind,
+							  std::string reason)
+		{
+			return UnsupportedItem{
+				.kind = std::move(kind),
+				.name = UnsupportedMethodName(declaration),
+				.reason = std::move(reason),
+				.suggested_action = "exclude this member or provide a hand-authored mock",
+				.source_range = ToSourceRange(source_manager, declaration.getSourceRange()),
+			};
+		}
+
+		[[nodiscard]] std::string SignatureForReport(const ClassModel& class_model,
+													 const clang::CXXMethodDecl& method,
+													 const std::vector<ParameterModel>& parameters)
+		{
+			std::string signature = class_model.qualified_name;
+			signature += "::";
+			signature += method.getNameAsString();
+			signature += '(';
+			for (std::size_t index = 0U; index < parameters.size(); ++index)
+			{
+				if (index != 0U)
+				{
+					signature += ", ";
+				}
+				signature += parameters[index].type_spelling;
+			}
+			signature += ')';
+			return signature;
+		}
+
 		class ClassExtractorVisitor final : public clang::RecursiveASTVisitor<ClassExtractorVisitor>
 		{
 		  public:
 			ClassExtractorVisitor(const HeaderModel& target_header,
+								  const clang::ASTContext& ast_context,
 								  const clang::SourceManager& source_manager)
-				: target_header_(target_header), source_manager_(source_manager),
+				: target_header_(target_header), ast_context_(ast_context),
+				  source_manager_(source_manager),
 				  target_path_(AbsoluteNormalized(target_header.absolute_path))
 			{
 			}
@@ -133,7 +242,7 @@ namespace mockfakegen
 
 				const auto namespaces = NamespaceParts(declaration->getDeclContext());
 				const auto name = declaration->getNameAsString();
-				result_.classes.push_back(ClassModel{
+				auto class_model = ClassModel{
 					.name = name,
 					.qualified_name = BuildQualifiedName(namespaces, name),
 					.namespaces = namespaces,
@@ -144,7 +253,9 @@ namespace mockfakegen
 					.mock_methods = {},
 					.fake_methods = {},
 					.unsupported_items = {},
-				});
+				};
+				ExtractMethods(*declaration, class_model);
+				result_.classes.push_back(std::move(class_model));
 				return true;
 			}
 
@@ -210,7 +321,170 @@ namespace mockfakegen
 				return AbsoluteNormalized(filename.str()) == target_path_;
 			}
 
+			void ExtractMethods(const clang::CXXRecordDecl& declaration, ClassModel& class_model)
+			{
+				for (const auto* child : declaration.decls())
+				{
+					const auto* function_template =
+						llvm::dyn_cast<clang::FunctionTemplateDecl>(child);
+					if (function_template != nullptr)
+					{
+						const auto* templated = function_template->getTemplatedDecl();
+						if (templated != nullptr)
+						{
+							class_model.unsupported_items.push_back(
+								MakeUnsupportedMethod(*templated,
+													  source_manager_,
+													  "function_template",
+													  "function template member is not supported"));
+						}
+						continue;
+					}
+
+					const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(child);
+					if (method == nullptr || method->isImplicit())
+					{
+						continue;
+					}
+
+					if (llvm::isa<clang::CXXConstructorDecl>(method))
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "constructor",
+												  "constructor fake generation is not supported"));
+						continue;
+					}
+					if (llvm::isa<clang::CXXDestructorDecl>(method))
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "destructor",
+												  "destructor fake generation is not supported"));
+						continue;
+					}
+					if (llvm::isa<clang::CXXConversionDecl>(method))
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "conversion_operator",
+												  "conversion operator is not supported"));
+						continue;
+					}
+					if (method->isOverloadedOperator())
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "overloaded_operator",
+												  "overloaded operator is not supported"));
+						continue;
+					}
+					if (method->getAccess() != clang::AS_public)
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "non_public_method",
+												  "only public methods are generated"));
+						continue;
+					}
+					if (method->isDeleted())
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "deleted_method",
+												  "deleted method is not supported"));
+						continue;
+					}
+					if (method->isDefaulted())
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "defaulted_method",
+												  "defaulted method is not supported"));
+						continue;
+					}
+					if (method->isConstexpr())
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "constexpr_method",
+												  "constexpr method is not supported"));
+						continue;
+					}
+					if (method->doesThisDeclarationHaveABody())
+					{
+						class_model.unsupported_items.push_back(
+							MakeUnsupportedMethod(*method,
+												  source_manager_,
+												  "inline_body",
+												  "inline method body is not supported"));
+						continue;
+					}
+
+					auto method_model = BuildMethodModel(*method, class_model);
+					class_model.mock_methods.push_back(method_model);
+					class_model.fake_methods.push_back(std::move(method_model));
+				}
+			}
+
+			[[nodiscard]] MethodModel BuildMethodModel(const clang::CXXMethodDecl& method,
+													   const ClassModel& class_model) const
+			{
+				std::vector<ParameterModel> parameters;
+				parameters.reserve(method.parameters().size());
+				for (std::size_t index = 0U; index < method.parameters().size(); ++index)
+				{
+					const auto* parameter = method.parameters()[index];
+					const auto original_name = parameter->getNameAsString();
+					const auto generated_name =
+						original_name.empty() ? "arg" + std::to_string(index) : original_name;
+					const auto type_spelling =
+						TypeSpelling(parameter->getOriginalType(), ast_context_);
+					parameters.push_back(ParameterModel{
+						.type_spelling = type_spelling,
+						.gmock_type_spelling = type_spelling,
+						.original_name = original_name,
+						.generated_name = generated_name,
+						.has_default_argument = parameter->hasDefaultArg(),
+						.is_rvalue_ref = parameter->getType()->isRValueReferenceType(),
+						.is_nonconst_by_value = IsNonConstByValue(parameter->getType()),
+					});
+				}
+
+				const auto return_type = TypeSpelling(method.getReturnType(), ast_context_);
+				return MethodModel{
+					.name = method.getNameAsString(),
+					.qualified_owner_name = class_model.qualified_name,
+					.return_type_spelling = return_type,
+					.gmock_return_type_spelling = return_type,
+					.parameters = parameters,
+					.signature_for_report = SignatureForReport(class_model, method, parameters),
+					.is_static = method.isStatic(),
+					.is_const = method.isConst(),
+					.is_volatile = method.isVolatile(),
+					.is_noexcept = IsNoexcept(method),
+					.has_conditional_noexcept = HasConditionalNoexcept(method),
+					.is_virtual = method.isVirtual(),
+					.is_pure_virtual = method.isPureVirtual(),
+					.is_inline = method.isInlined(),
+					.is_deleted = method.isDeleted(),
+					.is_defaulted = method.isDefaulted(),
+					.ref_qualifier = ToRefQualifierKind(method.getRefQualifier()),
+					.access = ToAccessKind(method.getAccess()),
+					.source_range = ToSourceRange(source_manager_, method.getSourceRange()),
+				};
+			}
+
 			const HeaderModel& target_header_;
+			const clang::ASTContext& ast_context_;
 			const clang::SourceManager& source_manager_;
 			std::filesystem::path target_path_;
 			ClassExtractionResult result_;
@@ -220,7 +494,7 @@ namespace mockfakegen
 	ClassExtractionResult ExtractClassDefinitionsFromAst(const clang::ASTUnit& ast,
 														 const HeaderModel& target_header)
 	{
-		ClassExtractorVisitor visitor(target_header, ast.getSourceManager());
+		ClassExtractorVisitor visitor(target_header, ast.getASTContext(), ast.getSourceManager());
 		visitor.TraverseDecl(ast.getASTContext().getTranslationUnitDecl());
 		return visitor.TakeResult();
 	}
