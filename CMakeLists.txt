@@ -353,6 +353,24 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 		COMMAND mockfakegen_hoge_fixture_generation_test
 	)
 
+	add_executable(mockfakegen_hoge_ast_e2e_test tests/fixtures/hoge/hoge_ast_e2e_test.cpp)
+	target_link_libraries(mockfakegen_hoge_ast_e2e_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_hoge_ast_e2e_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_hoge_ast_e2e_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_hoge_ast_e2e_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_hoge_ast_e2e_test)
+	mockfakegen_apply_sanitizers(mockfakegen_hoge_ast_e2e_test)
+
+	add_test(NAME mockfakegen_hoge_ast_e2e_test COMMAND mockfakegen_hoge_ast_e2e_test)
+
 	add_executable(
 		mockfakegen_hoge_generated_smoke
 		tests/fixtures/hoge/hoge_generated_smoke_test.cpp
