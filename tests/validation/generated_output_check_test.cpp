@@ -136,10 +136,11 @@ namespace
 			source_dir / "tests/fixtures/namespaced/generated",
 			source_dir / "tests/fixtures/overload/generated",
 			source_dir / "tests/fixtures/qualifier/generated",
+			source_dir / "tests/fixtures/reporting/generated",
 		});
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 24U, "generated fixtures should be included");
+		Expect(result.checked_file_count == 32U, "generated fixtures should be included");
 	}
 } // namespace
 

@@ -38,12 +38,16 @@ namespace mockfakegen
 	struct ProjectGenerationOptions
 	{
 		bool emit_all_mocks = true;
+		bool emit_manifest = true;
+		bool emit_report = true;
 	};
 
 	[[nodiscard]] std::vector<GeneratedFile>
 	GenerateMinimalMockFake(const SimpleClassModel& class_model);
 	[[nodiscard]] std::vector<GeneratedFile> GenerateMinimalMockFake(const ClassModel& class_model);
 	[[nodiscard]] GeneratedFile GenerateAllMocksHeader(std::span<const GeneratedFile> files);
+	[[nodiscard]] GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models);
+	[[nodiscard]] GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models);
 	[[nodiscard]] std::vector<GeneratedFile>
 	GenerateMockFakeProject(std::span<const ClassModel> class_models,
 							ProjectGenerationOptions options = {});

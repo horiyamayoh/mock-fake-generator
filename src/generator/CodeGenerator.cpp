@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -16,6 +17,80 @@ namespace mockfakegen
 		[[nodiscard]] std::string MockClassName(const SimpleClassModel& class_model)
 		{
 			return "Mock" + class_model.name;
+		}
+
+		[[nodiscard]] std::string JsonString(std::string_view value)
+		{
+			constexpr char hex_digits[] = "0123456789abcdef";
+			std::string text;
+			text.reserve(value.size() + 2U);
+			text += '"';
+			for (const char raw_character : value)
+			{
+				const auto character = static_cast<unsigned char>(raw_character);
+				switch (character)
+				{
+					case '"':
+						text += "\\\"";
+						break;
+					case '\\':
+						text += "\\\\";
+						break;
+					case '\b':
+						text += "\\b";
+						break;
+					case '\f':
+						text += "\\f";
+						break;
+					case '\n':
+						text += "\\n";
+						break;
+					case '\r':
+						text += "\\r";
+						break;
+					case '\t':
+						text += "\\t";
+						break;
+					default:
+						if (character < 0x20U)
+						{
+							text += "\\u00";
+							text += hex_digits[(character >> 4U) & 0x0FU];
+							text += hex_digits[character & 0x0FU];
+						}
+						else
+						{
+							text += static_cast<char>(character);
+						}
+						break;
+				}
+			}
+			text += '"';
+			return text;
+		}
+
+		[[nodiscard]] std::string MarkdownCell(std::string_view value)
+		{
+			std::string text;
+			text.reserve(value.size());
+			for (const char character : value)
+			{
+				switch (character)
+				{
+					case '|':
+						text += "\\|";
+						break;
+					case '\n':
+					case '\r':
+					case '\t':
+						text += ' ';
+						break;
+					default:
+						text += character;
+						break;
+				}
+			}
+			return text;
 		}
 
 		[[nodiscard]] std::string ScopedMockAliasName(const SimpleClassModel& class_model)
@@ -96,6 +171,160 @@ namespace mockfakegen
 				text += parameters[index].type;
 			}
 			return text;
+		}
+
+		[[nodiscard]] std::string SourceHeaderName(const ClassModel& class_model)
+		{
+			if (!class_model.source_header.include_spelling.empty())
+			{
+				return class_model.source_header.include_spelling;
+			}
+			if (!class_model.source_header.project_relative_path.empty())
+			{
+				return class_model.source_header.project_relative_path.generic_string();
+			}
+			return class_model.source_header.absolute_path.generic_string();
+		}
+
+		[[nodiscard]] std::string MockHeaderName(const ClassModel& class_model)
+		{
+			if (!class_model.mock_header_name.empty())
+			{
+				return class_model.mock_header_name;
+			}
+			return DefaultMockHeaderName(class_model.name);
+		}
+
+		[[nodiscard]] std::string FakeSourceName(const ClassModel& class_model)
+		{
+			if (!class_model.fake_source_name.empty())
+			{
+				return class_model.fake_source_name;
+			}
+			return DefaultFakeSourceName(class_model.name);
+		}
+
+		struct ClassReportEntry
+		{
+			std::string qualified_name;
+			std::string mock_header;
+			std::string fake_source;
+			std::string source_header;
+			std::size_t generated_methods = 0U;
+			std::size_t unsupported_items = 0U;
+		};
+
+		struct UnsupportedReportEntry
+		{
+			std::string header;
+			std::string class_name;
+			std::string member;
+			std::string reason;
+			std::string suggested_action;
+		};
+
+		[[nodiscard]] ClassReportEntry MakeClassReportEntry(const ClassModel& class_model)
+		{
+			return ClassReportEntry{
+				.qualified_name = class_model.qualified_name.empty()
+					? BuildQualifiedName(class_model.namespaces, class_model.name)
+					: class_model.qualified_name,
+				.mock_header = MockHeaderName(class_model),
+				.fake_source = FakeSourceName(class_model),
+				.source_header = SourceHeaderName(class_model),
+				.generated_methods = class_model.mock_methods.size(),
+				.unsupported_items = class_model.unsupported_items.size(),
+			};
+		}
+
+		[[nodiscard]] std::vector<ClassReportEntry>
+		SortedClassReportEntries(std::span<const ClassModel> class_models)
+		{
+			std::vector<ClassReportEntry> entries;
+			entries.reserve(class_models.size());
+			for (const auto& class_model : class_models)
+			{
+				entries.push_back(MakeClassReportEntry(class_model));
+			}
+
+			std::sort(entries.begin(),
+					  entries.end(),
+					  [](const auto& lhs, const auto& rhs)
+					  {
+						  if (lhs.qualified_name != rhs.qualified_name)
+						  {
+							  return lhs.qualified_name < rhs.qualified_name;
+						  }
+						  return lhs.source_header < rhs.source_header;
+					  });
+			return entries;
+		}
+
+		[[nodiscard]] std::vector<UnsupportedReportEntry>
+		SortedUnsupportedReportEntries(std::span<const ClassModel> class_models)
+		{
+			std::vector<UnsupportedReportEntry> entries;
+			for (const auto& class_model : class_models)
+			{
+				const auto header = SourceHeaderName(class_model);
+				const auto class_name = class_model.qualified_name.empty()
+					? BuildQualifiedName(class_model.namespaces, class_model.name)
+					: class_model.qualified_name;
+				for (const auto& unsupported : class_model.unsupported_items)
+				{
+					entries.push_back(UnsupportedReportEntry{
+						.header = header,
+						.class_name = class_name,
+						.member = unsupported.member_signature.empty()
+							? unsupported.name
+							: unsupported.member_signature,
+						.reason = unsupported.reason,
+						.suggested_action = unsupported.suggested_action,
+					});
+				}
+			}
+
+			std::sort(entries.begin(),
+					  entries.end(),
+					  [](const auto& lhs, const auto& rhs)
+					  {
+						  if (lhs.header != rhs.header)
+						  {
+							  return lhs.header < rhs.header;
+						  }
+						  if (lhs.class_name != rhs.class_name)
+						  {
+							  return lhs.class_name < rhs.class_name;
+						  }
+						  if (lhs.member != rhs.member)
+						  {
+							  return lhs.member < rhs.member;
+						  }
+						  return lhs.reason < rhs.reason;
+					  });
+			return entries;
+		}
+
+		[[nodiscard]] std::size_t
+		TotalGeneratedMethods(const std::vector<ClassReportEntry>& entries)
+		{
+			std::size_t count = 0U;
+			for (const auto& entry : entries)
+			{
+				count += entry.generated_methods;
+			}
+			return count;
+		}
+
+		[[nodiscard]] std::size_t
+		TotalUnsupportedItems(const std::vector<ClassReportEntry>& entries)
+		{
+			std::size_t count = 0U;
+			for (const auto& entry : entries)
+			{
+				count += entry.unsupported_items;
+			}
+			return count;
 		}
 
 		[[nodiscard]] std::string GMockParameterType(const SimpleParameterModel& parameter)
@@ -290,9 +519,18 @@ namespace mockfakegen
 			const auto mock_class_name = MockClassName(class_model);
 			std::ostringstream out;
 			out << "#pragma once\n\n"
-				<< "#include <gmock/gmock.h>\n\n"
-				<< "#include \"" << class_model.header_include << "\"\n"
-				<< "#include \"MockFakeRuntime.h\"\n\n";
+				<< "#include <gmock/gmock.h>\n\n";
+
+			std::vector<std::string> local_includes = {
+				class_model.header_include,
+				"MockFakeRuntime.h",
+			};
+			std::sort(local_includes.begin(), local_includes.end());
+			for (const auto& include : local_includes)
+			{
+				out << "#include \"" << include << "\"\n";
+			}
+			out << '\n';
 
 			OpenNamespace(out, class_model);
 
@@ -327,8 +565,17 @@ namespace mockfakegen
 			{
 				out << "#include <utility>\n\n";
 			}
-			out << "#include \"" << class_model.header_include << "\"\n"
-				<< "#include \"" << mock_class_name << ".h\"\n\n";
+
+			std::vector<std::string> local_includes = {
+				class_model.header_include,
+				mock_class_name + ".h",
+			};
+			std::sort(local_includes.begin(), local_includes.end());
+			for (const auto& include : local_includes)
+			{
+				out << "#include \"" << include << "\"\n";
+			}
+			out << '\n';
 
 			OpenNamespace(out, class_model);
 
@@ -490,11 +737,112 @@ namespace mockfakegen
 			"AllMocks.h", out.str(), GeneratedFileKind::AllMocksHeader, std::nullopt);
 	}
 
+	GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models)
+	{
+		const auto entries = SortedClassReportEntries(class_models);
+		const auto generated_methods = TotalGeneratedMethods(entries);
+		const auto unsupported_items = TotalUnsupportedItems(entries);
+
+		std::ostringstream out;
+		out << "{\n"
+			<< "  \"summary\": {\n"
+			<< "    \"classes\": " << entries.size() << ",\n"
+			<< "    \"generated_methods\": " << generated_methods << ",\n"
+			<< "    \"unsupported_items\": " << unsupported_items << ",\n"
+			<< "    \"diagnostic_summary\": {\n"
+			<< "      \"warnings\": " << unsupported_items << ",\n"
+			<< "      \"errors\": 0\n"
+			<< "    }\n"
+			<< "  },\n"
+			<< "  \"classes\": [\n";
+
+		for (std::size_t index = 0U; index < entries.size(); ++index)
+		{
+			const auto& entry = entries[index];
+			out << "    {\n"
+				<< "      \"qualified_name\": " << JsonString(entry.qualified_name) << ",\n"
+				<< "      \"mock_header\": " << JsonString(entry.mock_header) << ",\n"
+				<< "      \"fake_source\": " << JsonString(entry.fake_source) << ",\n"
+				<< "      \"source_header\": " << JsonString(entry.source_header) << ",\n"
+				<< "      \"generated_methods\": " << entry.generated_methods << ",\n"
+				<< "      \"unsupported_methods\": " << entry.unsupported_items << ",\n"
+				<< "      \"unsupported_items\": " << entry.unsupported_items << ",\n"
+				<< "      \"diagnostic_summary\": {\n"
+				<< "        \"warnings\": " << entry.unsupported_items << ",\n"
+				<< "        \"errors\": 0\n"
+				<< "      }\n"
+				<< "    }";
+			if (index + 1U != entries.size())
+			{
+				out << ',';
+			}
+			out << '\n';
+		}
+
+		out << "  ]\n"
+			<< "}\n";
+
+		return MakeGeneratedFile(
+			"manifest.json", out.str(), GeneratedFileKind::Manifest, std::nullopt);
+	}
+
+	GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models)
+	{
+		const auto class_entries = SortedClassReportEntries(class_models);
+		const auto unsupported_entries = SortedUnsupportedReportEntries(class_models);
+		const auto generated_methods = TotalGeneratedMethods(class_entries);
+		const auto unsupported_items = TotalUnsupportedItems(class_entries);
+
+		std::ostringstream out;
+		out << "# mockfakegen generation report\n\n"
+			<< "## Summary\n\n"
+			<< "| Classes | Generated methods | Unsupported items | Warnings | Errors |\n"
+			<< "|---:|---:|---:|---:|---:|\n"
+			<< "| " << class_entries.size() << " | " << generated_methods << " | "
+			<< unsupported_items << " | " << unsupported_items << " | 0 |\n\n"
+			<< "## Link Replacement Notice\n\n"
+			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
+			   "product `.cpp` files in the same test target. Link each generated fake "
+			   "source instead of the product implementation it replaces.\n\n"
+			<< "## Generated Classes\n\n"
+			<< "| Class | Source header | Mock header | Fake source | Generated methods | "
+			   "Unsupported items |\n"
+			<< "|---|---|---|---|---:|---:|\n";
+
+		for (const auto& entry : class_entries)
+		{
+			out << "| " << MarkdownCell(entry.qualified_name) << " | "
+				<< MarkdownCell(entry.source_header) << " | " << MarkdownCell(entry.mock_header)
+				<< " | " << MarkdownCell(entry.fake_source) << " | " << entry.generated_methods
+				<< " | " << entry.unsupported_items << " |\n";
+		}
+
+		out << "\n## Unsupported Items\n\n";
+		if (unsupported_entries.empty())
+		{
+			out << "No unsupported items.\n";
+		}
+		else
+		{
+			out << "| Header | Class | Member | Reason | Suggested action |\n"
+				<< "|---|---|---|---|---|\n";
+			for (const auto& entry : unsupported_entries)
+			{
+				out << "| " << MarkdownCell(entry.header) << " | " << MarkdownCell(entry.class_name)
+					<< " | " << MarkdownCell(entry.member) << " | " << MarkdownCell(entry.reason)
+					<< " | " << MarkdownCell(entry.suggested_action) << " |\n";
+			}
+		}
+
+		return MakeGeneratedFile(
+			"generation_report.md", out.str(), GeneratedFileKind::Report, std::nullopt);
+	}
+
 	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
 													   ProjectGenerationOptions options)
 	{
 		std::vector<GeneratedFile> files;
-		files.reserve((class_models.size() * 2U) + 2U);
+		files.reserve((class_models.size() * 2U) + 4U);
 		for (const auto& class_model : class_models)
 		{
 			const auto simple_class = ToSimpleClassModel(class_model);
@@ -506,6 +854,14 @@ namespace mockfakegen
 		if (options.emit_all_mocks)
 		{
 			files.push_back(GenerateAllMocksHeader(files));
+		}
+		if (options.emit_manifest)
+		{
+			files.push_back(GenerateManifestJson(class_models));
+		}
+		if (options.emit_report)
+		{
+			files.push_back(GenerateGenerationReport(class_models));
 		}
 
 		SortGeneratedFiles(files);

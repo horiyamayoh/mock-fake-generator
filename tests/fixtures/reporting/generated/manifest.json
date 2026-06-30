@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "classes": 1,
+    "generated_methods": 1,
+    "unsupported_items": 2,
+    "diagnostic_summary": {
+      "warnings": 2,
+      "errors": 0
+    }
+  },
+  "classes": [
+    {
+      "qualified_name": "sample::Service",
+      "mock_header": "MockService.h",
+      "fake_source": "FakeService.cpp",
+      "source_header": "Service.h",
+      "generated_methods": 1,
+      "unsupported_methods": 2,
+      "unsupported_items": 2,
+      "diagnostic_summary": {
+        "warnings": 2,
+        "errors": 0
+      }
+    }
+  ]
+}

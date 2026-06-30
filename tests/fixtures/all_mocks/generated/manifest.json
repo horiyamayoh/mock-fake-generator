@@ -1,0 +1,39 @@
+{
+  "summary": {
+    "classes": 2,
+    "generated_methods": 2,
+    "unsupported_items": 0,
+    "diagnostic_summary": {
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "classes": [
+    {
+      "qualified_name": "Alpha",
+      "mock_header": "MockAlpha.h",
+      "fake_source": "FakeAlpha.cpp",
+      "source_header": "Alpha.h",
+      "generated_methods": 1,
+      "unsupported_methods": 0,
+      "unsupported_items": 0,
+      "diagnostic_summary": {
+        "warnings": 0,
+        "errors": 0
+      }
+    },
+    {
+      "qualified_name": "Beta",
+      "mock_header": "MockBeta.h",
+      "fake_source": "FakeBeta.cpp",
+      "source_header": "Beta.h",
+      "generated_methods": 1,
+      "unsupported_methods": 0,
+      "unsupported_items": 0,
+      "diagnostic_summary": {
+        "warnings": 0,
+        "errors": 0
+      }
+    }
+  ]
+}

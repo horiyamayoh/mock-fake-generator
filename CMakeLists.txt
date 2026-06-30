@@ -670,6 +670,50 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_all_mocks_generated_smoke COMMAND mockfakegen_all_mocks_generated_smoke)
 
 	add_executable(
+		mockfakegen_reporting_generation_test
+		tests/fixtures/reporting/reporting_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_reporting_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_reporting_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_reporting_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_reporting_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_reporting_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_reporting_generation_test)
+
+	add_test(NAME mockfakegen_reporting_generation_test COMMAND mockfakegen_reporting_generation_test)
+
+	add_executable(
+		mockfakegen_reporting_generated_smoke
+		tests/fixtures/reporting/reporting_generated_smoke_test.cpp
+		tests/fixtures/reporting/generated/FakeService.cpp
+	)
+	target_include_directories(
+		mockfakegen_reporting_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/reporting/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/reporting/generated"
+	)
+	target_link_libraries(mockfakegen_reporting_generated_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
+	target_compile_features(mockfakegen_reporting_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_reporting_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_reporting_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_reporting_generated_smoke)
+
+	add_test(NAME mockfakegen_reporting_generated_smoke COMMAND mockfakegen_reporting_generated_smoke)
+
+	add_executable(
 		mockfakegen_generated_output_check_test
 		tests/validation/generated_output_check_test.cpp
 	)
