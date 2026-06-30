@@ -113,6 +113,9 @@ namespace mockfakegen
 		bool is_inline = false;
 		bool is_deleted = false;
 		bool is_defaulted = false;
+		bool return_type_is_void = false;
+		bool return_type_is_reference = false;
+		bool return_type_is_default_constructible = true;
 		RefQualifierKind ref_qualifier = RefQualifierKind::None;
 		AccessKind access = AccessKind::Unknown;
 		SourceRange source_range;
@@ -142,6 +145,8 @@ namespace mockfakegen
 		std::vector<MethodModel> mock_methods;
 		std::vector<MethodModel> fake_methods;
 		std::vector<UnsupportedItem> unsupported_items;
+		bool link_ready = true;
+		std::vector<std::string> link_readiness_reasons = {};
 	};
 
 	struct ProjectModel

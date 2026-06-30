@@ -280,6 +280,8 @@ namespace
 					"{\n"
 					"  \"summary\": {\n"
 					"    \"classes\": 2,\n"
+					"    \"link_ready_classes\": 1,\n"
+					"    \"not_link_ready_classes\": 1,\n"
 					"    \"generated_methods\": 3,\n"
 					"    \"unsupported_items\": 1,\n"
 					"    \"diagnostic_summary\": {\n"
@@ -296,6 +298,10 @@ namespace
 					"      \"generated_methods\": 2,\n"
 					"      \"unsupported_methods\": 1,\n"
 					"      \"unsupported_items\": 1,\n"
+					"      \"link_ready\": false,\n"
+					"      \"link_readiness_reasons\": [\n"
+					"        \"unsupported items remain\"\n"
+					"      ],\n"
 					"      \"diagnostic_summary\": {\n"
 					"        \"warnings\": 1,\n"
 					"        \"errors\": 0\n"
@@ -309,6 +315,8 @@ namespace
 					"      \"generated_methods\": 1,\n"
 					"      \"unsupported_methods\": 0,\n"
 					"      \"unsupported_items\": 0,\n"
+					"      \"link_ready\": true,\n"
+					"      \"link_readiness_reasons\": [],\n"
 					"      \"diagnostic_summary\": {\n"
 					"        \"warnings\": 0,\n"
 					"        \"errors\": 0\n"
@@ -383,6 +391,18 @@ namespace
 			   "manifest should omit collision section when filenames are unique");
 	}
 
+	void CMakeFragmentUsesOnlyLinkReadyFakeSources()
+	{
+		const auto files = mockfakegen::GenerateMockFakeProject(
+			std::vector<mockfakegen::ClassModel>{ReportBetaModel(), ReportAlphaModel()});
+
+		const auto& fragment = FindFile(files, "CMakeLists.fragment.cmake");
+		Expect(Contains(fragment.content, "FakeBeta.cpp"),
+			   "link-ready fake should appear in usable source list");
+		Expect(!Contains(fragment.content, "FakeAlpha.cpp"),
+			   "not link-ready fake should be omitted from usable source list");
+	}
+
 	void GeneratesGenerationReport()
 	{
 		const std::vector classes = {ReportBetaModel(), ReportAlphaModel()};
@@ -391,12 +411,12 @@ namespace
 
 		Expect(report.relative_path == "generation_report.md", "report path should be stable");
 		Expect(report.kind == mockfakegen::GeneratedFileKind::Report, "report kind should be set");
-		Expect(Contains(report.content, "| 2 | 3 | 1 | 1 | 0 |"),
+		Expect(Contains(report.content, "| 2 | 1 | 1 | 3 | 1 | 1 | 0 |"),
 			   "report should include diagnostic summary");
 		Expect(Contains(report.content, "`FakeXXX.cpp`"), "report should include link warning");
 		Expect(Contains(report.content,
-						"| alpha::Alpha | include/Alpha.h | MockAlpha.h | FakeAlpha.cpp | 2 | "
-						"1 |"),
+						"| alpha::Alpha | include/Alpha.h | MockAlpha.h | FakeAlpha.cpp | no | "
+						"unsupported items remain | 2 | 1 |"),
 			   "report should include generated class row");
 		Expect(Contains(report.content,
 						"| include/Alpha.h | alpha::Alpha | alpha::Alpha::Convert | function "
@@ -430,6 +450,7 @@ int main()
 	GeneratesManifestJson();
 	ResolvesQualifiedFilenameCollisions();
 	KeepsShortFilenamesWithoutCollision();
+	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();
 	return 0;

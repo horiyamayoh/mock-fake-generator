@@ -88,6 +88,29 @@ namespace mockfakegen
 			return text;
 		}
 
+		void WriteJsonStringArray(std::ostringstream& out,
+								  const std::vector<std::string>& values,
+								  std::string_view indent)
+		{
+			if (values.empty())
+			{
+				out << "[]";
+				return;
+			}
+
+			out << "[\n";
+			for (std::size_t index = 0U; index < values.size(); ++index)
+			{
+				out << indent << "  " << JsonString(values[index]);
+				if (index + 1U != values.size())
+				{
+					out << ',';
+				}
+				out << '\n';
+			}
+			out << indent << ']';
+		}
+
 		[[nodiscard]] std::string MarkdownCell(std::string_view value)
 		{
 			std::string text;
@@ -148,6 +171,25 @@ namespace mockfakegen
 				return class_model.qualified_name;
 			}
 			return BuildQualifiedName(class_model.namespaces, class_model.name);
+		}
+
+		[[nodiscard]] std::vector<std::string> LinkReadinessReasons(const ClassModel& class_model)
+		{
+			std::vector<std::string> reasons = class_model.link_readiness_reasons;
+			if (!class_model.unsupported_items.empty())
+			{
+				reasons.push_back("unsupported items remain");
+			}
+			if (!class_model.link_ready && reasons.empty())
+			{
+				reasons.push_back("class marked not link-ready");
+			}
+			return reasons;
+		}
+
+		[[nodiscard]] bool IsLinkReady(const ClassModel& class_model)
+		{
+			return class_model.link_ready && LinkReadinessReasons(class_model).empty();
 		}
 
 		void OpenNamespace(std::ostringstream& out, const SimpleClassModel& class_model)
@@ -378,6 +420,8 @@ namespace mockfakegen
 			std::string source_header;
 			std::size_t generated_methods = 0U;
 			std::size_t unsupported_items = 0U;
+			bool link_ready = true;
+			std::vector<std::string> link_readiness_reasons;
 			bool filename_collision = false;
 		};
 
@@ -405,6 +449,8 @@ namespace mockfakegen
 				.source_header = SourceHeaderName(class_model),
 				.generated_methods = class_model.mock_methods.size(),
 				.unsupported_items = class_model.unsupported_items.size(),
+				.link_ready = IsLinkReady(class_model),
+				.link_readiness_reasons = LinkReadinessReasons(class_model),
 				.filename_collision =
 					mock_header != default_mock_header || fake_source != default_fake_source,
 			};
@@ -800,6 +846,7 @@ namespace mockfakegen
 				.qualified_name = QualifiedClassName(class_model),
 				.source_header = class_model.header_include,
 				.generated_method_count = class_model.methods.size(),
+				.link_ready = class_model.link_ready && class_model.link_readiness_reasons.empty(),
 			};
 		}
 
@@ -828,6 +875,8 @@ namespace mockfakegen
 				.mock_header_name = MockHeaderName(class_model),
 				.fake_source_name = FakeSourceName(class_model),
 				.methods = {},
+				.link_ready = IsLinkReady(class_model),
+				.link_readiness_reasons = LinkReadinessReasons(class_model),
 			};
 			simple_class.methods.reserve(class_model.mock_methods.size());
 
@@ -915,7 +964,8 @@ namespace mockfakegen
 		std::vector<std::filesystem::path> fake_sources;
 		for (const auto& file : files)
 		{
-			if (file.kind == GeneratedFileKind::FakeSource)
+			if (file.kind == GeneratedFileKind::FakeSource &&
+				(!file.source_class.has_value() || file.source_class->link_ready))
 			{
 				fake_sources.push_back(file.relative_path);
 			}
@@ -958,6 +1008,22 @@ namespace mockfakegen
 		out << "{\n"
 			<< "  \"summary\": {\n"
 			<< "    \"classes\": " << entries.size() << ",\n"
+			<< "    \"link_ready_classes\": "
+			<< std::count_if(entries.begin(),
+							 entries.end(),
+							 [](const auto& entry)
+							 {
+								 return entry.link_ready;
+							 })
+			<< ",\n"
+			<< "    \"not_link_ready_classes\": "
+			<< std::count_if(entries.begin(),
+							 entries.end(),
+							 [](const auto& entry)
+							 {
+								 return !entry.link_ready;
+							 })
+			<< ",\n"
 			<< "    \"generated_methods\": " << generated_methods << ",\n"
 			<< "    \"unsupported_items\": " << unsupported_items << ",\n"
 			<< "    \"diagnostic_summary\": {\n"
@@ -991,6 +1057,10 @@ namespace mockfakegen
 				<< "      \"generated_methods\": " << entry.generated_methods << ",\n"
 				<< "      \"unsupported_methods\": " << entry.unsupported_items << ",\n"
 				<< "      \"unsupported_items\": " << entry.unsupported_items << ",\n"
+				<< "      \"link_ready\": " << (entry.link_ready ? "true" : "false") << ",\n"
+				<< "      \"link_readiness_reasons\": ";
+			WriteJsonStringArray(out, entry.link_readiness_reasons, "      ");
+			out << ",\n"
 				<< "      \"diagnostic_summary\": {\n"
 				<< "        \"warnings\": " << entry.unsupported_items << ",\n"
 				<< "        \"errors\": 0\n"
@@ -1020,25 +1090,52 @@ namespace mockfakegen
 		std::ostringstream out;
 		out << "# mockfakegen generation report\n\n"
 			<< "## Summary\n\n"
-			<< "| Classes | Generated methods | Unsupported items | Warnings | Errors |\n"
-			<< "|---:|---:|---:|---:|---:|\n"
-			<< "| " << class_entries.size() << " | " << generated_methods << " | "
-			<< unsupported_items << " | " << unsupported_items << " | 0 |\n\n"
+			<< "| Classes | Link-ready classes | Not link-ready classes | Generated methods | "
+			   "Unsupported items | Warnings | Errors |\n"
+			<< "|---:|---:|---:|---:|---:|---:|---:|\n"
+			<< "| " << class_entries.size() << " | "
+			<< std::count_if(class_entries.begin(),
+							 class_entries.end(),
+							 [](const auto& entry)
+							 {
+								 return entry.link_ready;
+							 })
+			<< " | "
+			<< std::count_if(class_entries.begin(),
+							 class_entries.end(),
+							 [](const auto& entry)
+							 {
+								 return !entry.link_ready;
+							 })
+			<< " | " << generated_methods << " | " << unsupported_items << " | "
+			<< unsupported_items << " | 0 |\n\n"
 			<< "## Link Replacement Notice\n\n"
 			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
 			   "product `.cpp` files in the same test target. Link each generated fake "
 			   "source instead of the product implementation it replaces.\n\n"
 			<< "## Generated Classes\n\n"
-			<< "| Class | Source header | Mock header | Fake source | Generated methods | "
-			   "Unsupported items |\n"
-			<< "|---|---|---|---|---:|---:|\n";
+			<< "| Class | Source header | Mock header | Fake source | Link ready | Link-readiness "
+			   "reason | Generated methods | Unsupported items |\n"
+			<< "|---|---|---|---|---|---|---:|---:|\n";
 
 		for (const auto& entry : class_entries)
 		{
+			std::string link_readiness_reason;
+			for (std::size_t reason_index = 0U; reason_index < entry.link_readiness_reasons.size();
+				 ++reason_index)
+			{
+				if (reason_index != 0U)
+				{
+					link_readiness_reason += "; ";
+				}
+				link_readiness_reason += entry.link_readiness_reasons[reason_index];
+			}
+
 			out << "| " << MarkdownCell(entry.qualified_name) << " | "
 				<< MarkdownCell(entry.source_header) << " | " << MarkdownCell(entry.mock_header)
-				<< " | " << MarkdownCell(entry.fake_source) << " | " << entry.generated_methods
-				<< " | " << entry.unsupported_items << " |\n";
+				<< " | " << MarkdownCell(entry.fake_source) << " | "
+				<< (entry.link_ready ? "yes" : "no") << " | " << MarkdownCell(link_readiness_reason)
+				<< " | " << entry.generated_methods << " | " << entry.unsupported_items << " |\n";
 		}
 
 		out << "\n## Unsupported Items\n\n";

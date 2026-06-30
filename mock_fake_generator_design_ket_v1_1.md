@@ -1680,6 +1680,53 @@ CI 差分を安定させるため、以下を守る。
 
 gMock include path は設定または CMake integration で与える。
 
+### 21.5 PolicyEngine failure / publication matrix
+
+PolicyEngine は failure kind ごとに exit code、generated file publish、manifest/report
+emission を同じ表で判断する。`publish generated files` は `MockXXX.h` / `FakeXXX.cpp`
+/ `AllMocks.h` / CMake fragment を usable output として採用するかを表す。diagnostic
+artifact としての manifest/report は別に判断する。
+
+| failure kind | best-effort exit | strict exit | publish generated files | emit manifest | emit report |
+|---|---:|---:|---|---|---|
+| parse failure | 1 | 1 | no | yes | yes |
+| unsupported item | 0 | 1 | yes | yes | yes |
+| write failure | 1 | 1 | no | no | yes |
+| format failure | 1 | 1 | no | yes | yes |
+| ket contamination | 1 | 1 | no | yes | yes |
+| compile validation failure | 1 | 1 | no | yes | yes |
+| link validation failure | 1 | 1 | no | yes | yes |
+| fallback incompatibility | 1 | 1 | no | yes | yes |
+
+### 21.6 fallback compatibility matrix
+
+Missing mock fallback は method signature ごとに compatibility を判定する。
+
+| fallback policy | `void` | value return, default constructible | reference return | non-default-constructible value return | `noexcept` function |
+|---|---|---|---|---|---|
+| `abort` | compatible | compatible | compatible | compatible | compatible |
+| `default-return` | compatible | compatible | incompatible diagnostic | incompatible diagnostic | compatible |
+| `throw` | compatible | compatible | compatible | compatible | incompatible diagnostic |
+| `compile-error` | compatible by policy, intentionally fails generated compile when fallback is needed | compatible by policy | compatible by policy | compatible by policy | compatible by policy |
+
+`throw` fallback は `noexcept` function に使わない。`default-return` は reference return と
+default construct できない value return には使わず、該当 method を fallback
+incompatibility として report する。
+
+### 21.7 link-readiness and usable source list
+
+class-level link readiness は、生成された fake source を test target に入れてよいかを表す。
+
+| class state | link-ready | CMake fragment usable source list | manifest/report |
+|---|---|---|---|
+| generated methods only, unsupported なし | yes | `FakeXXX.cpp` を載せる | `link_ready: true` |
+| unsupported item が残る | no | `FakeXXX.cpp` を載せない | `link_ready: false`, reason を出す |
+| fallback incompatibility がある | no | `FakeXXX.cpp` を載せない | `link_ready: false`, reason を出す |
+| parse / validation / ket contamination failure | no publish | usable source list を publish しない | diagnostic artifact に failure を出す |
+
+not link-ready な fake は diagnostic と手動調査のために生成できても、CMake fragment の
+`MOCKFAKE_GENERATED_SOURCES` には含めない。
+
 ---
 
 ## 22. テストコードでの利用例

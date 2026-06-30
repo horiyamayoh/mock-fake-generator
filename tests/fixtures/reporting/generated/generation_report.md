@@ -2,9 +2,9 @@
 
 ## Summary
 
-| Classes | Generated methods | Unsupported items | Warnings | Errors |
-|---:|---:|---:|---:|---:|
-| 1 | 1 | 2 | 2 | 0 |
+| Classes | Link-ready classes | Not link-ready classes | Generated methods | Unsupported items | Warnings | Errors |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0 | 1 | 1 | 2 | 2 | 0 |
 
 ## Link Replacement Notice
 
@@ -12,9 +12,9 @@ Do not link generated `FakeXXX.cpp` files together with the corresponding produc
 
 ## Generated Classes
 
-| Class | Source header | Mock header | Fake source | Generated methods | Unsupported items |
-|---|---|---|---|---:|---:|
-| sample::Service | Service.h | MockService.h | FakeService.cpp | 1 | 2 |
+| Class | Source header | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
+|---|---|---|---|---|---|---:|---:|
+| sample::Service | Service.h | MockService.h | FakeService.cpp | no | unsupported items remain | 1 | 2 |
 
 ## Unsupported Items
 

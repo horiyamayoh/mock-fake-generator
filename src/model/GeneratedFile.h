@@ -26,6 +26,7 @@ namespace mockfakegen
 		std::string qualified_name;
 		std::filesystem::path source_header;
 		std::size_t generated_method_count = 0U;
+		bool link_ready = true;
 	};
 
 	struct GeneratedFile

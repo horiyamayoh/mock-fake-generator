@@ -38,6 +38,9 @@ namespace mockfakegen
 	enum class FallbackPolicy
 	{
 		Abort,
+		DefaultReturn,
+		Throw,
+		CompileError,
 	};
 
 	enum class MockNamespaceMode

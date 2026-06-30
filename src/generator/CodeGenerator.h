@@ -35,6 +35,8 @@ namespace mockfakegen
 		std::string mock_header_name;
 		std::string fake_source_name;
 		std::vector<SimpleMethodModel> methods;
+		bool link_ready = true;
+		std::vector<std::string> link_readiness_reasons = {};
 	};
 
 	struct ProjectGenerationOptions

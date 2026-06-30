@@ -135,6 +135,45 @@ namespace mockfakegen
 				exception_spec == clang::EST_NoexceptTrue;
 		}
 
+		[[nodiscard]] bool HasAccessibleDefaultConstructor(const clang::CXXRecordDecl& record)
+		{
+			if (!record.hasDefinition())
+			{
+				return false;
+			}
+
+			for (const auto* constructor : record.ctors())
+			{
+				if (constructor->isDefaultConstructor() && !constructor->isDeleted() &&
+					constructor->getAccess() == clang::AS_public)
+				{
+					return true;
+				}
+			}
+
+			return record.needsImplicitDefaultConstructor();
+		}
+
+		[[nodiscard]] bool IsDefaultConstructibleReturn(clang::QualType type)
+		{
+			if (type->isVoidType() || type->isReferenceType())
+			{
+				return false;
+			}
+			if (type->isBuiltinType() || type->isPointerType() || type->isEnumeralType())
+			{
+				return true;
+			}
+
+			const auto* record = type->getAsCXXRecordDecl();
+			if (record == nullptr)
+			{
+				return false;
+			}
+
+			return HasAccessibleDefaultConstructor(*record);
+		}
+
 		[[nodiscard]] std::string UnsupportedMethodName(const clang::NamedDecl& declaration)
 		{
 			const auto name = declaration.getNameAsString();
@@ -496,6 +535,7 @@ namespace mockfakegen
 				}
 
 				const auto return_type = type_spelling_.SpellType(method.getReturnType());
+				const auto raw_return_type = method.getReturnType();
 				return MethodModel{
 					.name = method.getNameAsString(),
 					.qualified_owner_name = class_model.qualified_name,
@@ -513,6 +553,10 @@ namespace mockfakegen
 					.is_inline = method.isInlined(),
 					.is_deleted = method.isDeleted(),
 					.is_defaulted = method.isDefaulted(),
+					.return_type_is_void = raw_return_type->isVoidType(),
+					.return_type_is_reference = raw_return_type->isReferenceType(),
+					.return_type_is_default_constructible =
+						IsDefaultConstructibleReturn(raw_return_type),
 					.ref_qualifier = ToRefQualifierKind(method.getRefQualifier()),
 					.access = ToAccessKind(method.getAccess()),
 					.source_range = ToSourceRange(source_manager_, method.getSourceRange()),

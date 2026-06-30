@@ -1,6 +1,8 @@
 {
   "summary": {
     "classes": 1,
+    "link_ready_classes": 0,
+    "not_link_ready_classes": 1,
     "generated_methods": 1,
     "unsupported_items": 2,
     "diagnostic_summary": {
@@ -17,6 +19,10 @@
       "generated_methods": 1,
       "unsupported_methods": 2,
       "unsupported_items": 2,
+      "link_ready": false,
+      "link_readiness_reasons": [
+        "unsupported items remain"
+      ],
       "diagnostic_summary": {
         "warnings": 2,
         "errors": 0
