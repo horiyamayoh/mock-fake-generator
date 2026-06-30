@@ -656,6 +656,50 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_comma_type_generated_smoke COMMAND mockfakegen_comma_type_generated_smoke)
 
 	add_executable(
+		mockfakegen_static_method_generation_test
+		tests/fixtures/static_method/static_method_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_static_method_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_static_method_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_static_method_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_static_method_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_static_method_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_static_method_generation_test)
+
+	add_test(NAME mockfakegen_static_method_generation_test COMMAND mockfakegen_static_method_generation_test)
+
+	add_executable(
+		mockfakegen_static_method_generated_smoke
+		tests/fixtures/static_method/static_method_generated_smoke_test.cpp
+		tests/fixtures/static_method/generated/FakeHoge.cpp
+	)
+	target_include_directories(
+		mockfakegen_static_method_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/static_method/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/static_method/generated"
+	)
+	target_link_libraries(mockfakegen_static_method_generated_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
+	target_compile_features(mockfakegen_static_method_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_static_method_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_static_method_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_static_method_generated_smoke)
+
+	add_test(NAME mockfakegen_static_method_generated_smoke COMMAND mockfakegen_static_method_generated_smoke)
+
+	add_executable(
 		mockfakegen_all_mocks_generation_test
 		tests/fixtures/all_mocks/all_mocks_generation_test.cpp
 	)
