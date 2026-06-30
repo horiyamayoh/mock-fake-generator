@@ -45,6 +45,33 @@ set_target_properties(
 )
 mockfakegen_apply_sanitizers(mockfakegen_ket)
 
+add_library(
+	mockfakegen_core
+		src/Config.cpp
+		src/support/CliSupport.cpp
+)
+target_include_directories(mockfakegen_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(mockfakegen_core PRIVATE mockfakegen_ket)
+target_compile_features(mockfakegen_core PUBLIC cxx_std_23)
+set_target_properties(
+	mockfakegen_core
+	PROPERTIES
+		CXX_EXTENSIONS OFF
+)
+mockfakegen_apply_strict_warnings(mockfakegen_core)
+mockfakegen_apply_sanitizers(mockfakegen_core)
+
+add_executable(mockfakegen src/main.cpp)
+target_link_libraries(mockfakegen PRIVATE mockfakegen_core)
+target_compile_features(mockfakegen PRIVATE cxx_std_23)
+set_target_properties(
+	mockfakegen
+	PROPERTIES
+		CXX_EXTENSIONS OFF
+)
+mockfakegen_apply_strict_warnings(mockfakegen)
+mockfakegen_apply_sanitizers(mockfakegen)
+
 if(MOCKFAKEGEN_ENABLE_FORMAT_TARGETS)
 	find_package(Python3 COMPONENTS Interpreter)
 
@@ -66,6 +93,19 @@ if(MOCKFAKEGEN_ENABLE_FORMAT_TARGETS)
 endif()
 
 if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
+	add_executable(mockfakegen_config_cli_test tests/config/config_cli_test.cpp)
+	target_link_libraries(mockfakegen_config_cli_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_config_cli_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_config_cli_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_config_cli_test)
+	mockfakegen_apply_sanitizers(mockfakegen_config_cli_test)
+
+	add_test(NAME mockfakegen_config_cli_test COMMAND mockfakegen_config_cli_test)
+
 	add_executable(mockfakegen_foundation_smoke tests/foundation/foundation_smoke.cpp)
 	target_link_libraries(mockfakegen_foundation_smoke PRIVATE mockfakegen_ket)
 	target_compile_features(mockfakegen_foundation_smoke PRIVATE cxx_std_23)
