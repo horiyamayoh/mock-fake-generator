@@ -52,6 +52,7 @@ namespace mockfakegen
 		std::filesystem::path build_path;
 		std::vector<HeaderModel> headers;
 		bool fake_special_members = false;
+		bool fake_static_data = false;
 	};
 
 	struct CompilationResolveResult

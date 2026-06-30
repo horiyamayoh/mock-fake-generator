@@ -53,6 +53,12 @@ namespace mockfakegen
 							 {
 								 return lhs.signature_for_report < rhs.signature_for_report;
 							 });
+			std::stable_sort(class_model.static_data_members.begin(),
+							 class_model.static_data_members.end(),
+							 [](const auto& lhs, const auto& rhs)
+							 {
+								 return lhs.signature_for_report < rhs.signature_for_report;
+							 });
 			std::stable_sort(class_model.unsupported_items.begin(),
 							 class_model.unsupported_items.end(),
 							 [](const auto& lhs, const auto& rhs)

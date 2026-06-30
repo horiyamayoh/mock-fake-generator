@@ -204,6 +204,41 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::ClassModel StaticDataModel()
+	{
+		return mockfakegen::ClassModel{
+			.name = "StaticData",
+			.qualified_name = "sample::StaticData",
+			.namespaces = {"sample"},
+			.mock_name = "MockStaticData",
+			.mock_header_name = "MockStaticData.h",
+			.fake_source_name = "FakeStaticData.cpp",
+			.source_header = HeaderNamed("StaticData.h"),
+			.mock_methods =
+				{
+					MethodNamed("Ready"),
+				},
+			.fake_methods =
+				{
+					MethodNamed("Ready"),
+				},
+			.static_data_members =
+				{
+					mockfakegen::StaticDataMemberModel{
+						.name = "count",
+						.type_spelling = "int",
+						.signature_for_report = "sample::StaticData::count",
+					},
+					mockfakegen::StaticDataMemberModel{
+						.name = "limit",
+						.type_spelling = "const int",
+						.signature_for_report = "sample::StaticData::limit",
+					},
+				},
+			.unsupported_items = {},
+		};
+	}
+
 	[[nodiscard]] mockfakegen::ClassModel EscapingReportModel()
 	{
 		auto unsupported = UnsupportedFunctionTemplate();
@@ -494,6 +529,27 @@ namespace
 			   "normal fake methods should still be generated");
 	}
 
+	void GeneratesStaticDataDefinitions()
+	{
+		const std::vector classes = {StaticDataModel()};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
+
+		const auto& fake = FindFile(files, "FakeStaticData.cpp");
+		Expect(Contains(fake.content, "int StaticData::count{};"),
+			   "static data fake should generate default definition");
+		Expect(Contains(fake.content, "const int StaticData::limit{};"),
+			   "const static data fake should generate default definition");
+		Expect(Contains(fake.content, "void StaticData::Ready()"),
+			   "normal fake methods should still be generated");
+
+		const auto static_data_position = fake.content.find("int StaticData::count{};");
+		const auto method_position = fake.content.find("void StaticData::Ready()");
+		Expect(static_data_position != std::string::npos && method_position != std::string::npos &&
+				   static_data_position < method_position,
+			   "static data definitions should be emitted before methods");
+	}
+
 	void CMakeFragmentUsesOnlyLinkReadyFakeSources()
 	{
 		const auto files = mockfakegen::GenerateMockFakeProject(
@@ -556,6 +612,7 @@ int main()
 	ProjectOptionsSelectGlobalMutexRuntime();
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
 	GeneratesSpecialMemberFakes();
+	GeneratesStaticDataDefinitions();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();

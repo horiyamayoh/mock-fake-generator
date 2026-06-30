@@ -294,6 +294,13 @@ namespace mockfakegen
 				value += "\nmethod:";
 				value += MethodFingerprint(method);
 			}
+			for (const auto& static_data : class_model.static_data_members)
+			{
+				value += "\nstatic_data:";
+				value += static_data.signature_for_report;
+				value += "|";
+				value += static_data.type_spelling;
+			}
 			for (const auto& item : class_model.unsupported_items)
 			{
 				value += "\nunsupported:";
@@ -496,6 +503,7 @@ namespace mockfakegen
 					real_header,
 					ClassExtractionOptions{
 						.fake_special_members = options.fake_special_members,
+						.fake_static_data = options.fake_static_data,
 					});
 				if (!HasExtractedContent(extraction))
 				{
@@ -562,6 +570,7 @@ namespace mockfakegen
 				synthetic_header,
 				ClassExtractionOptions{
 					.fake_special_members = options.fake_special_members,
+					.fake_static_data = options.fake_static_data,
 				});
 			MergeExtraction(result, observations, synthetic_header, std::move(attempt), extraction);
 		}

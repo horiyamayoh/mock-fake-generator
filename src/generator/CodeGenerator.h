@@ -40,6 +40,12 @@ namespace mockfakegen
 		bool is_noexcept = false;
 	};
 
+	struct SimpleStaticDataMemberModel
+	{
+		std::string type;
+		std::string name;
+	};
+
 	struct SimpleClassModel
 	{
 		std::string name;
@@ -50,6 +56,7 @@ namespace mockfakegen
 		std::vector<SimpleMethodModel> methods;
 		std::vector<SimpleConstructorModel> fake_constructors = {};
 		std::vector<SimpleDestructorModel> fake_destructors = {};
+		std::vector<SimpleStaticDataMemberModel> static_data_members = {};
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;

@@ -838,6 +838,13 @@ namespace mockfakegen
 				}
 				emitted_definition = true;
 			};
+			for (const auto& static_data : class_model.static_data_members)
+			{
+				separate_definition();
+				out << indent << static_data.type << ' ' << class_model.name
+					<< "::" << static_data.name << "{};\n";
+			}
+
 			for (const auto& constructor : class_model.fake_constructors)
 			{
 				separate_definition();
@@ -946,6 +953,7 @@ namespace mockfakegen
 				.methods = {},
 				.fake_constructors = {},
 				.fake_destructors = {},
+				.static_data_members = {},
 				.link_ready = IsLinkReady(class_model),
 				.link_readiness_reasons = LinkReadinessReasons(class_model),
 			};
@@ -1001,6 +1009,15 @@ namespace mockfakegen
 			{
 				simple_class.fake_destructors.push_back(SimpleDestructorModel{
 					.is_noexcept = destructor.is_noexcept,
+				});
+			}
+
+			simple_class.static_data_members.reserve(class_model.static_data_members.size());
+			for (const auto& static_data : class_model.static_data_members)
+			{
+				simple_class.static_data_members.push_back(SimpleStaticDataMemberModel{
+					.type = static_data.type_spelling,
+					.name = static_data.name,
 				});
 			}
 

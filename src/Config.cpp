@@ -582,9 +582,7 @@ namespace mockfakegen
 				}
 				if (*parsed)
 				{
-					AddDeferredError(result.errors,
-									 kFakeStaticDataOption,
-									 "static data member fake generation is deferred.");
+					config.fake_static_data = true;
 				}
 			}
 			else if (option == kInterfaceMockOption)
@@ -796,6 +794,7 @@ namespace mockfakegen
 			"  --mock-namespace-mode <mode> same-as-product.\n"
 			"  --collision-policy <policy> qualified-filename.\n"
 			"  --fake-special-members <bool> Generate safe constructor/destructor fakes.\n"
+			"  --fake-static-data <bool> Generate safe static data member definitions.\n"
 			"  --dry-run               Resolve config without writing generated files.\n"
 			"  --overwrite             Allow replacing existing generated files.\n"
 			"  --strict                Fail when unsupported input is encountered.\n"

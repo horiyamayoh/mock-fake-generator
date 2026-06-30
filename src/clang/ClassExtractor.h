@@ -19,6 +19,7 @@ namespace mockfakegen
 	struct ClassExtractionOptions
 	{
 		bool fake_special_members = false;
+		bool fake_static_data = false;
 	};
 
 	[[nodiscard]] ClassExtractionResult

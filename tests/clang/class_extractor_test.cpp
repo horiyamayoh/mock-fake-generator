@@ -171,6 +171,20 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] std::size_t UnsupportedKindCount(const mockfakegen::ClassModel& class_model,
+												   std::string_view kind)
+	{
+		std::size_t count = 0U;
+		for (const auto& item : class_model.unsupported_items)
+		{
+			if (item.kind == kind)
+			{
+				++count;
+			}
+		}
+		return count;
+	}
+
 	void ExtractsPublicMethodsAndQualifiersInDeclarationOrder()
 	{
 		TempTree tree;
@@ -360,6 +374,97 @@ namespace
 		Expect(derived_model.unsupported_items[0].reason.find("base class") != std::string::npos,
 			   "unsafe constructor diagnostic should explain base class");
 	}
+
+	void ExtractsStaticDataWhenEnabled()
+	{
+		TempTree tree;
+		tree.Write("include/StaticData.h",
+				   "#pragma once\n"
+				   "class StaticData {\n"
+				   "public:\n"
+				   "  static int count;\n"
+				   "  static const int limit;\n"
+				   "  inline static int inline_count = 3;\n"
+				   "  static constexpr int cached = 9;\n"
+				   "  static bool Ready();\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/StaticData.h",
+							mockfakegen::ClassExtractionOptions{.fake_static_data = true});
+
+		Expect(result.classes.size() == 1U, "static data fixture class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.static_data_members.size() == 2U,
+			   "out-of-line static data should be extracted");
+		Expect(class_model.static_data_members[0].name == "count",
+			   "first static data member should keep declaration order");
+		Expect(class_model.static_data_members[0].type_spelling == "int",
+			   "static data type should be spelled");
+		Expect(class_model.static_data_members[1].name == "limit",
+			   "const static data member should be extracted");
+		Expect(class_model.static_data_members[1].type_spelling == "const int",
+			   "const static data type should preserve const");
+		Expect(class_model.mock_methods.size() == 1U,
+			   "static member functions should still be extracted separately");
+		Expect(class_model.unsupported_items.empty(),
+			   "safe static data members should not be reported unsupported");
+	}
+
+	void ReportsStaticDataWhenDisabled()
+	{
+		TempTree tree;
+		tree.Write("include/StaticDataDisabled.h",
+				   "#pragma once\n"
+				   "class StaticDataDisabled {\n"
+				   "public:\n"
+				   "  static int count;\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/StaticDataDisabled.h");
+
+		Expect(result.classes.size() == 1U, "disabled static data class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.static_data_members.empty(),
+			   "static data should not be generated when disabled");
+		Expect(HasUnsupportedKind(class_model, "static_data_member"),
+			   "disabled static data should be reported unsupported");
+		Expect(!result.diagnostics.empty(), "disabled static data should emit diagnostic");
+	}
+
+	void ReportsUnsafeStaticDataWhenEnabled()
+	{
+		TempTree tree;
+		tree.Write("include/UnsafeStaticData.h",
+				   "#pragma once\n"
+				   "class UnsafeStaticData {\n"
+				   "public:\n"
+				   "  static int& ref;\n"
+				   "  static constinit int boot;\n"
+				   "  static int values[2];\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/UnsafeStaticData.h",
+							mockfakegen::ClassExtractionOptions{.fake_static_data = true});
+
+		Expect(result.classes.size() == 1U, "unsafe static data class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.static_data_members.empty(),
+			   "unsafe static data should not be generated");
+		Expect(UnsupportedKindCount(class_model, "static_data_member") == 3U,
+			   "all unsafe static data members should be reported unsupported");
+		Expect(class_model.unsupported_items[0].reason.find("reference static data member") !=
+				   std::string::npos,
+			   "reference static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[1].reason.find("constinit") != std::string::npos,
+			   "constinit static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[2].reason.find("array static data member") !=
+				   std::string::npos,
+			   "array static data diagnostic should be specific");
+	}
 } // namespace
 
 int main()
@@ -373,5 +478,8 @@ int main()
 	ExtractsSpecialMembersWhenEnabled();
 	ReportsUnsafeSpecialMemberConstructor();
 	ReportsUnsafeSpecialMemberBaseConstructor();
+	ExtractsStaticDataWhenEnabled();
+	ReportsStaticDataWhenDisabled();
+	ReportsUnsafeStaticDataWhenEnabled();
 	return 0;
 }

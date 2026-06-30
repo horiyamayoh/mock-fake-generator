@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/Attr.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/RecursiveASTVisitor.h>
@@ -327,6 +328,7 @@ namespace mockfakegen
 					.fake_methods = {},
 					.fake_constructors = {},
 					.fake_destructors = {},
+					.static_data_members = {},
 					.unsupported_items = {},
 				};
 				ExtractMethods(*declaration, class_model);
@@ -413,6 +415,14 @@ namespace mockfakegen
 													"function_template",
 													"function template member is not supported");
 						}
+						continue;
+					}
+
+					const auto* variable = llvm::dyn_cast<clang::VarDecl>(child);
+					if (variable != nullptr && variable->isStaticDataMember() &&
+						!variable->isImplicit())
+					{
+						RecordStaticDataMember(*variable, class_model);
 						continue;
 					}
 
@@ -700,6 +710,109 @@ namespace mockfakegen
 					.signature_for_report = SignatureForReport(class_model, destructor, {}),
 					.is_noexcept = IsNoexcept(destructor),
 					.source_range = ToSourceRange(source_manager_, destructor.getSourceRange()),
+				});
+			}
+
+			[[nodiscard]] bool ReferencesNestedType(clang::QualType type) const
+			{
+				while (type->isPointerType())
+				{
+					type = type->getPointeeType();
+				}
+
+				if (const auto* record = type->getAsCXXRecordDecl(); record != nullptr)
+				{
+					const auto* context = record->getDeclContext();
+					return context != nullptr && context->isRecord();
+				}
+
+				if (const auto* enum_type = type->getAs<clang::EnumType>(); enum_type != nullptr)
+				{
+					const auto* enum_decl = enum_type->getDecl();
+					const auto* context =
+						enum_decl == nullptr ? nullptr : enum_decl->getDeclContext();
+					return context != nullptr && context->isRecord();
+				}
+
+				return false;
+			}
+
+			[[nodiscard]] std::string
+			UnsupportedStaticDataReason(const clang::VarDecl& variable) const
+			{
+				const auto type = variable.getType();
+				const auto name = variable.getNameAsString();
+				if (variable.hasAttr<clang::ConstInitAttr>())
+				{
+					return "constinit static data member requires an explicit initializer policy";
+				}
+				if (variable.getTLSKind() != clang::VarDecl::TLS_None)
+				{
+					return "thread-local static data member is not supported";
+				}
+				if (variable.hasInit())
+				{
+					return "static data member with in-class initializer is not supported";
+				}
+				if (type->isReferenceType())
+				{
+					return "reference static data member '" + name +
+						"' cannot be safely default-initialized";
+				}
+				if (type->isArrayType())
+				{
+					return "array static data member '" + name +
+						"' requires array declarator synthesis";
+				}
+				if (ReferencesNestedType(type))
+				{
+					return "static data member '" + name +
+						"' uses a nested type that cannot be safely spelled outside the class";
+				}
+				if (!IsDefaultConstructibleField(type))
+				{
+					const auto type_spelling = type_spelling_.SpellType(type);
+					return "static data member '" + name + "' of type '" + type_spelling.spelling +
+						"' is not default-constructible";
+				}
+				return {};
+			}
+
+			void RecordStaticDataMember(const clang::VarDecl& variable, ClassModel& class_model)
+			{
+				if (variable.isInline() || variable.isConstexpr())
+				{
+					return;
+				}
+				if (!options_.fake_static_data)
+				{
+					RecordUnsupportedMethod(class_model,
+											variable,
+											UnsupportedReasonCode::StaticDataMember,
+											"static_data_member",
+											"static data member fake generation is not enabled");
+					return;
+				}
+
+				const auto unsupported_reason = UnsupportedStaticDataReason(variable);
+				if (!unsupported_reason.empty())
+				{
+					RecordUnsupportedMethod(class_model,
+											variable,
+											UnsupportedReasonCode::StaticDataMember,
+											"static_data_member",
+											unsupported_reason);
+					return;
+				}
+
+				const auto type = type_spelling_.SpellType(variable.getType());
+				const auto signature =
+					class_model.qualified_name + "::" + variable.getNameAsString();
+				class_model.static_data_members.push_back(StaticDataMemberModel{
+					.name = variable.getNameAsString(),
+					.type_spelling = type.spelling,
+					.signature_for_report = signature,
+					.source_range = ToSourceRange(source_manager_, variable.getSourceRange()),
 				});
 			}
 

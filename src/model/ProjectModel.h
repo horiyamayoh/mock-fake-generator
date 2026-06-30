@@ -45,6 +45,7 @@ namespace mockfakegen
 		ConstexprMethod,
 		ConditionalNoexcept,
 		VolatileMethod,
+		StaticDataMember,
 	};
 
 	struct SourceLocation
@@ -137,6 +138,14 @@ namespace mockfakegen
 		SourceRange source_range = {};
 	};
 
+	struct StaticDataMemberModel
+	{
+		std::string name;
+		std::string type_spelling;
+		std::string signature_for_report;
+		SourceRange source_range = {};
+	};
+
 	struct UnsupportedItem
 	{
 		UnsupportedReasonCode reason_code = UnsupportedReasonCode::Unknown;
@@ -162,6 +171,7 @@ namespace mockfakegen
 		std::vector<MethodModel> fake_methods;
 		std::vector<ConstructorModel> fake_constructors = {};
 		std::vector<DestructorModel> fake_destructors = {};
+		std::vector<StaticDataMemberModel> static_data_members = {};
 		std::vector<UnsupportedItem> unsupported_items;
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};

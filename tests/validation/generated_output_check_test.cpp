@@ -142,11 +142,12 @@ namespace
 			source_dir / "tests/fixtures/qualified_collision/generated",
 			source_dir / "tests/fixtures/reporting/generated",
 			source_dir / "tests/fixtures/special_member/generated",
+			source_dir / "tests/fixtures/static_data/generated",
 			source_dir / "tests/fixtures/static_method/generated",
 		});
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 51U, "generated fixtures should be included");
+		Expect(result.checked_file_count == 53U, "generated fixtures should be included");
 	}
 } // namespace
 

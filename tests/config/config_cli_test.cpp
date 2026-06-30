@@ -309,6 +309,17 @@ namespace
 		Expect(result.config->fake_special_members, "fake-special-members should parse true");
 	}
 
+	void ParsesFakeStaticDataTrue()
+	{
+		auto args = ValidArgs();
+		args.push_back("--fake-static-data=true");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "fake-static-data true should parse");
+		Expect(result.config->fake_static_data, "fake-static-data should parse true");
+	}
+
 	void ReportsDeferredOptions()
 	{
 		auto args = ValidArgs();
@@ -423,6 +434,7 @@ int main()
 	ParsesGlobalMutexRegistryMode();
 	ParsesSharedOwnerRegistryMode();
 	ParsesFakeSpecialMembersTrue();
+	ParsesFakeStaticDataTrue();
 	ReportsDeferredOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();
