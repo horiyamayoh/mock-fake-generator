@@ -1,5 +1,7 @@
 #include "generator/CodeGenerator.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -382,19 +384,67 @@ namespace mockfakegen
 				.generated_method_count = class_model.methods.size(),
 			};
 		}
+
+		[[nodiscard]] GeneratedFile GenerateMockHeader(const SimpleClassModel& class_model)
+		{
+			return MakeGeneratedFile("Mock" + class_model.name + ".h",
+									 BuildMockHeaderContent(class_model),
+									 GeneratedFileKind::MockHeader,
+									 SourceClass(class_model));
+		}
+
+		[[nodiscard]] GeneratedFile GenerateFakeSource(const SimpleClassModel& class_model)
+		{
+			return MakeGeneratedFile("Fake" + class_model.name + ".cpp",
+									 BuildFakeSourceContent(class_model),
+									 GeneratedFileKind::FakeSource,
+									 SourceClass(class_model));
+		}
+
+		[[nodiscard]] SimpleClassModel ToSimpleClassModel(const ClassModel& class_model)
+		{
+			SimpleClassModel simple_class{
+				.name = class_model.name,
+				.namespaces = class_model.namespaces,
+				.header_include = class_model.source_header.include_spelling,
+				.methods = {},
+			};
+			simple_class.methods.reserve(class_model.mock_methods.size());
+
+			for (const auto& method : class_model.mock_methods)
+			{
+				SimpleMethodModel simple_method{
+					.return_type = method.return_type_spelling,
+					.gmock_return_type = method.gmock_return_type_spelling,
+					.name = method.name,
+					.parameters = {},
+					.is_const = method.is_const,
+					.is_noexcept = method.is_noexcept,
+					.ref_qualifier = method.ref_qualifier,
+				};
+				simple_method.parameters.reserve(method.parameters.size());
+
+				for (const auto& parameter : method.parameters)
+				{
+					simple_method.parameters.push_back(SimpleParameterModel{
+						.type = parameter.type_spelling,
+						.gmock_type = parameter.gmock_type_spelling,
+						.name = parameter.generated_name,
+					});
+				}
+
+				simple_class.methods.push_back(std::move(simple_method));
+			}
+
+			return simple_class;
+		}
 	} // namespace
 
 	std::vector<GeneratedFile> GenerateMinimalMockFake(const SimpleClassModel& class_model)
 	{
 		std::vector<GeneratedFile> files;
-		files.push_back(MakeGeneratedFile("Mock" + class_model.name + ".h",
-										  BuildMockHeaderContent(class_model),
-										  GeneratedFileKind::MockHeader,
-										  SourceClass(class_model)));
-		files.push_back(MakeGeneratedFile("Fake" + class_model.name + ".cpp",
-										  BuildFakeSourceContent(class_model),
-										  GeneratedFileKind::FakeSource,
-										  SourceClass(class_model)));
+		files.push_back(GenerateMockHeader(class_model));
+		files.push_back(GenerateFakeSource(class_model));
 		files.push_back(MakeThreadLocalRuntimeHeader());
 		SortGeneratedFiles(files);
 		return files;
@@ -402,39 +452,63 @@ namespace mockfakegen
 
 	std::vector<GeneratedFile> GenerateMinimalMockFake(const ClassModel& class_model)
 	{
-		SimpleClassModel simple_class{
-			.name = class_model.name,
-			.namespaces = class_model.namespaces,
-			.header_include = class_model.source_header.include_spelling,
-			.methods = {},
-		};
-		simple_class.methods.reserve(class_model.mock_methods.size());
+		return GenerateMinimalMockFake(ToSimpleClassModel(class_model));
+	}
 
-		for (const auto& method : class_model.mock_methods)
+	GeneratedFile GenerateAllMocksHeader(std::span<const GeneratedFile> files)
+	{
+		std::vector<std::filesystem::path> mock_headers;
+		for (const auto& file : files)
 		{
-			SimpleMethodModel simple_method{
-				.return_type = method.return_type_spelling,
-				.gmock_return_type = method.gmock_return_type_spelling,
-				.name = method.name,
-				.parameters = {},
-				.is_const = method.is_const,
-				.is_noexcept = method.is_noexcept,
-				.ref_qualifier = method.ref_qualifier,
-			};
-			simple_method.parameters.reserve(method.parameters.size());
-
-			for (const auto& parameter : method.parameters)
+			if (file.kind == GeneratedFileKind::MockHeader)
 			{
-				simple_method.parameters.push_back(SimpleParameterModel{
-					.type = parameter.type_spelling,
-					.gmock_type = parameter.gmock_type_spelling,
-					.name = parameter.generated_name,
-				});
+				mock_headers.push_back(file.relative_path);
 			}
-
-			simple_class.methods.push_back(std::move(simple_method));
 		}
 
-		return GenerateMinimalMockFake(simple_class);
+		std::sort(mock_headers.begin(),
+				  mock_headers.end(),
+				  [](const auto& lhs, const auto& rhs)
+				  {
+					  return lhs.generic_string() < rhs.generic_string();
+				  });
+		mock_headers.erase(std::unique(mock_headers.begin(), mock_headers.end()),
+						   mock_headers.end());
+
+		std::ostringstream out;
+		out << "#pragma once\n";
+		if (!mock_headers.empty())
+		{
+			out << '\n';
+		}
+		for (const auto& mock_header : mock_headers)
+		{
+			out << "#include \"" << mock_header.generic_string() << "\"\n";
+		}
+
+		return MakeGeneratedFile(
+			"AllMocks.h", out.str(), GeneratedFileKind::AllMocksHeader, std::nullopt);
+	}
+
+	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
+													   ProjectGenerationOptions options)
+	{
+		std::vector<GeneratedFile> files;
+		files.reserve((class_models.size() * 2U) + 2U);
+		for (const auto& class_model : class_models)
+		{
+			const auto simple_class = ToSimpleClassModel(class_model);
+			files.push_back(GenerateMockHeader(simple_class));
+			files.push_back(GenerateFakeSource(simple_class));
+		}
+
+		files.push_back(MakeThreadLocalRuntimeHeader());
+		if (options.emit_all_mocks)
+		{
+			files.push_back(GenerateAllMocksHeader(files));
+		}
+
+		SortGeneratedFiles(files);
+		return files;
 	}
 } // namespace mockfakegen

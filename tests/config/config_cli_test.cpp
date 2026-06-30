@@ -45,7 +45,19 @@ namespace
 		Expect(!result.config->overwrite, "overwrite should default false");
 		Expect(!result.config->strict, "strict should default false");
 		Expect(result.config->best_effort, "best-effort should default true");
+		Expect(result.config->emit_all_mocks, "emit-all-mocks should default true");
 		Expect(result.config->jobs == 3, "jobs should parse as integer");
+	}
+
+	void ParsesEmitAllMocksFalse()
+	{
+		auto args = ValidArgs();
+		args.push_back("--emit-all-mocks=false");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "emit-all-mocks false config should parse");
+		Expect(!result.config->emit_all_mocks, "emit-all-mocks should parse false");
 	}
 
 	void ReportsMissingRequiredOptions()
@@ -75,6 +87,21 @@ namespace
 		Expect(result.errors[0].option == "--jobs", "invalid jobs should identify option");
 		Expect(result.errors[0].message == "--jobs must be a positive integer.",
 			   "invalid jobs diagnostic should be deterministic");
+	}
+
+	void ReportsInvalidEmitAllMocks()
+	{
+		auto args = ValidArgs();
+		args.push_back("--emit-all-mocks=maybe");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "invalid emit-all-mocks should fail");
+		Expect(result.errors.size() == 1U, "invalid emit-all-mocks should produce one error");
+		Expect(result.errors[0].option == "--emit-all-mocks",
+			   "invalid emit-all-mocks should identify option");
+		Expect(result.errors[0].message == "--emit-all-mocks must be true or false.",
+			   "invalid emit-all-mocks diagnostic should be deterministic");
 	}
 
 	void ReportsStrictBestEffortConflict()
@@ -127,8 +154,10 @@ namespace
 int main()
 {
 	ParsesValidConfig();
+	ParsesEmitAllMocksFalse();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();
+	ReportsInvalidEmitAllMocks();
 	ReportsStrictBestEffortConflict();
 	HelpDoesNotRequirePaths();
 	RunCliReturnsDeterministicExitCodes();

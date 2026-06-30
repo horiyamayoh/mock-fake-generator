@@ -22,6 +22,7 @@ namespace mockfakegen
 		constexpr std::string_view kOverwriteOption = "--overwrite";
 		constexpr std::string_view kStrictOption = "--strict";
 		constexpr std::string_view kBestEffortOption = "--best-effort";
+		constexpr std::string_view kEmitAllMocksOption = "--emit-all-mocks";
 		constexpr std::string_view kJobsOption = "--jobs";
 
 		[[nodiscard]] int DefaultJobs() noexcept
@@ -58,7 +59,8 @@ namespace mockfakegen
 			return option == kHelpOption || option == kInputRootOption ||
 				option == kOutputDirOption || option == kProjectRootOption ||
 				option == kDryRunOption || option == kOverwriteOption || option == kStrictOption ||
-				option == kBestEffortOption || option == kJobsOption;
+				option == kBestEffortOption || option == kEmitAllMocksOption ||
+				option == kJobsOption;
 		}
 
 		[[nodiscard]] bool IsFlagOption(std::string_view option) noexcept
@@ -103,6 +105,19 @@ namespace mockfakegen
 			}
 
 			return value;
+		}
+
+		[[nodiscard]] std::optional<bool> ParseBoolValue(std::string_view text)
+		{
+			if (text == "true")
+			{
+				return true;
+			}
+			if (text == "false")
+			{
+				return false;
+			}
+			return std::nullopt;
 		}
 
 		[[nodiscard]] std::filesystem::path NormalizePath(std::string value)
@@ -251,6 +266,20 @@ namespace mockfakegen
 
 				config.jobs = *parsed_jobs;
 			}
+			else if (option == kEmitAllMocksOption)
+			{
+				const auto parsed_emit_all_mocks = ParseBoolValue(*value);
+				if (!parsed_emit_all_mocks.has_value())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kEmitAllMocksOption,
+							 "--emit-all-mocks must be true or false.");
+					continue;
+				}
+
+				config.emit_all_mocks = *parsed_emit_all_mocks;
+			}
 		}
 
 		if (strict_seen && best_effort_seen)
@@ -329,6 +358,7 @@ namespace mockfakegen
 			"  --overwrite            Allow replacing existing generated files.\n"
 			"  --strict               Fail when unsupported input is encountered.\n"
 			"  --best-effort          Generate supported output and report unsupported input.\n"
+			"  --emit-all-mocks <bool> Generate AllMocks.h when true.\n"
 			"  --jobs <N>             Positive worker count.\n";
 	}
 

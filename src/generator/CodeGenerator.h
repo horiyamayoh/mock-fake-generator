@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <string>
 #include <vector>
 
@@ -34,7 +35,16 @@ namespace mockfakegen
 		std::vector<SimpleMethodModel> methods;
 	};
 
+	struct ProjectGenerationOptions
+	{
+		bool emit_all_mocks = true;
+	};
+
 	[[nodiscard]] std::vector<GeneratedFile>
 	GenerateMinimalMockFake(const SimpleClassModel& class_model);
 	[[nodiscard]] std::vector<GeneratedFile> GenerateMinimalMockFake(const ClassModel& class_model);
+	[[nodiscard]] GeneratedFile GenerateAllMocksHeader(std::span<const GeneratedFile> files);
+	[[nodiscard]] std::vector<GeneratedFile>
+	GenerateMockFakeProject(std::span<const ClassModel> class_models,
+							ProjectGenerationOptions options = {});
 } // namespace mockfakegen

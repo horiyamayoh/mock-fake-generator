@@ -36,6 +36,7 @@ namespace mockfakegen
 		bool overwrite = false;
 		bool strict = false;
 		bool best_effort = true;
+		bool emit_all_mocks = true;
 		int jobs = 1;
 	};
 
