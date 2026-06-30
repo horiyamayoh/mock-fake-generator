@@ -125,6 +125,7 @@ add_library(
 		src/Config.cpp
 		src/clang/ClassExtractor.cpp
 		src/clang/SyntheticTuParser.cpp
+		src/clang/TypeSpellingService.cpp
 		src/generator/CodeGenerator.cpp
 		src/HeaderScanner.cpp
 		src/model/GeneratedFile.cpp
@@ -249,6 +250,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_class_extractor_test)
 
 	add_test(NAME mockfakegen_class_extractor_test COMMAND mockfakegen_class_extractor_test)
+
+	add_executable(mockfakegen_type_spelling_service_test tests/clang/type_spelling_service_test.cpp)
+	target_link_libraries(mockfakegen_type_spelling_service_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_type_spelling_service_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_type_spelling_service_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_type_spelling_service_test)
+	mockfakegen_apply_sanitizers(mockfakegen_type_spelling_service_test)
+
+	add_test(NAME mockfakegen_type_spelling_service_test COMMAND mockfakegen_type_spelling_service_test)
 
 	add_executable(mockfakegen_header_scanner_test tests/scanner/header_scanner_test.cpp)
 	target_link_libraries(mockfakegen_header_scanner_test PRIVATE mockfakegen_core)

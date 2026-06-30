@@ -16,6 +16,8 @@
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/Casting.h>
 
+#include "clang/TypeSpellingService.h"
+
 namespace mockfakegen
 {
 	namespace
@@ -133,19 +135,6 @@ namespace mockfakegen
 				exception_spec == clang::EST_NoexceptTrue;
 		}
 
-		[[nodiscard]] std::string TypeSpelling(clang::QualType type,
-											   const clang::ASTContext& ast_context)
-		{
-			clang::PrintingPolicy policy(ast_context.getLangOpts());
-			policy.SuppressTagKeyword = true;
-			return type.getAsString(policy);
-		}
-
-		[[nodiscard]] bool IsNonConstByValue(clang::QualType type)
-		{
-			return !type->isReferenceType() && !type->isPointerType() && !type.isConstQualified();
-		}
-
 		[[nodiscard]] std::string UnsupportedMethodName(const clang::NamedDecl& declaration)
 		{
 			const auto name = declaration.getNameAsString();
@@ -199,7 +188,7 @@ namespace mockfakegen
 								  const clang::ASTContext& ast_context,
 								  const clang::SourceManager& source_manager)
 				: target_header_(target_header), ast_context_(ast_context),
-				  source_manager_(source_manager),
+				  type_spelling_(ast_context), source_manager_(source_manager),
 				  target_path_(AbsoluteNormalized(target_header.absolute_path))
 			{
 			}
@@ -443,28 +432,15 @@ namespace mockfakegen
 				for (std::size_t index = 0U; index < method.parameters().size(); ++index)
 				{
 					const auto* parameter = method.parameters()[index];
-					const auto original_name = parameter->getNameAsString();
-					const auto generated_name =
-						original_name.empty() ? "arg" + std::to_string(index) : original_name;
-					const auto type_spelling =
-						TypeSpelling(parameter->getOriginalType(), ast_context_);
-					parameters.push_back(ParameterModel{
-						.type_spelling = type_spelling,
-						.gmock_type_spelling = type_spelling,
-						.original_name = original_name,
-						.generated_name = generated_name,
-						.has_default_argument = parameter->hasDefaultArg(),
-						.is_rvalue_ref = parameter->getType()->isRValueReferenceType(),
-						.is_nonconst_by_value = IsNonConstByValue(parameter->getType()),
-					});
+					parameters.push_back(type_spelling_.SpellParameter(*parameter, index));
 				}
 
-				const auto return_type = TypeSpelling(method.getReturnType(), ast_context_);
+				const auto return_type = type_spelling_.SpellType(method.getReturnType());
 				return MethodModel{
 					.name = method.getNameAsString(),
 					.qualified_owner_name = class_model.qualified_name,
-					.return_type_spelling = return_type,
-					.gmock_return_type_spelling = return_type,
+					.return_type_spelling = return_type.spelling,
+					.gmock_return_type_spelling = return_type.gmock_spelling,
 					.parameters = parameters,
 					.signature_for_report = SignatureForReport(class_model, method, parameters),
 					.is_static = method.isStatic(),
@@ -485,6 +461,7 @@ namespace mockfakegen
 
 			const HeaderModel& target_header_;
 			const clang::ASTContext& ast_context_;
+			TypeSpellingService type_spelling_;
 			const clang::SourceManager& source_manager_;
 			std::filesystem::path target_path_;
 			ClassExtractionResult result_;
