@@ -470,6 +470,61 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_namespaced_generated_smoke COMMAND mockfakegen_namespaced_generated_smoke)
 
 	add_executable(
+		mockfakegen_qualified_collision_generation_test
+		tests/fixtures/qualified_collision/qualified_collision_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_qualified_collision_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_qualified_collision_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_qualified_collision_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_qualified_collision_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_qualified_collision_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_qualified_collision_generation_test)
+
+	add_test(
+		NAME mockfakegen_qualified_collision_generation_test
+		COMMAND mockfakegen_qualified_collision_generation_test
+	)
+
+	add_executable(
+		mockfakegen_qualified_collision_generated_smoke
+		tests/fixtures/qualified_collision/qualified_collision_generated_smoke_test.cpp
+		tests/fixtures/qualified_collision/generated/Fake_a_Hoge.cpp
+		tests/fixtures/qualified_collision/generated/Fake_b_Hoge.cpp
+	)
+	target_include_directories(
+		mockfakegen_qualified_collision_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/qualified_collision/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/qualified_collision/generated"
+	)
+	target_link_libraries(
+		mockfakegen_qualified_collision_generated_smoke
+		PRIVATE
+			${MOCKFAKEGEN_GMOCK_MAIN_TARGET}
+	)
+	target_compile_features(mockfakegen_qualified_collision_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_qualified_collision_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_qualified_collision_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_qualified_collision_generated_smoke)
+
+	add_test(
+		NAME mockfakegen_qualified_collision_generated_smoke
+		COMMAND mockfakegen_qualified_collision_generated_smoke
+	)
+
+	add_executable(
 		mockfakegen_overload_generation_test
 		tests/fixtures/overload/overload_generation_test.cpp
 	)

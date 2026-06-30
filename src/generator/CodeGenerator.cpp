@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -17,6 +18,24 @@ namespace mockfakegen
 		[[nodiscard]] std::string MockClassName(const SimpleClassModel& class_model)
 		{
 			return "Mock" + class_model.name;
+		}
+
+		[[nodiscard]] std::string MockHeaderFileName(const SimpleClassModel& class_model)
+		{
+			if (!class_model.mock_header_name.empty())
+			{
+				return class_model.mock_header_name;
+			}
+			return "Mock" + class_model.name + ".h";
+		}
+
+		[[nodiscard]] std::string FakeSourceFileName(const SimpleClassModel& class_model)
+		{
+			if (!class_model.fake_source_name.empty())
+			{
+				return class_model.fake_source_name;
+			}
+			return "Fake" + class_model.name + ".cpp";
 		}
 
 		[[nodiscard]] std::string JsonString(std::string_view value)
@@ -122,6 +141,15 @@ namespace mockfakegen
 			return namespace_name + "::" + class_model.name;
 		}
 
+		[[nodiscard]] std::string QualifiedClassName(const ClassModel& class_model)
+		{
+			if (!class_model.qualified_name.empty())
+			{
+				return class_model.qualified_name;
+			}
+			return BuildQualifiedName(class_model.namespaces, class_model.name);
+		}
+
 		void OpenNamespace(std::ostringstream& out, const SimpleClassModel& class_model)
 		{
 			const auto namespace_name = NamespaceName(class_model.namespaces);
@@ -204,14 +232,153 @@ namespace mockfakegen
 			return DefaultFakeSourceName(class_model.name);
 		}
 
+		void CountFileName(std::map<std::string, std::size_t>& counts, std::string name)
+		{
+			const auto [iterator, inserted] = counts.emplace(std::move(name), 0U);
+			(void)inserted;
+			++iterator->second;
+		}
+
+		[[nodiscard]] std::size_t FileNameCount(const std::map<std::string, std::size_t>& counts,
+												const std::string& name)
+		{
+			const auto iterator = counts.find(name);
+			if (iterator == counts.end())
+			{
+				return 0U;
+			}
+			return iterator->second;
+		}
+
+		[[nodiscard]] bool IsAsciiFileNameCharacter(const unsigned char character) noexcept
+		{
+			return (character >= static_cast<unsigned char>('a') &&
+					character <= static_cast<unsigned char>('z')) ||
+				(character >= static_cast<unsigned char>('A') &&
+				 character <= static_cast<unsigned char>('Z')) ||
+				(character >= static_cast<unsigned char>('0') &&
+				 character <= static_cast<unsigned char>('9')) ||
+				character == static_cast<unsigned char>('_');
+		}
+
+		[[nodiscard]] std::string SanitizeFileNameComponent(std::string_view component)
+		{
+			std::string text;
+			text.reserve(component.size());
+			for (const char raw_character : component)
+			{
+				const auto character = static_cast<unsigned char>(raw_character);
+				if (IsAsciiFileNameCharacter(character))
+				{
+					text += static_cast<char>(character);
+				}
+				else
+				{
+					text += '_';
+				}
+			}
+
+			if (text.empty())
+			{
+				return "unnamed";
+			}
+			return text;
+		}
+
+		[[nodiscard]] std::vector<std::string>
+		QualifiedFileNameComponents(const ClassModel& class_model)
+		{
+			std::vector<std::string> components = class_model.namespaces;
+			if (components.empty() && !class_model.qualified_name.empty())
+			{
+				std::string_view qualified_name = class_model.qualified_name;
+				while (!qualified_name.empty())
+				{
+					const auto separator = qualified_name.find("::");
+					if (separator == std::string_view::npos)
+					{
+						components.emplace_back(qualified_name);
+						break;
+					}
+
+					components.emplace_back(qualified_name.substr(0U, separator));
+					qualified_name.remove_prefix(separator + 2U);
+				}
+			}
+
+			if (components.empty() || components.back() != class_model.name)
+			{
+				components.push_back(class_model.name);
+			}
+			return components;
+		}
+
+		[[nodiscard]] std::string QualifiedFileNameToken(const ClassModel& class_model)
+		{
+			const auto components = QualifiedFileNameComponents(class_model);
+			std::string text;
+			for (const auto& component : components)
+			{
+				if (!text.empty())
+				{
+					text += '_';
+				}
+				text += SanitizeFileNameComponent(component);
+			}
+			return text;
+		}
+
+		[[nodiscard]] std::string QualifiedMockHeaderName(const ClassModel& class_model)
+		{
+			return "Mock_" + QualifiedFileNameToken(class_model) + ".h";
+		}
+
+		[[nodiscard]] std::string QualifiedFakeSourceName(const ClassModel& class_model)
+		{
+			return "Fake_" + QualifiedFileNameToken(class_model) + ".cpp";
+		}
+
+		[[nodiscard]] std::vector<ClassModel>
+		ResolveQualifiedFilenameCollisions(std::span<const ClassModel> class_models)
+		{
+			std::map<std::string, std::size_t> mock_header_counts;
+			std::map<std::string, std::size_t> fake_source_counts;
+			for (const auto& class_model : class_models)
+			{
+				CountFileName(mock_header_counts, MockHeaderName(class_model));
+				CountFileName(fake_source_counts, FakeSourceName(class_model));
+			}
+
+			std::vector<ClassModel> resolved;
+			resolved.reserve(class_models.size());
+			for (const auto& class_model : class_models)
+			{
+				auto resolved_class = class_model;
+				const auto mock_collision =
+					FileNameCount(mock_header_counts, MockHeaderName(class_model)) > 1U;
+				const auto fake_collision =
+					FileNameCount(fake_source_counts, FakeSourceName(class_model)) > 1U;
+				if (mock_collision || fake_collision)
+				{
+					resolved_class.mock_header_name = QualifiedMockHeaderName(class_model);
+					resolved_class.fake_source_name = QualifiedFakeSourceName(class_model);
+				}
+				resolved.push_back(std::move(resolved_class));
+			}
+			return resolved;
+		}
+
 		struct ClassReportEntry
 		{
 			std::string qualified_name;
 			std::string mock_header;
 			std::string fake_source;
+			std::string default_mock_header;
+			std::string default_fake_source;
 			std::string source_header;
 			std::size_t generated_methods = 0U;
 			std::size_t unsupported_items = 0U;
+			bool filename_collision = false;
 		};
 
 		struct UnsupportedReportEntry
@@ -225,15 +392,21 @@ namespace mockfakegen
 
 		[[nodiscard]] ClassReportEntry MakeClassReportEntry(const ClassModel& class_model)
 		{
+			const auto mock_header = MockHeaderName(class_model);
+			const auto fake_source = FakeSourceName(class_model);
+			const auto default_mock_header = DefaultMockHeaderName(class_model.name);
+			const auto default_fake_source = DefaultFakeSourceName(class_model.name);
 			return ClassReportEntry{
-				.qualified_name = class_model.qualified_name.empty()
-					? BuildQualifiedName(class_model.namespaces, class_model.name)
-					: class_model.qualified_name,
-				.mock_header = MockHeaderName(class_model),
-				.fake_source = FakeSourceName(class_model),
+				.qualified_name = QualifiedClassName(class_model),
+				.mock_header = mock_header,
+				.fake_source = fake_source,
+				.default_mock_header = default_mock_header,
+				.default_fake_source = default_fake_source,
 				.source_header = SourceHeaderName(class_model),
 				.generated_methods = class_model.mock_methods.size(),
 				.unsupported_items = class_model.unsupported_items.size(),
+				.filename_collision =
+					mock_header != default_mock_header || fake_source != default_fake_source,
 			};
 		}
 
@@ -267,9 +440,7 @@ namespace mockfakegen
 			for (const auto& class_model : class_models)
 			{
 				const auto header = SourceHeaderName(class_model);
-				const auto class_name = class_model.qualified_name.empty()
-					? BuildQualifiedName(class_model.namespaces, class_model.name)
-					: class_model.qualified_name;
+				const auto class_name = QualifiedClassName(class_model);
 				for (const auto& unsupported : class_model.unsupported_items)
 				{
 					entries.push_back(UnsupportedReportEntry{
@@ -568,7 +739,7 @@ namespace mockfakegen
 
 			std::vector<std::string> local_includes = {
 				class_model.header_include,
-				mock_class_name + ".h",
+				MockHeaderFileName(class_model),
 			};
 			std::sort(local_includes.begin(), local_includes.end());
 			for (const auto& include : local_includes)
@@ -634,7 +805,7 @@ namespace mockfakegen
 
 		[[nodiscard]] GeneratedFile GenerateMockHeader(const SimpleClassModel& class_model)
 		{
-			return MakeGeneratedFile("Mock" + class_model.name + ".h",
+			return MakeGeneratedFile(MockHeaderFileName(class_model),
 									 BuildMockHeaderContent(class_model),
 									 GeneratedFileKind::MockHeader,
 									 SourceClass(class_model));
@@ -642,7 +813,7 @@ namespace mockfakegen
 
 		[[nodiscard]] GeneratedFile GenerateFakeSource(const SimpleClassModel& class_model)
 		{
-			return MakeGeneratedFile("Fake" + class_model.name + ".cpp",
+			return MakeGeneratedFile(FakeSourceFileName(class_model),
 									 BuildFakeSourceContent(class_model),
 									 GeneratedFileKind::FakeSource,
 									 SourceClass(class_model));
@@ -654,6 +825,8 @@ namespace mockfakegen
 				.name = class_model.name,
 				.namespaces = class_model.namespaces,
 				.header_include = class_model.source_header.include_spelling,
+				.mock_header_name = MockHeaderName(class_model),
+				.fake_source_name = FakeSourceName(class_model),
 				.methods = {},
 			};
 			simple_class.methods.reserve(class_model.mock_methods.size());
@@ -800,8 +973,21 @@ namespace mockfakegen
 			out << "    {\n"
 				<< "      \"qualified_name\": " << JsonString(entry.qualified_name) << ",\n"
 				<< "      \"mock_header\": " << JsonString(entry.mock_header) << ",\n"
-				<< "      \"fake_source\": " << JsonString(entry.fake_source) << ",\n"
-				<< "      \"source_header\": " << JsonString(entry.source_header) << ",\n"
+				<< "      \"fake_source\": " << JsonString(entry.fake_source) << ",\n";
+			if (entry.filename_collision)
+			{
+				out << "      \"filename_collision\": {\n"
+					<< "        \"policy\": \"qualified-filename\",\n"
+					<< "        \"default_mock_header\": " << JsonString(entry.default_mock_header)
+					<< ",\n"
+					<< "        \"resolved_mock_header\": " << JsonString(entry.mock_header)
+					<< ",\n"
+					<< "        \"default_fake_source\": " << JsonString(entry.default_fake_source)
+					<< ",\n"
+					<< "        \"resolved_fake_source\": " << JsonString(entry.fake_source) << "\n"
+					<< "      },\n";
+			}
+			out << "      \"source_header\": " << JsonString(entry.source_header) << ",\n"
 				<< "      \"generated_methods\": " << entry.generated_methods << ",\n"
 				<< "      \"unsupported_methods\": " << entry.unsupported_items << ",\n"
 				<< "      \"unsupported_items\": " << entry.unsupported_items << ",\n"
@@ -879,9 +1065,10 @@ namespace mockfakegen
 	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
 													   ProjectGenerationOptions options)
 	{
+		const auto resolved_class_models = ResolveQualifiedFilenameCollisions(class_models);
 		std::vector<GeneratedFile> files;
-		files.reserve((class_models.size() * 2U) + 4U);
-		for (const auto& class_model : class_models)
+		files.reserve((resolved_class_models.size() * 2U) + 4U);
+		for (const auto& class_model : resolved_class_models)
 		{
 			const auto simple_class = ToSimpleClassModel(class_model);
 			files.push_back(GenerateMockHeader(simple_class));
@@ -899,11 +1086,11 @@ namespace mockfakegen
 		}
 		if (options.emit_manifest)
 		{
-			files.push_back(GenerateManifestJson(class_models));
+			files.push_back(GenerateManifestJson(resolved_class_models));
 		}
 		if (options.emit_report)
 		{
-			files.push_back(GenerateGenerationReport(class_models));
+			files.push_back(GenerateGenerationReport(resolved_class_models));
 		}
 
 		SortGeneratedFiles(files);

@@ -1,0 +1,53 @@
+{
+  "summary": {
+    "classes": 2,
+    "generated_methods": 2,
+    "unsupported_items": 0,
+    "diagnostic_summary": {
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "classes": [
+    {
+      "qualified_name": "a::Hoge",
+      "mock_header": "Mock_a_Hoge.h",
+      "fake_source": "Fake_a_Hoge.cpp",
+      "filename_collision": {
+        "policy": "qualified-filename",
+        "default_mock_header": "MockHoge.h",
+        "resolved_mock_header": "Mock_a_Hoge.h",
+        "default_fake_source": "FakeHoge.cpp",
+        "resolved_fake_source": "Fake_a_Hoge.cpp"
+      },
+      "source_header": "a/Hoge.h",
+      "generated_methods": 1,
+      "unsupported_methods": 0,
+      "unsupported_items": 0,
+      "diagnostic_summary": {
+        "warnings": 0,
+        "errors": 0
+      }
+    },
+    {
+      "qualified_name": "b::Hoge",
+      "mock_header": "Mock_b_Hoge.h",
+      "fake_source": "Fake_b_Hoge.cpp",
+      "filename_collision": {
+        "policy": "qualified-filename",
+        "default_mock_header": "MockHoge.h",
+        "resolved_mock_header": "Mock_b_Hoge.h",
+        "default_fake_source": "FakeHoge.cpp",
+        "resolved_fake_source": "Fake_b_Hoge.cpp"
+      },
+      "source_header": "b/Hoge.h",
+      "generated_methods": 1,
+      "unsupported_methods": 0,
+      "unsupported_items": 0,
+      "diagnostic_summary": {
+        "warnings": 0,
+        "errors": 0
+      }
+    }
+  ]
+}

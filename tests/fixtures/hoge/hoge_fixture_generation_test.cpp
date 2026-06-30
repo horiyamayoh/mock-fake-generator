@@ -35,6 +35,8 @@ namespace
 			.name = "Hoge",
 			.namespaces = {},
 			.header_include = "Hoge.h",
+			.mock_header_name = {},
+			.fake_source_name = {},
 			.methods =
 				{
 					mockfakegen::SimpleMethodModel{

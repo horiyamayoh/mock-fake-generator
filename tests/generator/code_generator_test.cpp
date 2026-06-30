@@ -41,6 +41,8 @@ namespace
 			.name = "Hoge",
 			.namespaces = {},
 			.header_include = "Hoge.h",
+			.mock_header_name = {},
+			.fake_source_name = {},
 			.methods =
 				{
 					mockfakegen::SimpleMethodModel{
@@ -77,7 +79,34 @@ namespace
 	{
 		mockfakegen::MethodModel method;
 		method.name = std::move(name);
+		method.return_type_spelling = "void";
+		method.gmock_return_type_spelling = "void";
+		method.signature_for_report = method.name + "()";
 		return method;
+	}
+
+	[[nodiscard]] mockfakegen::ClassModel NamespacedHogeModel(std::string namespace_name,
+															  std::string include_spelling)
+	{
+		const auto qualified_name = namespace_name + "::Hoge";
+		return mockfakegen::ClassModel{
+			.name = "Hoge",
+			.qualified_name = qualified_name,
+			.namespaces = {std::move(namespace_name)},
+			.mock_name = "MockHoge",
+			.mock_header_name = "MockHoge.h",
+			.fake_source_name = "FakeHoge.cpp",
+			.source_header = HeaderNamed(std::move(include_spelling)),
+			.mock_methods =
+				{
+					MethodNamed("Run"),
+				},
+			.fake_methods =
+				{
+					MethodNamed("Run"),
+				},
+			.unsupported_items = {},
+		};
 	}
 
 	[[nodiscard]] mockfakegen::UnsupportedItem UnsupportedFunctionTemplate()
@@ -290,6 +319,70 @@ namespace
 					"manifest content should be deterministic");
 	}
 
+	void ResolvesQualifiedFilenameCollisions()
+	{
+		const std::vector classes = {
+			NamespacedHogeModel("b", "include/b/Hoge.h"),
+			NamespacedHogeModel("a", "include/a/Hoge.h"),
+		};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
+
+		const auto& a_mock = FindFile(files, "Mock_a_Hoge.h");
+		const auto& b_mock = FindFile(files, "Mock_b_Hoge.h");
+		const auto& a_fake = FindFile(files, "Fake_a_Hoge.cpp");
+		const auto& b_fake = FindFile(files, "Fake_b_Hoge.cpp");
+		Expect(a_mock.kind == mockfakegen::GeneratedFileKind::MockHeader,
+			   "a::Hoge mock should use qualified filename");
+		Expect(b_mock.kind == mockfakegen::GeneratedFileKind::MockHeader,
+			   "b::Hoge mock should use qualified filename");
+		Expect(a_fake.kind == mockfakegen::GeneratedFileKind::FakeSource,
+			   "a::Hoge fake should use qualified filename");
+		Expect(b_fake.kind == mockfakegen::GeneratedFileKind::FakeSource,
+			   "b::Hoge fake should use qualified filename");
+		Expect(Contains(a_fake.content, "#include \"Mock_a_Hoge.h\""),
+			   "a::Hoge fake should include resolved mock header");
+		Expect(Contains(b_fake.content, "#include \"Mock_b_Hoge.h\""),
+			   "b::Hoge fake should include resolved mock header");
+
+		const auto& all_mocks = FindFile(files, "AllMocks.h");
+		Expect(Contains(all_mocks.content, "#include \"Mock_a_Hoge.h\""),
+			   "AllMocks should include a::Hoge resolved header");
+		Expect(Contains(all_mocks.content, "#include \"Mock_b_Hoge.h\""),
+			   "AllMocks should include b::Hoge resolved header");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"filename_collision\""),
+			   "manifest should record collision entries");
+		Expect(Contains(manifest.content, "\"policy\": \"qualified-filename\""),
+			   "manifest should record collision policy");
+		Expect(Contains(manifest.content, "\"default_mock_header\": \"MockHoge.h\""),
+			   "manifest should record default mock header");
+		Expect(Contains(manifest.content, "\"resolved_mock_header\": \"Mock_a_Hoge.h\""),
+			   "manifest should record resolved a::Hoge mock header");
+		Expect(Contains(manifest.content, "\"resolved_fake_source\": \"Fake_b_Hoge.cpp\""),
+			   "manifest should record resolved b::Hoge fake source");
+	}
+
+	void KeepsShortFilenamesWithoutCollision()
+	{
+		const std::vector classes = {
+			NamespacedHogeModel("app", "include/app/Hoge.h"),
+		};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
+
+		const auto& mock = FindFile(files, "MockHoge.h");
+		const auto& fake = FindFile(files, "FakeHoge.cpp");
+		Expect(mock.kind == mockfakegen::GeneratedFileKind::MockHeader,
+			   "non-colliding mock should keep short filename");
+		Expect(fake.kind == mockfakegen::GeneratedFileKind::FakeSource,
+			   "non-colliding fake should keep short filename");
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(!Contains(manifest.content, "\"filename_collision\""),
+			   "manifest should omit collision section when filenames are unique");
+	}
+
 	void GeneratesGenerationReport()
 	{
 		const std::vector classes = {ReportBetaModel(), ReportAlphaModel()};
@@ -335,6 +428,8 @@ int main()
 	GeneratesMinimalHogeFiles();
 	GeneratedOutputDoesNotContainKetTokens();
 	GeneratesManifestJson();
+	ResolvesQualifiedFilenameCollisions();
+	KeepsShortFilenamesWithoutCollision();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();
 	return 0;

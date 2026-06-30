@@ -32,6 +32,8 @@ namespace mockfakegen
 		std::string name;
 		std::vector<std::string> namespaces;
 		std::string header_include;
+		std::string mock_header_name;
+		std::string fake_source_name;
 		std::vector<SimpleMethodModel> methods;
 	};
 
