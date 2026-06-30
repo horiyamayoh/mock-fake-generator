@@ -1,0 +1,32 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include "model/GeneratedFile.h"
+
+namespace mockfakegen
+{
+	struct SimpleParameterModel
+	{
+		std::string type;
+		std::string name;
+	};
+
+	struct SimpleMethodModel
+	{
+		std::string return_type;
+		std::string name;
+		std::vector<SimpleParameterModel> parameters;
+	};
+
+	struct SimpleClassModel
+	{
+		std::string name;
+		std::string header_include;
+		std::vector<SimpleMethodModel> methods;
+	};
+
+	[[nodiscard]] std::vector<GeneratedFile>
+	GenerateMinimalMockFake(const SimpleClassModel& class_model);
+} // namespace mockfakegen

@@ -48,8 +48,10 @@ mockfakegen_apply_sanitizers(mockfakegen_ket)
 add_library(
 	mockfakegen_core
 		src/Config.cpp
+		src/generator/CodeGenerator.cpp
 		src/HeaderScanner.cpp
 		src/model/GeneratedFile.cpp
+		src/output/OutputWriter.cpp
 		src/runtime_template/RuntimeTemplate.cpp
 		src/support/CliSupport.cpp
 )
@@ -134,6 +136,32 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_generated_file_test)
 
 	add_test(NAME mockfakegen_generated_file_test COMMAND mockfakegen_generated_file_test)
+
+	add_executable(mockfakegen_code_generator_test tests/generator/code_generator_test.cpp)
+	target_link_libraries(mockfakegen_code_generator_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_code_generator_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_code_generator_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_code_generator_test)
+	mockfakegen_apply_sanitizers(mockfakegen_code_generator_test)
+
+	add_test(NAME mockfakegen_code_generator_test COMMAND mockfakegen_code_generator_test)
+
+	add_executable(mockfakegen_output_writer_test tests/output/output_writer_test.cpp)
+	target_link_libraries(mockfakegen_output_writer_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_output_writer_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_output_writer_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_output_writer_test)
+	mockfakegen_apply_sanitizers(mockfakegen_output_writer_test)
+
+	add_test(NAME mockfakegen_output_writer_test COMMAND mockfakegen_output_writer_test)
 
 	add_executable(mockfakegen_runtime_template_test tests/runtime/runtime_template_test.cpp)
 	target_link_libraries(mockfakegen_runtime_template_test PRIVATE mockfakegen_core)
