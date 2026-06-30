@@ -123,6 +123,7 @@ mockfakegen_apply_sanitizers(mockfakegen_ket)
 add_library(
 	mockfakegen_core
 		src/Config.cpp
+		src/clang/ClassExtractor.cpp
 		src/clang/SyntheticTuParser.cpp
 		src/generator/CodeGenerator.cpp
 		src/HeaderScanner.cpp
@@ -235,6 +236,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_synthetic_tu_parser_test)
 
 	add_test(NAME mockfakegen_synthetic_tu_parser_test COMMAND mockfakegen_synthetic_tu_parser_test)
+
+	add_executable(mockfakegen_class_extractor_test tests/clang/class_extractor_test.cpp)
+	target_link_libraries(mockfakegen_class_extractor_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_class_extractor_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_class_extractor_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_class_extractor_test)
+	mockfakegen_apply_sanitizers(mockfakegen_class_extractor_test)
+
+	add_test(NAME mockfakegen_class_extractor_test COMMAND mockfakegen_class_extractor_test)
 
 	add_executable(mockfakegen_header_scanner_test tests/scanner/header_scanner_test.cpp)
 	target_link_libraries(mockfakegen_header_scanner_test PRIVATE mockfakegen_core)
