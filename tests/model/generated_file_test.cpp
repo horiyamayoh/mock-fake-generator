@@ -24,6 +24,7 @@ namespace
 														 mockfakegen::GeneratedSourceClass{
 															 .qualified_name = "app::Hoge",
 															 .source_header = "include/app/Hoge.h",
+															 .generated_method_count = 3U,
 														 });
 
 		Expect(file.relative_path == "MockHoge.h", "relative path should be lexically normalized");
@@ -34,6 +35,8 @@ namespace
 			   "source class name should be stored");
 		Expect(file.source_class->source_header == "include/app/Hoge.h",
 			   "source header metadata should be stored");
+		Expect(file.source_class->generated_method_count == 3U,
+			   "generated method count metadata should be stored");
 	}
 
 	void ConvertsKindsToStableText()

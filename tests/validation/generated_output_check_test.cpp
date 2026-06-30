@@ -125,13 +125,17 @@ namespace
 		Expect(result.diagnostics.size() == 1U, "empty directory should produce one diagnostic");
 	}
 
-	void HogeGeneratedFixturePasses()
+	void GeneratedFixturesPass()
 	{
-		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens(
-			{std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) / "tests/fixtures/hoge/generated"});
+		const auto source_dir = std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR);
+		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens({
+			source_dir / "tests/fixtures/hoge/generated",
+			source_dir / "tests/fixtures/namespaced/generated",
+			source_dir / "tests/fixtures/overload/generated",
+		});
 
-		Expect(result.ok(), "Hoge generated fixture should pass ket-token check");
-		Expect(result.checked_file_count == 3U, "Hoge generated fixture should be included");
+		Expect(result.ok(), "generated fixtures should pass ket-token check");
+		Expect(result.checked_file_count == 9U, "generated fixtures should be included");
 	}
 } // namespace
 
@@ -142,6 +146,6 @@ int main()
 	QuotedKetIncludeFails();
 	AngleKetIncludeFails();
 	EmptyDirectoryFails();
-	HogeGeneratedFixturePasses();
+	GeneratedFixturesPass();
 	return 0;
 }

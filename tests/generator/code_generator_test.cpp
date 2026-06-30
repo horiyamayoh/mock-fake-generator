@@ -81,6 +81,8 @@ namespace
 		const auto& mock = FindFile(files, "MockHoge.h");
 		Expect(mock.kind == mockfakegen::GeneratedFileKind::MockHeader, "mock kind should be set");
 		Expect(mock.source_class->qualified_name == "Hoge", "mock source class should be set");
+		Expect(mock.source_class->generated_method_count == 3U,
+			   "mock source class should record generated method count");
 		Expect(Contains(mock.content, "#include <gmock/gmock.h>"), "mock should include gMock");
 		Expect(Contains(mock.content, "#include \"Hoge.h\""), "mock should include source header");
 		Expect(Contains(mock.content, "#include \"MockFakeRuntime.h\""),
@@ -95,6 +97,8 @@ namespace
 
 		const auto& fake = FindFile(files, "FakeHoge.cpp");
 		Expect(fake.kind == mockfakegen::GeneratedFileKind::FakeSource, "fake kind should be set");
+		Expect(fake.source_class->generated_method_count == 3U,
+			   "fake source class should record generated method count");
 		Expect(Contains(fake.content, "#include \"Hoge.h\""), "fake should include source header");
 		Expect(Contains(fake.content, "#include \"MockHoge.h\""),
 			   "fake should include mock header");

@@ -240,6 +240,7 @@ namespace mockfakegen
 			return GeneratedSourceClass{
 				.qualified_name = QualifiedClassName(class_model),
 				.source_header = class_model.header_include,
+				.generated_method_count = class_model.methods.size(),
 			};
 		}
 	} // namespace
