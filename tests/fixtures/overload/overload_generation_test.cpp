@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 
+#include "../GoldenDiff.h"
 #include "clang/ClassExtractor.h"
 #include "clang/SyntheticTuParser.h"
 #include "generator/CodeGenerator.h"
@@ -19,20 +20,6 @@ namespace
 			std::cerr << "EXPECTATION FAILED: " << message << '\n';
 			std::exit(1);
 		}
-	}
-
-	void ExpectEqual(std::string_view actual,
-					 std::string_view expected,
-					 const std::filesystem::path& path)
-	{
-		if (actual == expected)
-		{
-			return;
-		}
-
-		std::cerr << "generated content mismatch: " << path.generic_string() << '\n';
-		std::cerr << "expected:\n" << expected << "\nactual:\n" << actual << '\n';
-		std::exit(1);
 	}
 
 	[[nodiscard]] std::string ReadText(const std::filesystem::path& path)
@@ -102,7 +89,7 @@ namespace
 
 			const auto path = generated_dir / file.relative_path;
 			const auto expected = ReadText(path);
-			ExpectEqual(file.content, expected, path);
+			mockfakegen_fixture::ExpectGoldenTextEqual(file.content, expected, path);
 		}
 	}
 } // namespace

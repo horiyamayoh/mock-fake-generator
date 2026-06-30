@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../GoldenDiff.h"
 #include "generator/CodeGenerator.h"
 
 namespace
@@ -71,8 +72,9 @@ namespace
 		Expect(generated.size() == 3U, "Hoge fixture should have three generated files");
 		for (const auto& file : generated)
 		{
-			const auto expected = ReadText(fixture_dir / file.relative_path);
-			Expect(file.content == expected, "generated fixture should match CodeGenerator output");
+			const auto path = fixture_dir / file.relative_path;
+			const auto expected = ReadText(path);
+			mockfakegen_fixture::ExpectGoldenTextEqual(file.content, expected, path);
 		}
 	}
 } // namespace

@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../GoldenDiff.h"
 #include "clang/ClassExtractor.h"
 #include "clang/SyntheticTuParser.h"
 #include "generator/CodeGenerator.h"
@@ -89,9 +90,9 @@ namespace
 
 		for (const auto& file : generated)
 		{
-			const auto expected = ReadText(generated_dir / file.relative_path);
-			Expect(file.content == expected,
-				   "AST-driven generated output should match golden file");
+			const auto path = generated_dir / file.relative_path;
+			const auto expected = ReadText(path);
+			mockfakegen_fixture::ExpectGoldenTextEqual(file.content, expected, path);
 			Expect(!Contains(file.content, "ket::"),
 				   "generated output should not contain ket namespace");
 			Expect(!Contains(file.content, "#include \"ket_"),
