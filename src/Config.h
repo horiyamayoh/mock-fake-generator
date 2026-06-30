@@ -34,6 +34,7 @@ namespace mockfakegen
 	{
 		ThreadLocal,
 		GlobalMutex,
+		SharedOwner,
 	};
 
 	enum class FallbackPolicy

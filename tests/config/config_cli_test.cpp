@@ -286,21 +286,33 @@ namespace
 			   "registry mode should be global-mutex");
 	}
 
-	void ReportsDeferredOptions()
+	void ParsesSharedOwnerRegistryMode()
 	{
 		auto args = ValidArgs();
 		args.push_back("--registry-mode=shared-owner");
 
 		const auto result = mockfakegen::ParseConfig(args);
 
-		Expect(!result.ok(), "deferred registry mode should fail");
+		Expect(result.ok(), "shared-owner registry mode should parse");
+		Expect(result.config->registry_mode == mockfakegen::RegistryMode::SharedOwner,
+			   "registry mode should be shared-owner");
+	}
+
+	void ReportsDeferredOptions()
+	{
+		auto args = ValidArgs();
+		args.push_back("--fallback-policy=throw");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "deferred fallback policy should fail");
 		Expect(result.errors.size() == 1U, "deferred option should produce one error");
 		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::DeferredOption,
 			   "deferred option should use deferred option code");
-		Expect(result.errors[0].option == "--registry-mode",
+		Expect(result.errors[0].option == "--fallback-policy",
 			   "deferred option should identify option");
 		Expect(result.errors[0].message ==
-				   "--registry-mode is deferred: registry mode 'shared-owner' is deferred.",
+				   "--fallback-policy is deferred: fallback policy 'throw' is deferred.",
 			   "deferred option diagnostic should be deterministic");
 	}
 
@@ -398,6 +410,7 @@ int main()
 	ReportsStrictBestEffortConflict();
 	ReportsDuplicateOptions();
 	ParsesGlobalMutexRegistryMode();
+	ParsesSharedOwnerRegistryMode();
 	ReportsDeferredOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();

@@ -408,6 +408,34 @@ namespace
 			   "global-mutex project should not generate thread-local runtime");
 	}
 
+	void ProjectOptionsSelectSharedOwnerRuntimeAndApi()
+	{
+		const std::vector classes = {ReportBetaModel()};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(
+			classes,
+			mockfakegen::ProjectGenerationOptions{
+				.registry_mode = mockfakegen::RegistryMode::SharedOwner,
+			});
+
+		const auto& runtime = FindFile(files, "MockFakeRuntime.h");
+		Expect(Contains(runtime.content, "#include <memory>"),
+			   "shared-owner project should generate shared runtime");
+		Expect(Contains(runtime.content, "ScopedSharedMock"),
+			   "shared-owner runtime should expose shared scope API");
+
+		const auto& mock = FindFile(files, "MockBeta.h");
+		Expect(Contains(mock.content,
+						"using ScopedMockBeta = ::mockfake::ScopedSharedMock<MockBeta>;"),
+			   "shared-owner mock alias should use shared scope API");
+
+		const auto& fake = FindFile(files, "FakeBeta.cpp");
+		Expect(Contains(fake.content, "if (auto mock = ::mockfake::CurrentMock<MockBeta>())"),
+			   "shared-owner fake should retain a shared_ptr copy while forwarding");
+		Expect(!Contains(fake.content, "if (auto* mock = ::mockfake::CurrentMock<MockBeta>())"),
+			   "shared-owner fake should not expect a raw pointer registry");
+	}
+
 	void CMakeFragmentUsesOnlyLinkReadyFakeSources()
 	{
 		const auto files = mockfakegen::GenerateMockFakeProject(
@@ -468,6 +496,7 @@ int main()
 	ResolvesQualifiedFilenameCollisions();
 	KeepsShortFilenamesWithoutCollision();
 	ProjectOptionsSelectGlobalMutexRuntime();
+	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();

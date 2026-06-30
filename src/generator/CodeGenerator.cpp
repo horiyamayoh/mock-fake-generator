@@ -140,6 +140,16 @@ namespace mockfakegen
 			return "ScopedMock" + class_model.name;
 		}
 
+		[[nodiscard]] std::string ScopedMockType(const SimpleClassModel& class_model,
+												 std::string_view mock_class_name)
+		{
+			if (class_model.registry_mode == RegistryMode::SharedOwner)
+			{
+				return "::mockfake::ScopedSharedMock<" + std::string(mock_class_name) + ">";
+			}
+			return "::mockfake::ScopedMock<" + std::string(mock_class_name) + ">";
+		}
+
 		[[nodiscard]] std::string NamespaceName(const std::vector<std::string>& namespaces)
 		{
 			std::string text;
@@ -767,8 +777,8 @@ namespace mockfakegen
 			}
 
 			out << indent << "};\n\n"
-				<< indent << "using " << ScopedMockAliasName(class_model)
-				<< " = ::mockfake::ScopedMock<" << mock_class_name << ">;\n";
+				<< indent << "using " << ScopedMockAliasName(class_model) << " = "
+				<< ScopedMockType(class_model, mock_class_name) << ";\n";
 			CloseNamespace(out, class_model);
 
 			return out.str();
@@ -807,12 +817,15 @@ namespace mockfakegen
 				const auto signature = DiagnosticSignature(class_model, method);
 				const auto is_void_return = method.return_type == "void";
 
+				const auto mock_lookup_declarator =
+					class_model.registry_mode == RegistryMode::SharedOwner ? "auto" : "auto*";
+
 				out << indent << method.return_type << ' ' << class_model.name
 					<< "::" << method.name << '(' << parameter_declarations << ')'
 					<< MethodQualifiers(method) << "\n"
 					<< indent << "{\n"
-					<< body_indent << "if (auto* mock = ::mockfake::CurrentMock<" << mock_class_name
-					<< ">())\n"
+					<< body_indent << "if (" << mock_lookup_declarator
+					<< " mock = ::mockfake::CurrentMock<" << mock_class_name << ">())\n"
 					<< body_indent << "{\n";
 
 				if (is_void_return)
@@ -1167,7 +1180,8 @@ namespace mockfakegen
 		files.reserve((resolved_class_models.size() * 2U) + 4U);
 		for (const auto& class_model : resolved_class_models)
 		{
-			const auto simple_class = ToSimpleClassModel(class_model);
+			auto simple_class = ToSimpleClassModel(class_model);
+			simple_class.registry_mode = options.registry_mode;
 			files.push_back(GenerateMockHeader(simple_class));
 			files.push_back(GenerateFakeSource(simple_class));
 		}

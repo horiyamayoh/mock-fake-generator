@@ -38,6 +38,7 @@ namespace mockfakegen
 		std::vector<SimpleMethodModel> methods;
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
+		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 	};
 
 	struct ProjectGenerationOptions

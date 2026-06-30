@@ -446,7 +446,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--class-filter <regex>` | value | none | deferred | ClassExtractor | 使用時は `DeferredOption` |
 | `--access <policy>` | value | `public` | `public` implemented, `protected` / `private` deferred | ClassExtractor / PolicyEngine | unknown value invalid。deferred value は `DeferredOption` |
 | `--include-struct <bool>` | bool value | `false` | `false` implemented, `true` deferred | ClassExtractor | `true` は `DeferredOption` |
-| `--registry-mode <mode>` | value | `thread-local` | `thread-local` / `global-mutex` implemented, `shared-owner` deferred | runtime template | unknown value invalid。deferred value は `DeferredOption` |
+| `--registry-mode <mode>` | value | `thread-local` | `thread-local` / `global-mutex` / `shared-owner` implemented | runtime template | unknown value invalid |
 | `--fallback-policy <policy>` | value | `abort` | `abort` implemented, `default-return` / `throw` / `compile-error` deferred | PolicyEngine / runtime template | unknown value invalid。deferred value は `DeferredOption` |
 | `--mock-namespace-mode <mode>` | value | `same-as-product` | `same-as-product` only | CodeGenerator | 他値は invalid |
 | `--collision-policy <policy>` | value | `qualified-filename` | `qualified-filename` only | CodeGenerator | 他値は invalid |
@@ -1275,6 +1275,8 @@ R MissingMockReturn(std::string_view signature)
 - `std::shared_ptr<Mock>` を登録する。
 - fake 呼び出し時に `shared_ptr` を取得してから mock method を呼ぶため、呼び出し中の lifetime が保証される。
 - stack mock より記述は少し重いが、非同期テストで安全性が高い。
+- generated mock alias は `ScopedSharedMock<Mock>` を指し、generated fake は
+  `CurrentMock<Mock>()` の `shared_ptr` copy を保持してから mock method を呼ぶ。
 
 テスト例:
 

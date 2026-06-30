@@ -134,6 +134,7 @@ namespace
 			source_dir / "tests/fixtures/default_argument/generated",
 			source_dir / "tests/fixtures/generated_runtime",
 			source_dir / "tests/fixtures/generated_runtime_global_mutex",
+			source_dir / "tests/fixtures/generated_runtime_shared_owner",
 			source_dir / "tests/fixtures/hoge/generated",
 			source_dir / "tests/fixtures/namespaced/generated",
 			source_dir / "tests/fixtures/overload/generated",
@@ -144,7 +145,7 @@ namespace
 		});
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 48U, "generated fixtures should be included");
+		Expect(result.checked_file_count == 49U, "generated fixtures should be included");
 	}
 } // namespace
 

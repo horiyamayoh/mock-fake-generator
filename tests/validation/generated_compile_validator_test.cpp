@@ -5,8 +5,10 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include "generator/CodeGenerator.h"
 #include "validation/GeneratedCompileValidator.h"
 
 namespace
@@ -82,6 +84,58 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::ParameterModel Parameter(std::string type, std::string name)
+	{
+		mockfakegen::ParameterModel parameter;
+		parameter.type_spelling = std::move(type);
+		parameter.gmock_type_spelling = parameter.type_spelling;
+		parameter.generated_name = std::move(name);
+		return parameter;
+	}
+
+	[[nodiscard]] mockfakegen::MethodModel
+	Method(std::string return_type,
+		   std::string name,
+		   std::vector<mockfakegen::ParameterModel> parameters = {})
+	{
+		mockfakegen::MethodModel method;
+		method.return_type_spelling = std::move(return_type);
+		method.gmock_return_type_spelling = method.return_type_spelling;
+		method.name = std::move(name);
+		method.parameters = std::move(parameters);
+		method.access = mockfakegen::AccessKind::Public;
+		return method;
+	}
+
+	[[nodiscard]] mockfakegen::ClassModel HogeClassModel()
+	{
+		mockfakegen::HeaderModel header;
+		header.include_spelling = "Hoge.h";
+
+		mockfakegen::ClassModel class_model;
+		class_model.name = "Hoge";
+		class_model.qualified_name = "Hoge";
+		class_model.mock_name = "MockHoge";
+		class_model.source_header = header;
+		class_model.mock_methods = {
+			Method("bool", "Initialize", {Parameter("int", "argc"), Parameter("char**", "argv")}),
+			Method("void", "Finalize"),
+			Method("bool", "DoSomething"),
+		};
+		class_model.fake_methods = class_model.mock_methods;
+		return class_model;
+	}
+
+	[[nodiscard]] std::vector<mockfakegen::GeneratedFile> SharedOwnerGeneratedFiles()
+	{
+		const std::vector classes = {HogeClassModel()};
+		return mockfakegen::GenerateMockFakeProject(
+			classes,
+			mockfakegen::ProjectGenerationOptions{
+				.registry_mode = mockfakegen::RegistryMode::SharedOwner,
+			});
+	}
+
 	[[nodiscard]] mockfakegen::GeneratedCompileValidationOptions CompileOptions()
 	{
 		const auto source_dir = std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR);
@@ -112,6 +166,16 @@ namespace
 			Expect(!Contains(command.command, "ket/modules"),
 				   "compile validation should not pass ket module include paths");
 		}
+	}
+
+	void CompileValidationSucceedsForSharedOwnerGeneratedOutput()
+	{
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(
+			CompileOptions(), SharedOwnerGeneratedFiles());
+
+		Expect(result.ok(), "generated shared-owner output should compile");
+		Expect(!result.skipped, "shared-owner compile validation should not be skipped");
+		Expect(result.commands.size() == 2U, "mock header smoke and fake source should compile");
 	}
 
 	void NoneValidationSkipsCompiler()
@@ -174,6 +238,7 @@ namespace
 int main()
 {
 	CompileValidationSucceedsForGeneratedFixture();
+	CompileValidationSucceedsForSharedOwnerGeneratedOutput();
 	NoneValidationSkipsCompiler();
 	CompileValidationReportsCxxFailure();
 	MissingGMockIncludePathIsClear();
