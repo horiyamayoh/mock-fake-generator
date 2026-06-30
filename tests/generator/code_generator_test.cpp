@@ -239,6 +239,56 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::ClassModel InterfaceModel()
+	{
+		mockfakegen::ParameterModel key;
+		key.type_spelling = "const std::string&";
+		key.gmock_type_spelling = "const std::string&";
+		key.generated_name = "key";
+
+		mockfakegen::ParameterModel value;
+		value.type_spelling = "std::string";
+		value.gmock_type_spelling = "std::string";
+		value.generated_name = "value";
+
+		mockfakegen::MethodModel save;
+		save.name = "Save";
+		save.qualified_owner_name = "sample::IStorage";
+		save.return_type_spelling = "bool";
+		save.gmock_return_type_spelling = "bool";
+		save.parameters = {key, value};
+		save.signature_for_report = "sample::IStorage::Save(const std::string&, std::string)";
+		save.is_virtual = true;
+		save.is_pure_virtual = true;
+		save.access = mockfakegen::AccessKind::Public;
+
+		mockfakegen::MethodModel load_count;
+		load_count.name = "LoadCount";
+		load_count.qualified_owner_name = "sample::IStorage";
+		load_count.return_type_spelling = "int";
+		load_count.gmock_return_type_spelling = "int";
+		load_count.signature_for_report = "sample::IStorage::LoadCount()";
+		load_count.is_const = true;
+		load_count.is_noexcept = true;
+		load_count.is_virtual = true;
+		load_count.is_pure_virtual = true;
+		load_count.access = mockfakegen::AccessKind::Public;
+
+		return mockfakegen::ClassModel{
+			.name = "IStorage",
+			.qualified_name = "sample::IStorage",
+			.namespaces = {"sample"},
+			.mock_name = "MockIStorage",
+			.mock_header_name = "MockIStorage.h",
+			.fake_source_name = "FakeIStorage.cpp",
+			.source_header = HeaderNamed("IStorage.h"),
+			.mock_methods = {save, load_count},
+			.fake_methods = {},
+			.unsupported_items = {},
+			.interface_mock = true,
+		};
+	}
+
 	[[nodiscard]] mockfakegen::ClassModel EscapingReportModel()
 	{
 		auto unsupported = UnsupportedFunctionTemplate();
@@ -274,6 +324,19 @@ namespace
 
 		std::cerr << "missing generated file: " << path << '\n';
 		std::exit(1);
+	}
+
+	[[nodiscard]] bool HasFile(const std::vector<mockfakegen::GeneratedFile>& files,
+							   std::string_view path)
+	{
+		for (const auto& file : files)
+		{
+			if (file.relative_path.generic_string() == path)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	void GeneratesMinimalHogeFiles()
@@ -550,6 +613,50 @@ namespace
 			   "static data definitions should be emitted before methods");
 	}
 
+	void GeneratesInterfaceMockProject()
+	{
+		const std::vector classes = {InterfaceModel()};
+
+		const auto files =
+			mockfakegen::GenerateMockFakeProject(classes,
+												 mockfakegen::ProjectGenerationOptions{
+													 .interface_mock = true,
+												 });
+
+		Expect(HasFile(files, "MockIStorage.h"), "interface mock header should be generated");
+		Expect(HasFile(files, "AllMocks.h"), "interface project should still emit AllMocks");
+		Expect(HasFile(files, "manifest.json"), "interface project should still emit manifest");
+		Expect(HasFile(files, "generation_report.md"),
+			   "interface project should still emit report");
+		Expect(!HasFile(files, "FakeIStorage.cpp"),
+			   "interface mode should not generate link replacement fake source");
+		Expect(!HasFile(files, "MockFakeRuntime.h"),
+			   "interface mode should not generate runtime header");
+		Expect(!HasFile(files, "CMakeLists.fragment.cmake"),
+			   "interface mode should not generate fake-source CMake fragment");
+
+		const auto& mock = FindFile(files, "MockIStorage.h");
+		Expect(Contains(mock.content, "class MockIStorage : public IStorage"),
+			   "interface mock should inherit from product interface");
+		Expect(Contains(mock.content, "~MockIStorage() override = default;"),
+			   "interface mock destructor should override base destructor");
+		Expect(Contains(mock.content,
+						"MOCK_METHOD(bool, Save, (const std::string&, std::string), "
+						"(override));"),
+			   "pure virtual method should be emitted with override");
+		Expect(
+			Contains(mock.content, "MOCK_METHOD(int, LoadCount, (), (const, noexcept, override));"),
+			"interface method qualifiers should include override");
+		Expect(!Contains(mock.content, "MockFakeRuntime.h"),
+			   "interface mock should not include runtime header");
+		Expect(!Contains(mock.content, "ScopedMock"),
+			   "interface mock should not expose link replacement scoped alias");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"fake_source\": \"\""),
+			   "interface manifest should not claim a fake source");
+	}
+
 	void CMakeFragmentUsesOnlyLinkReadyFakeSources()
 	{
 		const auto files = mockfakegen::GenerateMockFakeProject(
@@ -613,6 +720,7 @@ int main()
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
 	GeneratesSpecialMemberFakes();
 	GeneratesStaticDataDefinitions();
+	GeneratesInterfaceMockProject();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();

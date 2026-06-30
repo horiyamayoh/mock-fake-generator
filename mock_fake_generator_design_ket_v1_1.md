@@ -452,7 +452,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--collision-policy <policy>` | value | `qualified-filename` | `qualified-filename` only | CodeGenerator | 他値は invalid |
 | `--fake-special-members <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な constructor/destructor fake のみ生成し、unsafe case は unsupported |
 | `--fake-static-data <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な static data member definition のみ生成し、unsafe case は unsupported |
-| `--interface-mock <bool>` | bool value | `false` | `false` implemented, `true` deferred | CodeGenerator | `true` は `DeferredOption` |
+| `--interface-mock <bool>` | bool value | `false` | implemented | CodeGenerator | pure interface では継承型 Mock header のみ生成し、unsafe case は unsupported |
 | `--include-dir <path>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
 | `--define <macro>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
 | `--extra-arg <arg>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |

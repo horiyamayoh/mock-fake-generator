@@ -277,6 +277,10 @@ namespace mockfakegen
 
 		[[nodiscard]] std::string FakeSourceName(const ClassModel& class_model)
 		{
+			if (class_model.interface_mock)
+			{
+				return {};
+			}
 			if (!class_model.fake_source_name.empty())
 			{
 				return class_model.fake_source_name;
@@ -398,7 +402,10 @@ namespace mockfakegen
 			for (const auto& class_model : class_models)
 			{
 				CountFileName(mock_header_counts, MockHeaderName(class_model));
-				CountFileName(fake_source_counts, FakeSourceName(class_model));
+				if (!class_model.interface_mock)
+				{
+					CountFileName(fake_source_counts, FakeSourceName(class_model));
+				}
 			}
 
 			std::vector<ClassModel> resolved;
@@ -408,7 +415,7 @@ namespace mockfakegen
 				auto resolved_class = class_model;
 				const auto mock_collision =
 					FileNameCount(mock_header_counts, MockHeaderName(class_model)) > 1U;
-				const auto fake_collision =
+				const auto fake_collision = !class_model.interface_mock &&
 					FileNameCount(fake_source_counts, FakeSourceName(class_model)) > 1U;
 				if (mock_collision || fake_collision)
 				{
@@ -449,7 +456,9 @@ namespace mockfakegen
 			const auto mock_header = MockHeaderName(class_model);
 			const auto fake_source = FakeSourceName(class_model);
 			const auto default_mock_header = DefaultMockHeaderName(class_model.name);
-			const auto default_fake_source = DefaultFakeSourceName(class_model.name);
+			const auto default_fake_source = class_model.interface_mock
+				? std::string{}
+				: DefaultFakeSourceName(class_model.name);
 			return ClassReportEntry{
 				.qualified_name = QualifiedClassName(class_model),
 				.mock_header = mock_header,
@@ -692,6 +701,10 @@ namespace mockfakegen
 			{
 				specs.push_back("noexcept");
 			}
+			if (method.is_override)
+			{
+				specs.push_back("override");
+			}
 
 			switch (method.ref_qualifier)
 			{
@@ -770,8 +783,11 @@ namespace mockfakegen
 
 			std::vector<std::string> local_includes = {
 				class_model.header_include,
-				"MockFakeRuntime.h",
 			};
+			if (!class_model.interface_mock)
+			{
+				local_includes.push_back("MockFakeRuntime.h");
+			}
 			std::sort(local_includes.begin(), local_includes.end());
 			for (const auto& include : local_includes)
 			{
@@ -783,11 +799,21 @@ namespace mockfakegen
 
 			const auto indent = LocalIndent(class_model, 0U);
 			const auto member_indent = LocalIndent(class_model, 1U);
-			out << indent << "class " << mock_class_name << "\n"
+			out << indent << "class " << mock_class_name;
+			if (class_model.interface_mock)
+			{
+				out << " : public " << class_model.name;
+			}
+			out << "\n"
 				<< indent << "{\n"
 				<< indent << "  public:\n"
 				<< member_indent << mock_class_name << "() = default;\n"
-				<< member_indent << "~" << mock_class_name << "() = default;\n\n";
+				<< member_indent << "~" << mock_class_name << "()";
+			if (class_model.interface_mock)
+			{
+				out << " override";
+			}
+			out << " = default;\n\n";
 
 			for (const auto& method : class_model.methods)
 			{
@@ -796,9 +822,13 @@ namespace mockfakegen
 					<< GMockMethodSpecs(method) << "));\n";
 			}
 
-			out << indent << "};\n\n"
-				<< indent << "using " << ScopedMockAliasName(class_model) << " = "
-				<< ScopedMockType(class_model, mock_class_name) << ";\n";
+			out << indent << "};\n";
+			if (!class_model.interface_mock)
+			{
+				out << "\n"
+					<< indent << "using " << ScopedMockAliasName(class_model) << " = "
+					<< ScopedMockType(class_model, mock_class_name) << ";\n";
+			}
 			CloseNamespace(out, class_model);
 
 			return out.str();
@@ -956,6 +986,7 @@ namespace mockfakegen
 				.static_data_members = {},
 				.link_ready = IsLinkReady(class_model),
 				.link_readiness_reasons = LinkReadinessReasons(class_model),
+				.interface_mock = class_model.interface_mock,
 			};
 			simple_class.methods.reserve(class_model.mock_methods.size());
 
@@ -968,6 +999,7 @@ namespace mockfakegen
 					.parameters = {},
 					.is_const = method.is_const,
 					.is_noexcept = method.is_noexcept,
+					.is_override = class_model.interface_mock && method.is_virtual,
 					.ref_qualifier = method.ref_qualifier,
 				};
 				simple_method.parameters.reserve(method.parameters.size());
@@ -1278,23 +1310,45 @@ namespace mockfakegen
 	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
 													   ProjectGenerationOptions options)
 	{
-		const auto resolved_class_models = ResolveQualifiedFilenameCollisions(class_models);
+		std::vector<ClassModel> mode_class_models(class_models.begin(), class_models.end());
+		const auto interface_mode = options.interface_mock ||
+			std::any_of(mode_class_models.begin(),
+						mode_class_models.end(),
+						[](const auto& class_model)
+						{
+							return class_model.interface_mock;
+						});
+		if (interface_mode)
+		{
+			for (auto& class_model : mode_class_models)
+			{
+				class_model.interface_mock = true;
+			}
+		}
+
+		const auto resolved_class_models = ResolveQualifiedFilenameCollisions(mode_class_models);
 		std::vector<GeneratedFile> files;
-		files.reserve((resolved_class_models.size() * 2U) + 4U);
+		files.reserve((resolved_class_models.size() * (interface_mode ? 1U : 2U)) + 4U);
 		for (const auto& class_model : resolved_class_models)
 		{
 			auto simple_class = ToSimpleClassModel(class_model);
 			simple_class.registry_mode = options.registry_mode;
 			files.push_back(GenerateMockHeader(simple_class));
-			files.push_back(GenerateFakeSource(simple_class));
+			if (!interface_mode)
+			{
+				files.push_back(GenerateFakeSource(simple_class));
+			}
 		}
 
-		files.push_back(MakeRuntimeHeader(options.registry_mode));
+		if (!interface_mode)
+		{
+			files.push_back(MakeRuntimeHeader(options.registry_mode));
+		}
 		if (options.emit_all_mocks)
 		{
 			files.push_back(GenerateAllMocksHeader(files));
 		}
-		if (options.emit_cmake_fragment)
+		if (options.emit_cmake_fragment && !interface_mode)
 		{
 			files.push_back(GenerateCMakeFragment(files));
 		}

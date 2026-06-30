@@ -53,6 +53,7 @@ namespace mockfakegen
 		std::vector<HeaderModel> headers;
 		bool fake_special_members = false;
 		bool fake_static_data = false;
+		bool interface_mock = false;
 	};
 
 	struct CompilationResolveResult

@@ -46,6 +46,7 @@ namespace mockfakegen
 		ConditionalNoexcept,
 		VolatileMethod,
 		StaticDataMember,
+		InterfaceConstruct,
 	};
 
 	struct SourceLocation
@@ -173,6 +174,7 @@ namespace mockfakegen
 		std::vector<DestructorModel> fake_destructors = {};
 		std::vector<StaticDataMemberModel> static_data_members = {};
 		std::vector<UnsupportedItem> unsupported_items;
+		bool interface_mock = false;
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
 	};

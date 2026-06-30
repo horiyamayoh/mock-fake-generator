@@ -330,8 +330,16 @@ namespace mockfakegen
 					.fake_destructors = {},
 					.static_data_members = {},
 					.unsupported_items = {},
+					.interface_mock = options_.interface_mock,
 				};
-				ExtractMethods(*declaration, class_model);
+				if (options_.interface_mock)
+				{
+					ExtractInterfaceMembers(*declaration, class_model);
+				}
+				else
+				{
+					ExtractMethods(*declaration, class_model);
+				}
 				result_.classes.push_back(std::move(class_model));
 				return true;
 			}
@@ -529,6 +537,174 @@ namespace mockfakegen
 					auto method_model = BuildMethodModel(*method, class_model);
 					class_model.mock_methods.push_back(method_model);
 					class_model.fake_methods.push_back(std::move(method_model));
+				}
+			}
+
+			void ExtractInterfaceMembers(const clang::CXXRecordDecl& declaration,
+										 ClassModel& class_model)
+			{
+				for (const auto* child : declaration.decls())
+				{
+					const auto* function_template =
+						llvm::dyn_cast<clang::FunctionTemplateDecl>(child);
+					if (function_template != nullptr)
+					{
+						const auto* templated = function_template->getTemplatedDecl();
+						if (templated != nullptr)
+						{
+							RecordUnsupportedMethod(class_model,
+													*templated,
+													UnsupportedReasonCode::FunctionTemplate,
+													"function_template",
+													"function template member is not supported");
+						}
+						continue;
+					}
+
+					const auto* variable = llvm::dyn_cast<clang::VarDecl>(child);
+					if (variable != nullptr && variable->isStaticDataMember() &&
+						!variable->isImplicit())
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*variable,
+							UnsupportedReasonCode::InterfaceConstruct,
+							"interface_construct",
+							"static data member is not part of a pure interface");
+						continue;
+					}
+
+					const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(child);
+					if (method == nullptr || method->isImplicit())
+					{
+						continue;
+					}
+
+					if (llvm::isa<clang::CXXConstructorDecl>(method))
+					{
+						const auto* constructor = llvm::cast<clang::CXXConstructorDecl>(method);
+						RecordInterfaceConstructor(*constructor, class_model);
+						continue;
+					}
+					if (llvm::isa<clang::CXXDestructorDecl>(method))
+					{
+						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
+						RecordInterfaceDestructor(*destructor, class_model);
+						continue;
+					}
+					if (llvm::isa<clang::CXXConversionDecl>(method))
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConversionOperator,
+												"conversion_operator",
+												"conversion operator is not supported");
+						continue;
+					}
+					if (method->isOverloadedOperator())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::OverloadedOperator,
+												"overloaded_operator",
+												"overloaded operator is not supported");
+						continue;
+					}
+					if (method->getAccess() != clang::AS_public)
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::NonPublicMethod,
+												"non_public_method",
+												"only public interface methods are generated");
+						continue;
+					}
+					if (method->isStatic())
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::InterfaceConstruct,
+							"interface_construct",
+							"static member function is not part of a pure interface");
+						continue;
+					}
+					if (!method->isVirtual() || !method->isPureVirtual())
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::InterfaceConstruct,
+							"interface_construct",
+							"interface mock mode requires public pure virtual methods");
+						continue;
+					}
+					if (method->isDeleted())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::DeletedMethod,
+												"deleted_method",
+												"deleted method is not supported");
+						continue;
+					}
+					if (method->isDefaulted())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::DefaultedMethod,
+												"defaulted_method",
+												"defaulted method is not supported");
+						continue;
+					}
+					if (method->isConstexpr())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConstexprMethod,
+												"constexpr_method",
+												"constexpr method is not supported");
+						continue;
+					}
+					if (method->doesThisDeclarationHaveABody())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::InlineBody,
+												"inline_body",
+												"inline method body is not supported");
+						continue;
+					}
+					if (HasConditionalNoexcept(*method))
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConditionalNoexcept,
+												"conditional_noexcept",
+												"conditional noexcept is not supported");
+						continue;
+					}
+					if (method->isVolatile())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::VolatileMethod,
+												"volatile_method",
+												"volatile method is not supported");
+						continue;
+					}
+
+					class_model.mock_methods.push_back(BuildMethodModel(*method, class_model));
+				}
+
+				if (class_model.mock_methods.empty())
+				{
+					RecordUnsupportedMethod(
+						class_model,
+						declaration,
+						UnsupportedReasonCode::InterfaceConstruct,
+						"interface_construct",
+						"interface mock mode requires at least one public pure virtual method");
 				}
 			}
 
@@ -814,6 +990,67 @@ namespace mockfakegen
 					.signature_for_report = signature,
 					.source_range = ToSourceRange(source_manager_, variable.getSourceRange()),
 				});
+			}
+
+			void RecordInterfaceConstructor(const clang::CXXConstructorDecl& constructor,
+											ClassModel& class_model)
+			{
+				if (constructor.getAccess() == clang::AS_public &&
+					constructor.isDefaultConstructor() &&
+					(constructor.isDefaulted() || constructor.doesThisDeclarationHaveABody()))
+				{
+					return;
+				}
+
+				RecordUnsupportedMethod(
+					class_model,
+					constructor,
+					UnsupportedReasonCode::InterfaceConstruct,
+					"interface_construct",
+					"interface mock mode only supports public defaulted constructors");
+			}
+
+			void RecordInterfaceDestructor(const clang::CXXDestructorDecl& destructor,
+										   ClassModel& class_model)
+			{
+				if (destructor.getAccess() != clang::AS_public)
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::InterfaceConstruct,
+											"interface_construct",
+											"interface destructor must be public");
+					return;
+				}
+				if (!destructor.isVirtual())
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::InterfaceConstruct,
+											"interface_construct",
+											"interface destructor must be virtual");
+					return;
+				}
+				if (destructor.isPureVirtual())
+				{
+					RecordUnsupportedMethod(
+						class_model,
+						destructor,
+						UnsupportedReasonCode::InterfaceConstruct,
+						"interface_construct",
+						"pure virtual destructor requires a hand-authored definition");
+					return;
+				}
+				if (destructor.isDefaulted() || destructor.doesThisDeclarationHaveABody())
+				{
+					return;
+				}
+
+				RecordUnsupportedMethod(class_model,
+										destructor,
+										UnsupportedReasonCode::InterfaceConstruct,
+										"interface_construct",
+										"out-of-line interface destructor is not supported");
 			}
 
 			void RecordUnsupportedMethod(ClassModel& class_model,

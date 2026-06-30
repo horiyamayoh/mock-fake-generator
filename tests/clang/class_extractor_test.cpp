@@ -465,6 +465,71 @@ namespace
 				   std::string::npos,
 			   "array static data diagnostic should be specific");
 	}
+
+	void ExtractsInterfaceMockWhenEnabled()
+	{
+		TempTree tree;
+		tree.Write("include/IStorage.h",
+				   "#pragma once\n"
+				   "class IStorage {\n"
+				   "public:\n"
+				   "  virtual ~IStorage() = default;\n"
+				   "  virtual bool Save(const char* key, int value) const noexcept = 0;\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/IStorage.h",
+							mockfakegen::ClassExtractionOptions{.interface_mock = true});
+
+		Expect(result.classes.size() == 1U, "interface class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.interface_mock, "interface model should be marked");
+		Expect(class_model.mock_methods.size() == 1U,
+			   "pure virtual method should be extracted for interface mock");
+		Expect(class_model.fake_methods.empty(), "interface mode should not create fake methods");
+		Expect(class_model.mock_methods[0].name == "Save",
+			   "interface method name should be extracted");
+		Expect(class_model.mock_methods[0].is_virtual &&
+				   class_model.mock_methods[0].is_pure_virtual,
+			   "interface method should keep virtual flags");
+		Expect(class_model.mock_methods[0].is_const, "interface const qualifier should be kept");
+		Expect(class_model.mock_methods[0].is_noexcept,
+			   "interface noexcept qualifier should be kept");
+		Expect(class_model.unsupported_items.empty(),
+			   "pure interface should not be reported unsupported");
+	}
+
+	void ReportsUnsupportedInterfaceConstructs()
+	{
+		TempTree tree;
+		tree.Write("include/AlmostInterface.h",
+				   "#pragma once\n"
+				   "class AlmostInterface {\n"
+				   "public:\n"
+				   "  virtual ~AlmostInterface() = default;\n"
+				   "  bool Concrete();\n"
+				   "  static int Count();\n"
+				   "  virtual int Mixed();\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/AlmostInterface.h",
+							mockfakegen::ClassExtractionOptions{.interface_mock = true});
+
+		Expect(result.classes.size() == 1U, "almost-interface class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.interface_mock, "almost-interface model should be marked");
+		Expect(class_model.mock_methods.empty(),
+			   "non-pure interface constructs should not be generated");
+		Expect(UnsupportedKindCount(class_model, "interface_construct") == 4U,
+			   "all unsupported interface constructs should be reported");
+		Expect(!result.diagnostics.empty(),
+			   "unsupported interface constructs should emit diagnostics");
+		Expect(class_model.unsupported_items[0].reason.find("pure virtual") != std::string::npos,
+			   "non-pure interface diagnostic should explain pure virtual requirement");
+	}
 } // namespace
 
 int main()
@@ -481,5 +546,7 @@ int main()
 	ExtractsStaticDataWhenEnabled();
 	ReportsStaticDataWhenDisabled();
 	ReportsUnsafeStaticDataWhenEnabled();
+	ExtractsInterfaceMockWhenEnabled();
+	ReportsUnsupportedInterfaceConstructs();
 	return 0;
 }

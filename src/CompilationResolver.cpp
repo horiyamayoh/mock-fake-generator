@@ -289,6 +289,7 @@ namespace mockfakegen
 		[[nodiscard]] std::string ClassFingerprint(const ClassModel& class_model)
 		{
 			std::string value = class_model.qualified_name;
+			value += class_model.interface_mock ? "\nmode:interface" : "\nmode:link";
 			for (const auto& method : class_model.mock_methods)
 			{
 				value += "\nmethod:";
@@ -504,6 +505,7 @@ namespace mockfakegen
 					ClassExtractionOptions{
 						.fake_special_members = options.fake_special_members,
 						.fake_static_data = options.fake_static_data,
+						.interface_mock = options.interface_mock,
 					});
 				if (!HasExtractedContent(extraction))
 				{
@@ -571,6 +573,7 @@ namespace mockfakegen
 				ClassExtractionOptions{
 					.fake_special_members = options.fake_special_members,
 					.fake_static_data = options.fake_static_data,
+					.interface_mock = options.interface_mock,
 				});
 			MergeExtraction(result, observations, synthetic_header, std::move(attempt), extraction);
 		}

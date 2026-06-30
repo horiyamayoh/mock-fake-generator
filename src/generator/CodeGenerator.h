@@ -25,6 +25,7 @@ namespace mockfakegen
 		std::vector<SimpleParameterModel> parameters;
 		bool is_const = false;
 		bool is_noexcept = false;
+		bool is_override = false;
 		RefQualifierKind ref_qualifier = RefQualifierKind::None;
 	};
 
@@ -60,6 +61,7 @@ namespace mockfakegen
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
+		bool interface_mock = false;
 	};
 
 	struct ProjectGenerationOptions
@@ -69,6 +71,7 @@ namespace mockfakegen
 		bool emit_cmake_fragment = true;
 		bool emit_manifest = true;
 		bool emit_report = true;
+		bool interface_mock = false;
 	};
 
 	[[nodiscard]] std::vector<GeneratedFile>

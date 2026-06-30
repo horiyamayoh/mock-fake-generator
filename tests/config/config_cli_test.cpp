@@ -320,6 +320,17 @@ namespace
 		Expect(result.config->fake_static_data, "fake-static-data should parse true");
 	}
 
+	void ParsesInterfaceMockTrue()
+	{
+		auto args = ValidArgs();
+		args.push_back("--interface-mock=true");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "interface-mock true should parse");
+		Expect(result.config->interface_mock, "interface-mock should parse true");
+	}
+
 	void ReportsDeferredOptions()
 	{
 		auto args = ValidArgs();
@@ -435,6 +446,7 @@ int main()
 	ParsesSharedOwnerRegistryMode();
 	ParsesFakeSpecialMembersTrue();
 	ParsesFakeStaticDataTrue();
+	ParsesInterfaceMockTrue();
 	ReportsDeferredOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();

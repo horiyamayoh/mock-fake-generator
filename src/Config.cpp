@@ -598,9 +598,7 @@ namespace mockfakegen
 				}
 				if (*parsed)
 				{
-					AddDeferredError(result.errors,
-									 kInterfaceMockOption,
-									 "interface mock generation is deferred.");
+					config.interface_mock = true;
 				}
 			}
 			else if (option == kJobsOption)
@@ -795,6 +793,7 @@ namespace mockfakegen
 			"  --collision-policy <policy> qualified-filename.\n"
 			"  --fake-special-members <bool> Generate safe constructor/destructor fakes.\n"
 			"  --fake-static-data <bool> Generate safe static data member definitions.\n"
+			"  --interface-mock <bool> Generate inheritance-based interface mocks.\n"
 			"  --dry-run               Resolve config without writing generated files.\n"
 			"  --overwrite             Allow replacing existing generated files.\n"
 			"  --strict                Fail when unsupported input is encountered.\n"
