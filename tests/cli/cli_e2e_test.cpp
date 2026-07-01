@@ -856,10 +856,12 @@ namespace
 		Expect(blocked.exit_code == 1, "existing changed file should fail without overwrite");
 		Expect(ReadText(output_dir / "MockHoge.h") == "// user edit\n",
 			   "blocked publish should preserve existing file");
+		Expect(!std::filesystem::exists(output_dir / "FakeHoge.cpp"),
+			   "blocked class fake should not be published");
 		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
 			   "write failure should emit diagnostic report");
-		Expect(!std::filesystem::exists(output_dir / "manifest.json"),
-			   "write failure should not emit manifest");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "write failure should still emit diagnostic manifest when it is publishable");
 		const auto blocked_report = ReadText(output_dir / "generation_report.md");
 		Expect(Contains(blocked_report, "writer"), "writer diagnostic should appear in report");
 		Expect(Contains(blocked_report, "output_conflict"),
@@ -873,6 +875,62 @@ namespace
 		Expect(overwritten.exit_code == 0, "overwrite should replace existing generated files");
 		Expect(Contains(ReadText(output_dir / "MockHoge.h"), "MOCK_METHOD(bool, Initialize"),
 			   "overwrite should publish generated mock header");
+	}
+
+	void OutputConflictPublishesUnrelatedClasses(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "partial-conflict-product";
+		const auto include_dir = product_root / "include";
+		const auto build_dir = temp_root / "partial-conflict-build";
+		const auto output_dir = temp_root / "partial-conflict-generated";
+		std::filesystem::create_directories(build_dir);
+		WriteText(include_dir / "Good.h",
+				  "#pragma once\n"
+				  "class Good {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		WriteText(include_dir / "Other.h",
+				  "#pragma once\n"
+				  "class Other {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		WriteText(output_dir / "MockGood.h", "// user edit\n");
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "partial_conflict");
+		Expect(result.exit_code == 1, "partial output conflict should still return non-zero");
+		Expect(ReadText(output_dir / "MockGood.h") == "// user edit\n",
+			   "conflicting class mock should be preserved");
+		Expect(!std::filesystem::exists(output_dir / "FakeGood.cpp"),
+			   "same-class fake should not be published after mock conflict");
+		Expect(std::filesystem::exists(output_dir / "MockOther.h"),
+			   "unrelated class mock should be published");
+		Expect(std::filesystem::exists(output_dir / "FakeOther.cpp"),
+			   "unrelated class fake should be published");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(report, "output_conflict"),
+			   "partial conflict report should include writer diagnostic");
+		Expect(Contains(report, "MockGood.h"),
+			   "partial conflict report should name conflicting file");
 	}
 
 	void EmitOptionsControlOptionalArtifacts(const std::filesystem::path& temp_root,
@@ -1791,6 +1849,7 @@ int main()
 	QualifiedFilenameCollisionsAppearInCliArtifacts(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
+	OutputConflictPublishesUnrelatedClasses(temp_root);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
 	StrictModeFailsUnsupportedInput(temp_root);
 	TopLevelUnsupportedAppearsInManifest(temp_root);

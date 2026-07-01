@@ -547,6 +547,18 @@ namespace mockfakegen
 			}
 		}
 
+		[[nodiscard]] bool WroteGeneratedFileKind(const OutputWriteResult& result,
+												  GeneratedFileKind kind)
+		{
+			return std::any_of(result.files.begin(),
+							   result.files.end(),
+							   [kind](const auto& file)
+							   {
+								   return file.kind == kind &&
+									   file.status == OutputWriteStatus::Written;
+							   });
+		}
+
 		[[nodiscard]] Diagnostic ToParseDiagnostic(const CompilationResolverDiagnostic& diagnostic)
 		{
 			Diagnostic result;
@@ -868,7 +880,8 @@ namespace mockfakegen
 				OutputWriterOptions{
 					.output_dir = config.output_dir,
 					.dry_run = false,
-					.overwrite = config.overwrite,
+					.overwrite = config.overwrite ||
+						WroteGeneratedFileKind(write_result, GeneratedFileKind::Report),
 				},
 				std::span<const GeneratedFile>(&diagnostic_report, 1U));
 			std::vector<RunDiagnostic> report_writer_diagnostics;

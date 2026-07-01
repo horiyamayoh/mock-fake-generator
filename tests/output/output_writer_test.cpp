@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "output/OutputWriter.h"
@@ -117,6 +118,41 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::GeneratedSourceClass SourceClass(std::string name)
+	{
+		return mockfakegen::GeneratedSourceClass{
+			.qualified_name = std::move(name),
+			.source_header = "Product.h",
+			.generated_method_count = 1U,
+			.link_ready = true,
+		};
+	}
+
+	[[nodiscard]] mockfakegen::GeneratedFile ClassFile(std::filesystem::path relative_path,
+													   std::string content,
+													   mockfakegen::GeneratedFileKind kind,
+													   std::string source_class)
+	{
+		return mockfakegen::MakeGeneratedFile(std::move(relative_path),
+											  std::move(content),
+											  kind,
+											  SourceClass(std::move(source_class)));
+	}
+
+	[[nodiscard]] std::vector<mockfakegen::GeneratedFile> MixedClassFiles()
+	{
+		return {
+			ClassFile(
+				"MockGood.h", "good mock", mockfakegen::GeneratedFileKind::MockHeader, "Good"),
+			ClassFile(
+				"FakeGood.cpp", "good fake", mockfakegen::GeneratedFileKind::FakeSource, "Good"),
+			ClassFile(
+				"MockOther.h", "other mock", mockfakegen::GeneratedFileKind::MockHeader, "Other"),
+			ClassFile(
+				"FakeOther.cpp", "other fake", mockfakegen::GeneratedFileKind::FakeSource, "Other"),
+		};
+	}
+
 	void DryRunPlansWithoutCreatingOutputDirectory()
 	{
 		TempTree tree;
@@ -223,14 +259,14 @@ namespace
 		ExpectDiagnosticShape(result.diagnostics[0], "output_conflict");
 		Expect(result.files[0].status == mockfakegen::OutputWriteStatus::SkippedExisting,
 			   "existing file should be skipped");
-		Expect(result.files[1].status == mockfakegen::OutputWriteStatus::Failed,
-			   "transactional conflict should mark pending new files failed");
+		Expect(result.files[1].status == mockfakegen::OutputWriteStatus::Written,
+			   "unrelated missing file should still be written");
 		Expect(tree.Read("generated/MockHoge.h") == "old\n", "existing file should be preserved");
-		Expect(!std::filesystem::exists(tree.root() / "generated" / "nested" / "FakeHoge.cpp"),
-			   "existing conflict should prevent partial new file publication");
+		Expect(tree.Read("generated/nested/FakeHoge.cpp") == "fake\n",
+			   "existing conflict should not prevent partial new file publication");
 	}
 
-	void ConflictAfterValidFileRollsBackTheWholeSet()
+	void ConflictAfterValidFileKeepsPreviouslyPublishableFile()
 	{
 		TempTree tree;
 		tree.Write("generated/MockHoge.h", "old\n");
@@ -242,13 +278,42 @@ namespace
 		Expect(!result.ok(), "later conflict should fail the generated set");
 		Expect(result.diagnostics.size() == 1U, "later conflict should produce one diagnostic");
 		ExpectDiagnosticShape(result.diagnostics[0], "output_conflict");
-		Expect(result.files[0].status == mockfakegen::OutputWriteStatus::Failed,
-			   "new file before conflict should not be published");
+		Expect(result.files[0].status == mockfakegen::OutputWriteStatus::Written,
+			   "new unrelated file before conflict should be published");
 		Expect(result.files[1].status == mockfakegen::OutputWriteStatus::SkippedExisting,
 			   "conflicting file should be skipped");
-		Expect(!std::filesystem::exists(tree.root() / "generated" / "NewFirst.h"),
-			   "new file before conflict should not appear");
+		Expect(tree.Read("generated/NewFirst.h") == "new\n",
+			   "new unrelated file before conflict should appear");
 		Expect(tree.Read("generated/MockHoge.h") == "old\n", "conflicting file should be kept");
+	}
+
+	void SourceClassConflictSkipsSiblingsAndPublishesOtherClasses()
+	{
+		TempTree tree;
+		tree.Write("generated/MockGood.h", "old\n");
+
+		const auto result = mockfakegen::WriteGeneratedFiles(
+			{.output_dir = tree.root() / "generated", .dry_run = false, .overwrite = false},
+			MixedClassFiles());
+
+		Expect(!result.ok(), "source-class conflict should diagnose");
+		Expect(result.diagnostics.size() == 1U, "source-class conflict should diagnose once");
+		ExpectDiagnosticShape(result.diagnostics[0], "output_conflict");
+		Expect(result.files[0].status == mockfakegen::OutputWriteStatus::SkippedExisting,
+			   "conflicting class mock should be skipped");
+		Expect(result.files[1].status == mockfakegen::OutputWriteStatus::Failed,
+			   "same-class fake should not be published after mock conflict");
+		Expect(result.files[2].status == mockfakegen::OutputWriteStatus::Written,
+			   "other class mock should be written");
+		Expect(result.files[3].status == mockfakegen::OutputWriteStatus::Written,
+			   "other class fake should be written");
+		Expect(tree.Read("generated/MockGood.h") == "old\n", "conflicting mock should be kept");
+		Expect(!std::filesystem::exists(tree.root() / "generated" / "FakeGood.cpp"),
+			   "same-class fake should not appear");
+		Expect(tree.Read("generated/MockOther.h") == "other mock\n",
+			   "other class mock should be published");
+		Expect(tree.Read("generated/FakeOther.cpp") == "other fake\n",
+			   "other class fake should be published");
 	}
 
 	void LeavesSameContentUnchanged()
@@ -332,8 +397,8 @@ namespace
 		Expect(!result.ok(), "existing directory should fail before publish");
 		Expect(result.diagnostics.size() == 1U, "existing directory should diagnose once");
 		ExpectDiagnosticShape(result.diagnostics[0], "output_conflict");
-		Expect(!std::filesystem::exists(output_dir / "NewFirst.h"),
-			   "non-regular conflict should prevent partial new file publication");
+		Expect(tree.Read("generated/NewFirst.h") == "new\n",
+			   "non-regular conflict should not prevent unrelated new file publication");
 		Expect(std::filesystem::is_directory(output_path),
 			   "non-regular existing path should be preserved");
 		Expect(!std::filesystem::exists(StagingRootForOutputDir(output_dir)),
@@ -376,7 +441,8 @@ int main()
 	WriteModeRejectsTraversalBeforePublishingAnyFile();
 	WritesFilesAndCreatesDirectories();
 	RejectsExistingFileWithoutOverwrite();
-	ConflictAfterValidFileRollsBackTheWholeSet();
+	ConflictAfterValidFileKeepsPreviouslyPublishableFile();
+	SourceClassConflictSkipsSiblingsAndPublishesOtherClasses();
 	LeavesSameContentUnchanged();
 	OverwritesExistingFileWhenAllowed();
 	ReportsOutputDirectoryCreationFailure();

@@ -253,6 +253,53 @@ namespace mockfakegen
 			}
 		}
 
+		[[nodiscard]] std::string SourceClassKey(const PlanEntry& entry)
+		{
+			if (entry.file == nullptr || !entry.file->source_class.has_value())
+			{
+				return {};
+			}
+			return entry.file->source_class->qualified_name;
+		}
+
+		void SuppressBlockedSourceClasses(OutputWriteResult& result,
+										  std::vector<PlanEntry>& plan,
+										  const std::set<std::string>& blocked_source_classes)
+		{
+			if (blocked_source_classes.empty())
+			{
+				return;
+			}
+
+			for (auto& entry : plan)
+			{
+				const auto source_class_key = SourceClassKey(entry);
+				if (source_class_key.empty() ||
+					blocked_source_classes.find(source_class_key) == blocked_source_classes.end())
+				{
+					continue;
+				}
+
+				entry.publish = false;
+				auto& status = result.files[entry.result_index].status;
+				if (status != OutputWriteStatus::SkippedExisting &&
+					status != OutputWriteStatus::Unchanged)
+				{
+					status = OutputWriteStatus::Failed;
+				}
+			}
+		}
+
+		void BlockSourceClassIfPresent(const PlanEntry& entry,
+									   std::set<std::string>& blocked_source_classes)
+		{
+			const auto source_class_key = SourceClassKey(entry);
+			if (!source_class_key.empty())
+			{
+				blocked_source_classes.insert(source_class_key);
+			}
+		}
+
 		[[nodiscard]] std::filesystem::path AbsoluteOutputRoot(const OutputWriterOptions& options,
 															   OutputWriteResult& result)
 		{
@@ -504,7 +551,7 @@ namespace mockfakegen
 												std::vector<PlanEntry>& plan,
 												OutputWriteResult& result)
 		{
-			bool ok = true;
+			std::set<std::string> blocked_source_classes;
 			for (auto& entry : plan)
 			{
 				std::error_code status_error;
@@ -518,7 +565,7 @@ namespace mockfakegen
 								  "inspect_existing",
 								  "failed to inspect existing output file: " +
 									  status_error.message());
-					ok = false;
+					BlockSourceClassIfPresent(entry, blocked_source_classes);
 					continue;
 				}
 
@@ -535,7 +582,7 @@ namespace mockfakegen
 								  "output_conflict",
 								  "existing_symlink",
 								  "output path already exists as a symbolic link.");
-					ok = false;
+					BlockSourceClassIfPresent(entry, blocked_source_classes);
 					continue;
 				}
 
@@ -546,7 +593,7 @@ namespace mockfakegen
 								  "output_conflict",
 								  "existing_non_regular",
 								  "output path already exists and is not a regular file.");
-					ok = false;
+					BlockSourceClassIfPresent(entry, blocked_source_classes);
 					continue;
 				}
 
@@ -558,7 +605,7 @@ namespace mockfakegen
 								  "output_conflict",
 								  "read_existing",
 								  "failed to read existing output file.");
-					ok = false;
+					BlockSourceClassIfPresent(entry, blocked_source_classes);
 					continue;
 				}
 
@@ -576,7 +623,7 @@ namespace mockfakegen
 								  "existing_changed_file",
 								  "output file already exists; pass --overwrite to replace it.");
 					result.files[entry.result_index].status = OutputWriteStatus::SkippedExisting;
-					ok = false;
+					BlockSourceClassIfPresent(entry, blocked_source_classes);
 					continue;
 				}
 
@@ -584,11 +631,8 @@ namespace mockfakegen
 				entry.had_existing = true;
 			}
 
-			if (!ok)
-			{
-				MarkPublishEntriesFailed(result, plan);
-			}
-			return ok;
+			SuppressBlockedSourceClasses(result, plan, blocked_source_classes);
+			return true;
 		}
 
 		[[nodiscard]] bool PrepareStagingRoot(const std::filesystem::path& staging_root,
