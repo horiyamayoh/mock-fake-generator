@@ -806,8 +806,23 @@ namespace mockfakegen
 			return text;
 		}
 
+		[[nodiscard]] bool ShouldMoveParameter(const SimpleParameterModel& parameter)
+		{
+			return parameter.is_rvalue_ref || parameter.is_nonconst_by_value;
+		}
+
 		[[nodiscard]] std::string
-		JoinParameterNames(const std::vector<SimpleParameterModel>& parameters)
+		ParameterForwardingExpression(const SimpleParameterModel& parameter)
+		{
+			if (ShouldMoveParameter(parameter))
+			{
+				return "std::move(" + parameter.name + ')';
+			}
+			return parameter.name;
+		}
+
+		[[nodiscard]] std::string
+		JoinParameterForwardingExpressions(const std::vector<SimpleParameterModel>& parameters)
 		{
 			if (parameters.empty())
 			{
@@ -821,7 +836,7 @@ namespace mockfakegen
 				{
 					text += ", ";
 				}
-				text += parameters[index].name;
+				text += ParameterForwardingExpression(parameters[index]);
 			}
 			return text;
 		}
@@ -942,17 +957,37 @@ namespace mockfakegen
 				{
 					return true;
 				}
+				for (const auto& parameter : method.parameters)
+				{
+					if (ShouldMoveParameter(parameter))
+					{
+						return true;
+					}
+				}
 			}
 			return false;
 		}
 
 		[[nodiscard]] std::string MockCallExpression(const SimpleMethodModel& method,
-													 const std::string& parameter_names)
+													 const std::string& parameter_names,
+													 std::string_view mock_class_name)
 		{
 			std::string text;
-			if (method.ref_qualifier == RefQualifierKind::RValue)
+			if (method.ref_qualifier == RefQualifierKind::RValue && method.is_const)
+			{
+				text += "std::move(static_cast<const ";
+				text += mock_class_name;
+				text += "&>(*mock)).";
+			}
+			else if (method.ref_qualifier == RefQualifierKind::RValue)
 			{
 				text += "std::move(*mock).";
+			}
+			else if (method.is_const)
+			{
+				text += "static_cast<const ";
+				text += mock_class_name;
+				text += "&>(*mock).";
 			}
 			else
 			{
@@ -1114,8 +1149,8 @@ namespace mockfakegen
 			{
 				separate_definition();
 				const auto parameter_declarations = JoinParameterDeclarations(method.parameters);
-				const auto parameter_names = JoinParameterNames(method.parameters);
-				const auto mock_call = MockCallExpression(method, parameter_names);
+				const auto parameter_names = JoinParameterForwardingExpressions(method.parameters);
+				const auto mock_call = MockCallExpression(method, parameter_names, mock_class_name);
 				const auto signature = DiagnosticSignature(class_model, method);
 				const auto is_void_return = method.return_type == "void";
 
@@ -1219,6 +1254,8 @@ namespace mockfakegen
 						.gmock_type = parameter.gmock_type_spelling,
 						.name = parameter.generated_name,
 						.declaration = parameter.declaration_spelling,
+						.is_rvalue_ref = parameter.is_rvalue_ref,
+						.is_nonconst_by_value = parameter.is_nonconst_by_value,
 					});
 				}
 
@@ -1255,6 +1292,8 @@ namespace mockfakegen
 						.gmock_type = parameter.gmock_type_spelling,
 						.name = parameter.generated_name,
 						.declaration = parameter.declaration_spelling,
+						.is_rvalue_ref = parameter.is_rvalue_ref,
+						.is_nonconst_by_value = parameter.is_nonconst_by_value,
 					});
 				}
 				simple_class.fake_constructors.push_back(std::move(simple_constructor));

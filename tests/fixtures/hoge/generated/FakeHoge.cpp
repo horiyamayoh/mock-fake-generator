@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "Hoge.h"
 #include "MockHoge.h"
 
@@ -5,7 +7,7 @@ bool Hoge::Initialize(int argc, char** argv)
 {
 	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Initialize(argc, argv);
+		return mock->Initialize(std::move(argc), argv);
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("Hoge::Initialize(int, char**)");

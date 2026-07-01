@@ -667,6 +667,57 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_qualifier_generated_smoke COMMAND mockfakegen_qualifier_generated_smoke)
 
 	add_executable(
+		mockfakegen_forwarding_generation_test
+		tests/fixtures/forwarding/forwarding_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_forwarding_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_forwarding_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_forwarding_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_forwarding_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_forwarding_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_forwarding_generation_test)
+
+	add_test(
+		NAME mockfakegen_forwarding_generation_test
+		COMMAND mockfakegen_forwarding_generation_test
+	)
+
+	add_executable(
+		mockfakegen_forwarding_generated_smoke
+		tests/fixtures/forwarding/forwarding_generated_smoke_test.cpp
+		tests/fixtures/forwarding/generated/FakeForwarding.cpp
+	)
+	target_include_directories(
+		mockfakegen_forwarding_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/forwarding/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/forwarding/generated"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime"
+	)
+	target_link_libraries(mockfakegen_forwarding_generated_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
+	target_compile_features(mockfakegen_forwarding_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_forwarding_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_forwarding_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_forwarding_generated_smoke)
+
+	add_test(
+		NAME mockfakegen_forwarding_generated_smoke
+		COMMAND mockfakegen_forwarding_generated_smoke
+	)
+
+	add_executable(
 		mockfakegen_default_argument_generation_test
 		tests/fixtures/default_argument/default_argument_generation_test.cpp
 	)

@@ -45,7 +45,11 @@ namespace
 						.name = "Initialize",
 						.parameters =
 							{
-								mockfakegen::SimpleParameterModel{.type = "int", .name = "argc"},
+								mockfakegen::SimpleParameterModel{
+									.type = "int",
+									.name = "argc",
+									.is_nonconst_by_value = true,
+								},
 								mockfakegen::SimpleParameterModel{.type = "char**", .name = "argv"},
 							},
 					},

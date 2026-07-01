@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "Hoge.h"
 #include "MockHoge.h"
 
@@ -15,7 +17,7 @@ bool Hoge::Save(int value)
 {
 	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Save(value);
+		return mock->Save(std::move(value));
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("Hoge::Save(int)");

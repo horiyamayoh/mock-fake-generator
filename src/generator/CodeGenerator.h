@@ -17,6 +17,8 @@ namespace mockfakegen
 		std::string gmock_type = {};
 		std::string name;
 		std::string declaration = {};
+		bool is_rvalue_ref = false;
+		bool is_nonconst_by_value = false;
 	};
 
 	struct SimpleMethodModel

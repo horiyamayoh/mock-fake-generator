@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "MockService.h"
 #include "Service.h"
 
@@ -8,7 +10,7 @@ namespace sample
 	{
 		if (auto* mock = ::mockfake::CurrentMock<MockService>())
 		{
-			return mock->Run(value);
+			return mock->Run(std::move(value));
 		}
 
 		return ::mockfake::MissingMockReturn<bool>("sample::Service::Run(int)");

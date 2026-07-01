@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "Hoge.h"
 #include "MockHoge.h"
 
@@ -5,7 +7,7 @@ int Hoge::Get(int value)
 {
 	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Get(value);
+		return mock->Get(std::move(value));
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::Get(int)");

@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "Hoge.h"
 #include "MockHoge.h"
 
@@ -15,7 +17,7 @@ void Hoge::SetMap(std::map<int, double> value)
 {
 	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		mock->SetMap(value);
+		mock->SetMap(std::move(value));
 		return;
 	}
 

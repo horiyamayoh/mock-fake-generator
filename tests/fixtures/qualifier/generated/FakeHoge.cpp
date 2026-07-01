@@ -7,7 +7,7 @@ int Hoge::Get() const
 {
 	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Get();
+		return static_cast<const MockHoge&>(*mock).Get();
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::Get() const");
@@ -37,7 +37,7 @@ int Hoge::Peek() const&
 {
 	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Peek();
+		return static_cast<const MockHoge&>(*mock).Peek();
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::Peek() const&");
