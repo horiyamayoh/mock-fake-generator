@@ -37,6 +37,23 @@ namespace
 		return text.find(token) != std::string_view::npos;
 	}
 
+	[[nodiscard]] std::size_t CountOccurrences(std::string_view text, std::string_view token)
+	{
+		std::size_t count = 0U;
+		std::size_t offset = 0U;
+		while (!token.empty() && offset < text.size())
+		{
+			const auto found = text.find(token, offset);
+			if (found == std::string_view::npos)
+			{
+				break;
+			}
+			++count;
+			offset = found + token.size();
+		}
+		return count;
+	}
+
 	[[nodiscard]] std::string ReadText(const std::filesystem::path& path)
 	{
 		std::ifstream stream(path, std::ios::binary);
@@ -1168,6 +1185,45 @@ namespace
 			   "report should include clang diagnostic summary");
 	}
 
+	void MissingCompileDatabaseDiagnosticIsPrintedOnce(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "missing-compile-db-product";
+		const auto build_dir = temp_root / "missing-compile-db-build";
+		const auto output_dir = temp_root / "missing-compile-db-generated";
+		std::filesystem::create_directories(build_dir);
+		WriteText(product_root / "Service.h",
+				  "#pragma once\n"
+				  "class Service {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+
+		auto args = BaseArgs(product_root, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "missing_compile_db");
+
+		Expect(result.exit_code == 0, "missing compile database fallback should succeed");
+		Expect(std::filesystem::exists(output_dir / "MockService.h"),
+			   "synthetic fallback should publish generated mock");
+		constexpr std::string_view warning =
+			"compile_commands.json was not found; using synthetic TU fallback.";
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(CountOccurrences(stderr_text, warning) == 1U,
+			   "missing compile database warning should be printed once");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"code\": \"compile_database_not_found\""),
+			   "manifest should retain missing compile database diagnostic");
+		Expect(Contains(manifest, "synthetic-tu"),
+			   "manifest should record synthetic fallback parse mode");
+	}
+
 	void RegistryModeAffectsRuntime(const std::filesystem::path& temp_root,
 									const std::filesystem::path& product_dir,
 									const std::filesystem::path& build_dir)
@@ -1539,6 +1595,7 @@ int main()
 	TopLevelUnsupportedAppearsInManifest(temp_root);
 	PrivateTypeUsesAppearUnsupportedInManifest(temp_root);
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
+	MissingCompileDatabaseDiagnosticIsPrintedOnce(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);

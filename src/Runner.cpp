@@ -671,8 +671,16 @@ namespace mockfakegen
 			.exclude_globs = config.exclude_globs,
 		});
 		std::vector<RunDiagnostic> run_diagnostics;
+		std::size_t printed_diagnostic_count = 0U;
+		const auto print_new_run_diagnostics = [&err, &run_diagnostics, &printed_diagnostic_count]()
+		{
+			PrintRunDiagnostics(
+				err,
+				std::span<const RunDiagnostic>(run_diagnostics).subspan(printed_diagnostic_count));
+			printed_diagnostic_count = run_diagnostics.size();
+		};
 		AppendRunDiagnostics(run_diagnostics, scan_result.diagnostics);
-		PrintRunDiagnostics(err, run_diagnostics);
+		print_new_run_diagnostics();
 		if (!scan_result.ok())
 		{
 			const std::vector<ClassModel> no_classes;
@@ -710,7 +718,7 @@ namespace mockfakegen
 		});
 		AppendRunDiagnostics(run_diagnostics, resolve_result.diagnostics);
 		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);
-		PrintRunDiagnostics(err, run_diagnostics);
+		print_new_run_diagnostics();
 
 		auto report_classes = ResolveGeneratedClassFilenames(resolve_result.project.classes);
 		auto generated_files =
@@ -732,7 +740,7 @@ namespace mockfakegen
 			},
 			generated_files);
 		AppendRunDiagnostics(run_diagnostics, format_result.diagnostics);
-		PrintRunDiagnostics(err, run_diagnostics);
+		print_new_run_diagnostics();
 		if (!format_result.ok())
 		{
 			const auto diagnostic_files = AppendDiagnosticArtifacts(
@@ -794,7 +802,7 @@ namespace mockfakegen
 		AppendRunDiagnostics(run_diagnostics, unsupported_diagnostics);
 		AppendRunDiagnostics(run_diagnostics, top_level_unsupported_diagnostics);
 		AppendRunDiagnostics(run_diagnostics, policy_decision.diagnostics);
-		PrintRunDiagnostics(err, run_diagnostics);
+		print_new_run_diagnostics();
 
 		const auto final_files = AppendDiagnosticArtifacts(
 			format_result.files,
