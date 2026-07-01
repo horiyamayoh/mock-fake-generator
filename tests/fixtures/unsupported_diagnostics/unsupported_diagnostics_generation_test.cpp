@@ -380,7 +380,7 @@ namespace
 
 		Expect(extraction.classes.size() == 1U,
 			   "interface negative fixture should extract one interface class");
-		Expect(UnsupportedItemCount(extraction) == 7U,
+		Expect(UnsupportedItemCount(extraction) == 3U,
 			   "interface negative fixture should lock unsupported item count");
 		Expect(HasUnsupportedKind(extraction, "interface_construct"),
 			   "interface constructs should be reported unsupported");
@@ -389,14 +389,6 @@ namespace
 			   "unsupported interface constructor should be recorded");
 		Expect(HasUnsupportedMember(extraction, "interface_construct", "~BrokenInterface"),
 			   "unsupported interface destructor should be recorded");
-		Expect(HasUnsupportedMember(extraction, "interface_construct", "Implemented"),
-			   "non-pure virtual interface method should be recorded");
-		Expect(HasUnsupportedMember(extraction, "interface_construct", "NonVirtual"),
-			   "non-virtual interface method should be recorded");
-		Expect(HasUnsupportedMember(extraction, "interface_construct", "StaticCall"),
-			   "static interface method should be recorded");
-		Expect(HasUnsupportedMember(extraction, "interface_construct", "Data"),
-			   "interface static data should be recorded");
 		Expect(HasUnsupportedMember(extraction, "non_public_method", "ProtectedPure"),
 			   "protected interface method should be recorded");
 		ExpectPolicyBehavior(extraction);

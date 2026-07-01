@@ -1166,52 +1166,12 @@ namespace mockfakegen
 
 				for (const auto* child : declaration.decls())
 				{
-					const auto* function_template =
-						llvm::dyn_cast<clang::FunctionTemplateDecl>(child);
-					if (function_template != nullptr)
-					{
-						const auto* templated = function_template->getTemplatedDecl();
-						if (templated != nullptr)
-						{
-							RecordUnsupportedMethod(class_model,
-													*templated,
-													UnsupportedReasonCode::FunctionTemplate,
-													"function_template",
-													"function template member is not supported");
-						}
-						continue;
-					}
-
-					const auto* variable = llvm::dyn_cast<clang::VarDecl>(child);
-					if (variable != nullptr && variable->isStaticDataMember() &&
-						!variable->isImplicit())
-					{
-						RecordUnsupportedMethod(
-							class_model,
-							*variable,
-							UnsupportedReasonCode::InterfaceConstruct,
-							"interface_construct",
-							"static data member is not part of a pure interface");
-						continue;
-					}
-
 					const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(child);
 					if (method == nullptr || method->isImplicit())
 					{
 						continue;
 					}
 
-					if (IsMacroOrigin(*method))
-					{
-						RecordUnsupportedMethod(
-							class_model,
-							*method,
-							UnsupportedReasonCode::MacroOrigin,
-							"macro_origin",
-							"macro-origin method declaration is not "
-							"supported because source spelling may be unstable");
-						continue;
-					}
 					if (llvm::isa<clang::CXXConstructorDecl>(method))
 					{
 						const auto* constructor = llvm::cast<clang::CXXConstructorDecl>(method);
@@ -1222,6 +1182,21 @@ namespace mockfakegen
 					{
 						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
 						RecordInterfaceDestructor(*destructor, class_model);
+						continue;
+					}
+					if (!method->isVirtual())
+					{
+						continue;
+					}
+					if (IsMacroOrigin(*method))
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::MacroOrigin,
+							"macro_origin",
+							"macro-origin method declaration is not "
+							"supported because source spelling may be unstable");
 						continue;
 					}
 					if (IsAssignmentOperator(*method))
@@ -1295,16 +1270,6 @@ namespace mockfakegen
 							"override it");
 						continue;
 					}
-					if (!method->isVirtual() || !method->isPureVirtual())
-					{
-						RecordUnsupportedMethod(
-							class_model,
-							*method,
-							UnsupportedReasonCode::InterfaceConstruct,
-							"interface_construct",
-							"interface mock mode requires public pure virtual methods");
-						continue;
-					}
 					if (method->isConsteval())
 					{
 						RecordUnsupportedMethod(class_model,
@@ -1330,15 +1295,6 @@ namespace mockfakegen
 												UnsupportedReasonCode::UnsupportedAttribute,
 												"unsupported_attribute",
 												"method has attributes that are not supported");
-						continue;
-					}
-					if (HasBodyInTargetHeader(*method))
-					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::InlineBody,
-												"inline_body",
-												"inline method body is not supported");
 						continue;
 					}
 					if (HasConditionalNoexcept(*method))
@@ -1389,7 +1345,7 @@ namespace mockfakegen
 						declaration,
 						UnsupportedReasonCode::InterfaceConstruct,
 						"interface_construct",
-						"interface mock mode requires at least one public pure virtual method");
+						"interface mock mode requires at least one public virtual method");
 				}
 			}
 

@@ -453,7 +453,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--collision-policy <policy>` | value | `qualified-filename` | `qualified-filename` only | CodeGenerator | 他値は invalid |
 | `--fake-special-members <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な constructor/destructor fake のみ生成し、unsafe case は unsupported |
 | `--fake-static-data <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な static data member definition のみ生成し、unsafe case は unsupported |
-| `--interface-mock <bool>` | bool value | `false` | implemented | CodeGenerator | pure interface では継承型 Mock header のみ生成し、unsafe case は unsupported |
+| `--interface-mock <bool>` | bool value | `false` | implemented | CodeGenerator | public virtual method を持つ class では継承型 Mock header のみ生成し、unsafe case は unsupported |
 | `--include-dir <path>` | repeatable value | none | implemented | CompilationResolver / Validator | synthetic fallback parse と generated compile/link validation に追加 |
 | `--define <macro>` | repeatable value | none | implemented | CompilationResolver / Validator | `-D...` として synthetic fallback parse と generated compile/link validation に追加 |
 | `--extra-arg <arg>` | repeatable value | none | implemented | CompilationResolver / Validator | synthetic fallback parse と generated compile/link validation に追加。`--target=...` など option-looking value も separate form で受理 |
@@ -1549,7 +1549,7 @@ private:
 
 ## 19. interface mock 生成モード
 
-リンク差し替え型 fake とは別に、抽象 interface には継承型 mock の方が自然な場合がある。
+リンク差し替え型 fake とは別に、抽象 interface や concrete virtual base class には継承型 mock の方が自然な場合がある。
 
 入力:
 
@@ -1572,7 +1572,7 @@ public:
 };
 ```
 
-標準では、pure virtual のみからなる interface に対して `--interface-mock` を指定した場合に生成する。
+標準では link-seam fake を生成する。`--interface-mock` を指定した場合、public virtual method を持つ class に対して public virtual method の override mock を生成する。non-virtual member は virtual dispatch に関与しないため生成対象にしない。
 
 | モード | 出力 |
 |---|---|

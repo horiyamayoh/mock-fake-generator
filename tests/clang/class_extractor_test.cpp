@@ -926,35 +926,43 @@ namespace
 			   "implicit non-virtual destructor should not make the interface unsupported");
 	}
 
-	void ReportsUnsupportedInterfaceConstructs()
+	void ExtractsConcreteVirtualInterfaceMock()
 	{
 		TempTree tree;
-		tree.Write("include/AlmostInterface.h",
+		tree.Write("include/ConcreteVirtual.h",
 				   "#pragma once\n"
-				   "class AlmostInterface {\n"
+				   "class ConcreteVirtual {\n"
 				   "public:\n"
-				   "  virtual ~AlmostInterface() = default;\n"
-				   "  bool Concrete();\n"
-				   "  static int Count();\n"
-				   "  virtual int Mixed();\n"
+				   "  virtual ~ConcreteVirtual() = default;\n"
+				   "  virtual int Run() { return 1; }\n"
+				   "  virtual int Count() const;\n"
+				   "  bool Helper();\n"
+				   "  static int StaticCount();\n"
+				   "  static int Data;\n"
 				   "};\n");
 
 		const auto result =
 			ParseAndExtract(tree,
-							"include/AlmostInterface.h",
+							"include/ConcreteVirtual.h",
 							mockfakegen::ClassExtractionOptions{.interface_mock = true});
 
-		Expect(result.classes.size() == 1U, "almost-interface class should be extracted");
+		Expect(result.classes.size() == 1U, "concrete virtual class should be extracted");
 		const auto& class_model = result.classes[0];
-		Expect(class_model.interface_mock, "almost-interface model should be marked");
-		Expect(class_model.mock_methods.empty(),
-			   "non-pure interface constructs should not be generated");
-		Expect(UnsupportedKindCount(class_model, "interface_construct") == 4U,
-			   "all unsupported interface constructs should be reported");
-		Expect(!result.diagnostics.empty(),
-			   "unsupported interface constructs should emit diagnostics");
-		Expect(class_model.unsupported_items[0].reason.find("pure virtual") != std::string::npos,
-			   "non-pure interface diagnostic should explain pure virtual requirement");
+		Expect(class_model.interface_mock, "concrete virtual model should be marked");
+		Expect(class_model.mock_methods.size() == 2U,
+			   "public virtual methods should be extracted for interface mock");
+		Expect(class_model.fake_methods.empty(),
+			   "concrete virtual interface mode should not create fake methods");
+		Expect(class_model.mock_methods[0].name == "Run",
+			   "inline concrete virtual method should be extracted");
+		Expect(!class_model.mock_methods[0].is_pure_virtual,
+			   "concrete virtual method should keep non-pure flag");
+		Expect(class_model.mock_methods[1].name == "Count",
+			   "declared concrete virtual method should be extracted");
+		Expect(class_model.mock_methods[1].is_const,
+			   "concrete virtual const qualifier should be kept");
+		Expect(class_model.unsupported_items.empty(),
+			   "safe non-virtual members should be ignored in interface mode");
 	}
 
 	void ReportsFinalInterfaceConstructs()
@@ -1066,7 +1074,7 @@ int main()
 	ReportsUnsafeStaticDataWhenEnabled();
 	ExtractsInterfaceMockWhenEnabled();
 	InterfaceModeSupportsImplicitNonVirtualDestructor();
-	ReportsUnsupportedInterfaceConstructs();
+	ExtractsConcreteVirtualInterfaceMock();
 	ReportsFinalInterfaceConstructs();
 	InterfaceModeKeepsConcreteClassesLinkSeam();
 	return 0;

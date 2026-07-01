@@ -18,4 +18,25 @@ namespace sample
 	  public:
 		virtual int Run() = 0;
 	};
+
+	class ConcreteVirtual
+	{
+	  public:
+		virtual ~ConcreteVirtual() = default;
+
+		virtual int Run()
+		{
+			return -1;
+		}
+
+		virtual int LoadCount() const
+		{
+			return 0;
+		}
+
+		int Helper() const
+		{
+			return 42;
+		}
+	};
 } // namespace sample

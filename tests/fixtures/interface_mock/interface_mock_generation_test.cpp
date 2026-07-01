@@ -104,9 +104,10 @@ namespace
 														mockfakegen::ClassExtractionOptions{
 															.interface_mock = true,
 														});
-		Expect(extraction.classes.size() == 2U, "interface classes should be extracted");
+		Expect(extraction.classes.size() == 3U, "interface classes should be extracted");
 		const auto& storage = FindClass(extraction.classes, "sample::IStorage");
 		const auto& implicit = FindClass(extraction.classes, "sample::ImplicitDtorIface");
+		const auto& concrete = FindClass(extraction.classes, "sample::ConcreteVirtual");
 		Expect(storage.mock_methods.size() == 2U,
 			   "explicit-destructor interface pure virtual methods should be extracted");
 		Expect(storage.fake_methods.empty(), "interface mode should not extract fake methods");
@@ -121,6 +122,12 @@ namespace
 			   "implicit non-virtual interface destructor should not request override");
 		Expect(implicit.unsupported_items.empty(),
 			   "implicit non-virtual destructor should remain a supported interface mock");
+		Expect(concrete.mock_methods.size() == 2U, "concrete virtual methods should be extracted");
+		Expect(concrete.fake_methods.empty(), "interface mode should not extract fake methods");
+		Expect(concrete.mock_destructor_override,
+			   "concrete virtual destructor should request override");
+		Expect(concrete.unsupported_items.empty(),
+			   "safe concrete virtual members should not report unsupported items");
 
 		const auto generated =
 			mockfakegen::GenerateMockFakeProject(extraction.classes,
@@ -131,11 +138,13 @@ namespace
 													 .emit_report = false,
 													 .interface_mock = true,
 												 });
-		Expect(generated.size() == 2U, "interface fixture should generate mock headers only");
+		Expect(generated.size() == 3U, "interface fixture should generate mock headers only");
 		Expect(HasFile(generated, "MockIStorage.h"),
 			   "interface fixture should generate mock header");
 		Expect(HasFile(generated, "MockImplicitDtorIface.h"),
 			   "implicit-destructor interface fixture should generate mock header");
+		Expect(HasFile(generated, "MockConcreteVirtual.h"),
+			   "concrete virtual fixture should generate mock header");
 		Expect(!HasFile(generated, "FakeIStorage.cpp"),
 			   "interface fixture should not generate fake source");
 		Expect(!HasFile(generated, "MockFakeRuntime.h"),
@@ -149,6 +158,14 @@ namespace
 		Expect(!Contains(FindFile(generated, "MockImplicitDtorIface.h").content,
 						 "~MockImplicitDtorIface() override"),
 			   "implicit non-virtual destructor should not generate override");
+		Expect(Contains(FindFile(generated, "MockConcreteVirtual.h").content,
+						"MOCK_METHOD(int, Run, (), (override));"),
+			   "concrete virtual method should generate override");
+		Expect(Contains(FindFile(generated, "MockConcreteVirtual.h").content,
+						"MOCK_METHOD(int, LoadCount, (), (const, override));"),
+			   "concrete virtual const method should generate override");
+		Expect(!Contains(FindFile(generated, "MockConcreteVirtual.h").content, "Helper"),
+			   "non-virtual concrete member should not be generated");
 
 		for (const auto& file : generated)
 		{

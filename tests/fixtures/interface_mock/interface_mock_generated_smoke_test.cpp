@@ -6,6 +6,7 @@
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
 #endif
 #include "IStorage.h"
+#include "MockConcreteVirtual.h"
 #include "MockIStorage.h"
 #include "MockImplicitDtorIface.h"
 #if defined(__GNUC__) || defined(__clang__)
@@ -35,5 +36,18 @@ namespace
 
 		EXPECT_CALL(mock, Run()).WillOnce(Return(7));
 		EXPECT_EQ(iface.Run(), 7);
+	}
+
+	TEST(InterfaceMockGeneratedSmoke, OverridesConcreteVirtualMethods)
+	{
+		sample::MockConcreteVirtual mock;
+		sample::ConcreteVirtual& iface = mock;
+
+		EXPECT_CALL(mock, Run()).WillOnce(Return(11));
+		EXPECT_EQ(iface.Run(), 11);
+
+		EXPECT_CALL(mock, LoadCount()).WillOnce(Return(13));
+		EXPECT_EQ(iface.LoadCount(), 13);
+		EXPECT_EQ(iface.Helper(), 42);
 	}
 } // namespace

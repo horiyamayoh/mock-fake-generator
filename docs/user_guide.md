@@ -111,7 +111,7 @@ The CLI accepts both `--option value` and `--option=value` for value options.
 | `--collision-policy <policy>` | supported | `qualified-filename` | Filename collisions are resolved with namespace-qualified filenames. |
 | `--fake-special-members <bool>` | supported | `false` | Generate safe constructor/destructor fakes when supported. |
 | `--fake-static-data <bool>` | supported | `false` | Generate safe static data member definitions when supported. |
-| `--interface-mock <bool>` | supported | `false` | Generate inheritance-based interface mocks instead of link-replacement fakes. |
+| `--interface-mock <bool>` | supported | `false` | Generate inheritance-based mocks for classes with public virtual methods instead of link-replacement fakes. |
 | `--include-dir <path>` | supported, repeatable | none | Add an include directory to synthetic fallback parsing and generated compile/link validation. |
 | `--define <macro>` | supported, repeatable | none | Add a preprocessor definition to synthetic fallback parsing and generated compile/link validation. Values may be written as `NAME` or `NAME=value`; a leading `-D` is also accepted. |
 | `--extra-arg <arg>` | supported, repeatable | none | Add an extra compiler argument to parsing and generated compile/link validation. Separate-form option-looking values are accepted, for example `--extra-arg --target=x86_64-linux-gnu`. |
@@ -277,7 +277,8 @@ Common unsupported categories include:
 - Nested class definitions.
 - Function template members.
 - Conversion operators and overloaded operators.
-- Pure virtual methods in link-replacement mode.
+- Pure virtual methods in link-replacement mode. Use `--interface-mock true` for
+  inheritance-based mocks of pure interfaces or concrete virtual classes.
 - Non-public methods.
 - Deleted or defaulted methods where generation is not safe.
 - `constexpr`, `consteval`, volatile methods, conditional `noexcept`, explicit object

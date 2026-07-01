@@ -4,26 +4,26 @@
     "classes": 1,
     "link_ready_classes": 0,
     "not_link_ready_classes": 1,
-    "generated_methods": 1,
-    "unsupported_items": 7,
+    "generated_methods": 2,
+    "unsupported_items": 3,
     "registry_mode": "thread-local",
     "registry_mode_usage": "per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock",
     "fallback_policy": "abort",
-    "diagnostics": 7,
+    "diagnostics": 3,
     "validation_commands": 0,
     "usable_fake_sources": [],
     "diagnostic_summary": {
-      "total": 7,
+      "total": 3,
       "info": 0,
-      "warnings": 7,
+      "warnings": 3,
       "errors": 0,
       "by_component": [
         {
           "component": "clang",
           "summary": {
-            "total": 7,
+            "total": 3,
             "info": 0,
-            "warnings": 7,
+            "warnings": 3,
             "errors": 0
           }
         }
@@ -52,110 +52,6 @@
       "class": "negative::BrokenInterface",
       "member": "negative::BrokenInterface::BrokenInterface",
       "message": "interface mock mode only supports public defaulted constructors",
-      "suggested_action": "exclude this member or provide a hand-authored mock",
-      "command": "",
-      "stderr_summary": "",
-      "validation_artifact_path": ""
-    },
-    {
-      "severity": "warning",
-      "component": "clang",
-      "code": "unsupported_interface_construct",
-      "kind": "interface_construct",
-      "path": "Interface.h",
-      "source_range": {
-        "begin": {
-          "file": "Interface.h",
-          "line": 18,
-          "column": 3
-        },
-        "end": {
-          "file": "Interface.h",
-          "line": 18,
-          "column": 14
-        }
-      },
-      "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::Data",
-      "message": "static data member is not part of a pure interface",
-      "suggested_action": "exclude this member or provide a hand-authored mock",
-      "command": "",
-      "stderr_summary": "",
-      "validation_artifact_path": ""
-    },
-    {
-      "severity": "warning",
-      "component": "clang",
-      "code": "unsupported_interface_construct",
-      "kind": "interface_construct",
-      "path": "Interface.h",
-      "source_range": {
-        "begin": {
-          "file": "Interface.h",
-          "line": 12,
-          "column": 3
-        },
-        "end": {
-          "file": "Interface.h",
-          "line": 15,
-          "column": 3
-        }
-      },
-      "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::Implemented",
-      "message": "interface mock mode requires public pure virtual methods",
-      "suggested_action": "exclude this member or provide a hand-authored mock",
-      "command": "",
-      "stderr_summary": "",
-      "validation_artifact_path": ""
-    },
-    {
-      "severity": "warning",
-      "component": "clang",
-      "code": "unsupported_interface_construct",
-      "kind": "interface_construct",
-      "path": "Interface.h",
-      "source_range": {
-        "begin": {
-          "file": "Interface.h",
-          "line": 16,
-          "column": 3
-        },
-        "end": {
-          "file": "Interface.h",
-          "line": 16,
-          "column": 19
-        }
-      },
-      "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::NonVirtual",
-      "message": "interface mock mode requires public pure virtual methods",
-      "suggested_action": "exclude this member or provide a hand-authored mock",
-      "command": "",
-      "stderr_summary": "",
-      "validation_artifact_path": ""
-    },
-    {
-      "severity": "warning",
-      "component": "clang",
-      "code": "unsupported_interface_construct",
-      "kind": "interface_construct",
-      "path": "Interface.h",
-      "source_range": {
-        "begin": {
-          "file": "Interface.h",
-          "line": 17,
-          "column": 3
-        },
-        "end": {
-          "file": "Interface.h",
-          "line": 17,
-          "column": 26
-        }
-      },
-      "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::StaticCall",
-      "message": "static member function is not part of a pure interface",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
       "stderr_summary": "",
@@ -223,17 +119,17 @@
       "source_header": "Interface.h",
       "parse_mode": "synthetic-tu",
       "generation_mode": "interface-mock",
-      "generated_methods": 1,
-      "unsupported_methods": 7,
-      "unsupported_items": 7,
+      "generated_methods": 2,
+      "unsupported_methods": 3,
+      "unsupported_items": 3,
       "link_ready": false,
       "link_readiness_reasons": [
         "unsupported items remain: interface_construct, non_public_method"
       ],
       "diagnostic_summary": {
-        "total": 7,
+        "total": 3,
         "info": 0,
-        "warnings": 7,
+        "warnings": 3,
         "errors": 0
       }
     }
