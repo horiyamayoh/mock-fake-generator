@@ -33,6 +33,7 @@ namespace mockfakegen
 	{
 		std::string qualified_name;
 		std::filesystem::path source_header;
+		std::filesystem::path compiler;
 		std::vector<std::string> args;
 	};
 

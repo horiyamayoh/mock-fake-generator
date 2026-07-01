@@ -559,6 +559,93 @@ namespace
 		Expect(std::filesystem::exists(output_dir / "FakeB.cpp"), "B fake should be published");
 	}
 
+	void CompileValidationUsesCompileDatabaseCompiler(const std::filesystem::path& temp_root)
+	{
+#if defined(__unix__)
+		const auto product_root = temp_root / "compile-db-compiler-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "compile-db-compiler-build";
+		const auto output_dir = temp_root / "compile-db-compiler-generated";
+		const auto wrapper_dir = temp_root / "compile-db-compiler-wrappers";
+		const auto good_compiler = wrapper_dir / "compile-db-cxx.sh";
+		const auto bad_compiler = wrapper_dir / "default-cxx-should-not-run.sh";
+		WriteText(good_compiler,
+				  std::string("#!/bin/sh\nexec ") + ShellQuote(MOCKFAKEGEN_CXX_COMPILER) +
+					  " \"$@\"\n");
+		WriteText(bad_compiler,
+				  "#!/bin/sh\n"
+				  "echo default validation compiler should not run >&2\n"
+				  "exit 97\n");
+		std::filesystem::permissions(good_compiler,
+									 std::filesystem::perms::owner_read |
+										 std::filesystem::perms::owner_write |
+										 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::replace);
+		std::filesystem::permissions(bad_compiler,
+									 std::filesystem::perms::owner_read |
+										 std::filesystem::perms::owner_write |
+										 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::replace);
+		WriteText(include_dir / "CompilerCompat.h",
+				  "#pragma once\n"
+				  "#ifndef COMPAT_COMPILER_FLAG\n"
+				  "#error expected compile database compiler arguments\n"
+				  "#endif\n"
+				  "class CompilerCompat {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		const auto source = source_dir / "CompilerCompat.cpp";
+		WriteText(source, "#include \"CompilerCompat.h\"\n");
+		const auto command = good_compiler.string() + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -DCOMPAT_COMPILER_FLAG -c " +
+			ShellQuote(source.string()) + " -o compiler_compat.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		setenv("MOCKFAKEGEN_CXX_COMPILER", bad_compiler.c_str(), 1);
+		const auto result = RunMockfakegen(temp_root, args, "compile_db_validation_compiler");
+		setenv("MOCKFAKEGEN_CXX_COMPILER", MOCKFAKEGEN_CXX_COMPILER, 1);
+
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "validation should use compile DB compiler");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "compile DB compiler validation should run compile commands");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "compile DB compiler validation should not produce validation errors");
+		Expect(!Contains(stderr_text, "default validation compiler should not run"),
+			   "default validation compiler wrapper should not execute");
+		Expect(std::filesystem::exists(output_dir / "FakeCompilerCompat.cpp"),
+			   "compile DB compiler fake should be published");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, good_compiler.generic_string()),
+			   "manifest validation commands should use compile DB compiler");
+		Expect(!Contains(manifest, bad_compiler.generic_string()),
+			   "manifest validation commands should not use default compiler");
+#else
+		(void)temp_root;
+#endif
+	}
+
 	void CompileValidationAcceptsDeclaratorAwareTypes(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "complex-types-product";
@@ -1945,6 +2032,7 @@ int main()
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);
+	CompileValidationUsesCompileDatabaseCompiler(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
 	GeneratedNamesAvoidProductScopeCollisions(temp_root);

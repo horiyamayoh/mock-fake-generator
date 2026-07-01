@@ -28,6 +28,7 @@ namespace mockfakegen
 		{
 			std::filesystem::path source_path;
 			std::filesystem::path command_directory;
+			std::filesystem::path compiler;
 			std::vector<std::string> compile_args;
 			std::vector<std::string> tool_args;
 			std::string parse_command;
@@ -203,6 +204,24 @@ namespace mockfakegen
 				return ApplyPathMaps(path, path_maps);
 			}
 			return AbsoluteNormalized(CommandDirectory(command, path_maps) / path);
+		}
+
+		[[nodiscard]] std::filesystem::path
+		CommandCompilerPath(const clang::tooling::CompileCommand& command,
+							const std::vector<PathMapEntry>& path_maps)
+		{
+			auto compiler = command.CommandLine.empty()
+				? std::filesystem::path("clang++")
+				: std::filesystem::path(command.CommandLine.front());
+			if (compiler.empty() || compiler.parent_path().empty())
+			{
+				return compiler;
+			}
+			if (compiler.is_absolute())
+			{
+				return ApplyPathMaps(compiler, path_maps);
+			}
+			return AbsoluteNormalized(CommandDirectory(command, path_maps) / compiler);
 		}
 
 		[[nodiscard]] std::string JoinCommand(const std::filesystem::path& directory,
@@ -530,9 +549,8 @@ namespace mockfakegen
 			result.compile_args = SanitizeCompileCommandArgs(command, true, options.path_maps);
 			AppendExtraCompilerArgs(result.tool_args, options);
 			AppendExtraCompilerArgs(result.compile_args, options);
-			const auto executable = command.CommandLine.empty()
-				? std::filesystem::path("clang++")
-				: std::filesystem::path(command.CommandLine.front());
+			const auto executable = CommandCompilerPath(command, options.path_maps);
+			result.compiler = executable;
 			result.parse_command = JoinCommand(
 				result.command_directory, executable, result.tool_args, result.source_path);
 
@@ -773,6 +791,7 @@ namespace mockfakegen
 					result.validation_arg_sets.push_back(GeneratedSourceCompileArgs{
 						.qualified_name = class_model.qualified_name,
 						.source_header = class_model.source_header.include_spelling,
+						.compiler = attempt.compiler,
 						.args = attempt.compile_args,
 					});
 					result.project.classes.push_back(std::move(class_model));
@@ -997,6 +1016,7 @@ namespace mockfakegen
 						.header = failed_header,
 						.mode = HeaderParseMode::RealTu,
 						.translation_unit = parsed.source_path,
+						.compiler = parsed.compiler,
 						.compile_args = parsed.compile_args,
 						.parse_command = parsed.parse_command,
 						.success = false,
@@ -1038,6 +1058,7 @@ namespace mockfakegen
 					.header = real_header,
 					.mode = HeaderParseMode::RealTu,
 					.translation_unit = parsed.source_path,
+					.compiler = parsed.compiler,
 					.compile_args = parsed.compile_args,
 					.parse_command = parsed.parse_command,
 					.success = true,
@@ -1070,6 +1091,7 @@ namespace mockfakegen
 				.header = synthetic_header,
 				.mode = HeaderParseMode::SyntheticTu,
 				.translation_unit = {},
+				.compiler = {},
 				.compile_args = synthetic.compile_args,
 				.parse_command = "synthetic-tu " + synthetic.synthetic_code,
 				.success = synthetic.success,

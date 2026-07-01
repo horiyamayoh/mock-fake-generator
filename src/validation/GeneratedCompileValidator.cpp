@@ -593,14 +593,37 @@ namespace mockfakegen
 			return options.extra_args;
 		}
 
+		[[nodiscard]] std::filesystem::path
+		ValidationCompilerForFile(const GeneratedCompileValidationOptions& options,
+								  const GeneratedFile& file)
+		{
+			if (!file.source_class.has_value())
+			{
+				return options.compiler;
+			}
+			for (const auto& source_args : options.source_args)
+			{
+				if (source_args.qualified_name == file.source_class->qualified_name &&
+					source_args.source_header == file.source_class->source_header &&
+					!source_args.compiler.empty())
+				{
+					return source_args.compiler;
+				}
+			}
+			return options.compiler;
+		}
+
 		[[nodiscard]] std::vector<std::string>
 		BuildCompileCommandArguments(const GeneratedCompileValidationOptions& options,
 									 const std::filesystem::path& generated_root,
 									 const std::filesystem::path& source_path,
 									 const std::filesystem::path& object_path,
-									 std::span<const std::string> extra_args)
+									 std::span<const std::string> extra_args,
+									 const std::filesystem::path& compiler)
 		{
-			auto arguments = BaseCompileArguments(options, generated_root, extra_args);
+			auto command_options = options;
+			command_options.compiler = compiler;
+			auto arguments = BaseCompileArguments(command_options, generated_root, extra_args);
 			if (options.mode == ValidationMode::Syntax)
 			{
 				arguments.push_back("-fsyntax-only");
@@ -679,7 +702,8 @@ namespace mockfakegen
 							   const std::filesystem::path& source_path,
 							   const std::filesystem::path& object_path,
 							   const std::filesystem::path& artifact_path,
-							   std::span<const std::string> extra_args)
+							   std::span<const std::string> extra_args,
+							   const std::filesystem::path& compiler)
 		{
 			if (options.mode != ValidationMode::Syntax)
 			{
@@ -699,7 +723,7 @@ namespace mockfakegen
 			}
 
 			const auto arguments = BuildCompileCommandArguments(
-				options, generated_root, source_path, object_path, extra_args);
+				options, generated_root, source_path, object_path, extra_args, compiler);
 			const auto command = BuildCommand(arguments);
 			const auto process = RunCommand(arguments, options.command_timeout);
 			result.commands.push_back(GeneratedCompileCommandResult{
@@ -955,7 +979,8 @@ namespace mockfakegen
 							  smoke_source,
 							  object_path,
 							  artifact_path,
-							  ValidationArgsForFile(options, file));
+							  ValidationArgsForFile(options, file),
+							  ValidationCompilerForFile(options, file));
 			if (options.mode != ValidationMode::Syntax)
 			{
 				object_paths.push_back(object_path);
@@ -982,7 +1007,8 @@ namespace mockfakegen
 							  smoke_source,
 							  object_path,
 							  artifact_path,
-							  options.extra_args);
+							  options.extra_args,
+							  options.compiler);
 			object_paths.push_back(object_path);
 		}
 
@@ -1003,7 +1029,8 @@ namespace mockfakegen
 							  source_path,
 							  object_path,
 							  artifact_path,
-							  ValidationArgsForFile(options, file));
+							  ValidationArgsForFile(options, file),
+							  ValidationCompilerForFile(options, file));
 			if (options.mode != ValidationMode::Syntax)
 			{
 				object_paths.push_back(object_path);

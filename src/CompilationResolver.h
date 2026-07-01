@@ -31,6 +31,7 @@ namespace mockfakegen
 		HeaderModel header;
 		HeaderParseMode mode = HeaderParseMode::SyntheticTu;
 		std::filesystem::path translation_unit;
+		std::filesystem::path compiler;
 		std::vector<std::string> compile_args;
 		std::string parse_command;
 		bool success = false;
