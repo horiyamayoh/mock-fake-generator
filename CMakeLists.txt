@@ -141,6 +141,7 @@ add_library(
 		src/model/ProjectModel.cpp
 		src/output/OutputWriter.cpp
 		src/runtime_template/RuntimeTemplate.cpp
+		src/Runner.cpp
 		src/support/CliSupport.cpp
 		src/validation/GeneratedCompileValidator.cpp
 		src/validation/GeneratedOutputCheck.cpp
@@ -234,6 +235,27 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_config_cli_test)
 
 	add_test(NAME mockfakegen_config_cli_test COMMAND mockfakegen_config_cli_test)
+
+	add_executable(mockfakegen_cli_e2e_test tests/cli/cli_e2e_test.cpp)
+	target_compile_definitions(
+		mockfakegen_cli_e2e_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+			MOCKFAKEGEN_EXECUTABLE="$<TARGET_FILE:mockfakegen>"
+			MOCKFAKEGEN_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
+			MOCKFAKEGEN_GMOCK_INCLUDE_DIRS="${MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS_TEXT}"
+	)
+	target_compile_features(mockfakegen_cli_e2e_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_cli_e2e_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_cli_e2e_test)
+	mockfakegen_apply_sanitizers(mockfakegen_cli_e2e_test)
+	add_dependencies(mockfakegen_cli_e2e_test mockfakegen)
+
+	add_test(NAME mockfakegen_cli_e2e_test COMMAND mockfakegen_cli_e2e_test)
 
 	add_executable(mockfakegen_clang_cmake_smoke tests/clang/clang_cmake_smoke.cpp)
 	target_link_libraries(mockfakegen_clang_cmake_smoke PRIVATE mockfakegen_clang)

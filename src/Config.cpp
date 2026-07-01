@@ -822,23 +822,4 @@ namespace mockfakegen
 		}
 	}
 
-	int RunCli(int argc, const char* const* argv, std::ostream& out, std::ostream& err)
-	{
-		const auto result = ParseConfigFromArgv(argc, argv);
-		if (result.help_requested)
-		{
-			out << BuildUsage(result.program_name);
-			return result.errors.empty() ? 0 : 2;
-		}
-
-		if (!result.errors.empty())
-		{
-			PrintConfigErrors(err, result.errors);
-			err << '\n' << BuildUsage(result.program_name);
-			return 2;
-		}
-
-		out << "mockfakegen: configuration resolved\n";
-		return 0;
-	}
 } // namespace mockfakegen
