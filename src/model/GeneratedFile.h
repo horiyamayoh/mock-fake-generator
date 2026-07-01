@@ -29,6 +29,13 @@ namespace mockfakegen
 		bool link_ready = true;
 	};
 
+	struct GeneratedSourceCompileArgs
+	{
+		std::string qualified_name;
+		std::filesystem::path source_header;
+		std::vector<std::string> args;
+	};
+
 	struct GeneratedFile
 	{
 		std::filesystem::path relative_path;

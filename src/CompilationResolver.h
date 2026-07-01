@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "clang/SyntheticTuParser.h"
+#include "model/GeneratedFile.h"
 #include "model/ProjectModel.h"
 
 namespace mockfakegen
@@ -66,6 +67,7 @@ namespace mockfakegen
 		ProjectModel project;
 		std::vector<HeaderParseAttempt> parse_attempts;
 		std::vector<std::string> validation_args;
+		std::vector<GeneratedSourceCompileArgs> validation_arg_sets;
 		std::vector<CompilationResolverDiagnostic> diagnostics;
 
 		[[nodiscard]] bool ok() const noexcept;

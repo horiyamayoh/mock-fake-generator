@@ -490,26 +490,6 @@ namespace mockfakegen
 			return cxx_files;
 		}
 
-		[[nodiscard]] std::vector<std::filesystem::path>
-		MockHeaders(std::span<const GeneratedFile> files)
-		{
-			std::vector<std::filesystem::path> headers;
-			for (const auto& file : files)
-			{
-				if (file.kind == GeneratedFileKind::MockHeader)
-				{
-					headers.push_back(file.relative_path);
-				}
-			}
-			std::sort(headers.begin(),
-					  headers.end(),
-					  [](const auto& lhs, const auto& rhs)
-					  {
-						  return lhs.generic_string() < rhs.generic_string();
-					  });
-			return headers;
-		}
-
 		[[nodiscard]] std::filesystem::path
 		FakeObjectPath(const std::filesystem::path& tree_root,
 					   const std::filesystem::path& fake_relative_path)
@@ -519,35 +499,46 @@ namespace mockfakegen
 			return tree_root / object_relative_path;
 		}
 
-		[[nodiscard]] bool HasAllMocksHeader(std::span<const GeneratedFile> files)
+		[[nodiscard]] std::filesystem::path
+		MockHeaderSmokeSourcePath(const std::filesystem::path& tree_root,
+								  const std::filesystem::path& mock_relative_path)
 		{
-			return std::any_of(files.begin(),
-							   files.end(),
-							   [](const auto& file)
-							   {
-								   return file.kind == GeneratedFileKind::AllMocksHeader;
-							   });
+			auto source_relative_path =
+				std::filesystem::path("mock_header_smoke") / mock_relative_path;
+			source_relative_path.replace_extension(".cpp");
+			return tree_root / source_relative_path;
 		}
 
-		[[nodiscard]] std::string BuildMockHeadersSmokeSource(std::span<const GeneratedFile> files)
+		[[nodiscard]] std::filesystem::path
+		MockHeaderObjectPath(const std::filesystem::path& tree_root,
+							 const std::filesystem::path& mock_relative_path)
+		{
+			auto object_relative_path =
+				std::filesystem::path("objects/mock_headers") / mock_relative_path;
+			object_relative_path.replace_extension(".o");
+			return tree_root / object_relative_path;
+		}
+
+		[[nodiscard]] std::string BuildMockHeaderSmokeSource(const GeneratedFile& file)
 		{
 			std::ostringstream out;
-			if (HasAllMocksHeader(files))
-			{
-				out << "#include \"AllMocks.h\"\n";
-			}
-			for (const auto& header : MockHeaders(files))
-			{
-				out << "#include \"" << header.generic_string() << "\"\n";
-			}
-			out << "\nint main()\n"
+			out << "#include \"" << file.relative_path.generic_string() << "\"\n"
+				<< "\nnamespace\n"
 				<< "{\n"
-				<< "\treturn 0;\n"
-				<< "}\n";
+				<< "\tvoid mockfakegen_validate_mock_header() {}\n"
+				<< "} // namespace\n";
 			return out.str();
 		}
 
-		[[nodiscard]] bool HasStdArg(const std::vector<std::string>& args)
+		[[nodiscard]] std::string BuildLinkMainSmokeSource()
+		{
+			return "int main()\n"
+				   "{\n"
+				   "\treturn 0;\n"
+				   "}\n";
+		}
+
+		[[nodiscard]] bool HasStdArg(std::span<const std::string> args)
 		{
 			return std::any_of(args.begin(),
 							   args.end(),
@@ -559,12 +550,13 @@ namespace mockfakegen
 
 		[[nodiscard]] std::vector<std::string>
 		BaseCompileArguments(const GeneratedCompileValidationOptions& options,
-							 const std::filesystem::path& generated_root)
+							 const std::filesystem::path& generated_root,
+							 std::span<const std::string> extra_args)
 		{
 			std::vector<std::string> arguments;
 			arguments.push_back(options.compiler.empty() ? std::string("c++")
 														 : options.compiler.string());
-			if (!HasStdArg(options.extra_args))
+			if (!HasStdArg(extra_args))
 			{
 				arguments.push_back("-std=c++23");
 			}
@@ -575,20 +567,40 @@ namespace mockfakegen
 				arguments.push_back("-I");
 				arguments.push_back(include_dir.string());
 			}
-			for (const auto& extra_arg : options.extra_args)
+			for (const auto& extra_arg : extra_args)
 			{
 				arguments.push_back(extra_arg);
 			}
 			return arguments;
 		}
 
+		[[nodiscard]] std::span<const std::string>
+		ValidationArgsForFile(const GeneratedCompileValidationOptions& options,
+							  const GeneratedFile& file)
+		{
+			if (!file.source_class.has_value())
+			{
+				return options.extra_args;
+			}
+			for (const auto& source_args : options.source_args)
+			{
+				if (source_args.qualified_name == file.source_class->qualified_name &&
+					source_args.source_header == file.source_class->source_header)
+				{
+					return source_args.args;
+				}
+			}
+			return options.extra_args;
+		}
+
 		[[nodiscard]] std::vector<std::string>
 		BuildCompileCommandArguments(const GeneratedCompileValidationOptions& options,
 									 const std::filesystem::path& generated_root,
 									 const std::filesystem::path& source_path,
-									 const std::filesystem::path& object_path)
+									 const std::filesystem::path& object_path,
+									 std::span<const std::string> extra_args)
 		{
-			auto arguments = BaseCompileArguments(options, generated_root);
+			auto arguments = BaseCompileArguments(options, generated_root, extra_args);
 			if (options.mode == ValidationMode::Syntax)
 			{
 				arguments.push_back("-fsyntax-only");
@@ -666,7 +678,8 @@ namespace mockfakegen
 							   const std::filesystem::path& generated_root,
 							   const std::filesystem::path& source_path,
 							   const std::filesystem::path& object_path,
-							   const std::filesystem::path& artifact_path)
+							   const std::filesystem::path& artifact_path,
+							   std::span<const std::string> extra_args)
 		{
 			if (options.mode != ValidationMode::Syntax)
 			{
@@ -685,8 +698,8 @@ namespace mockfakegen
 				}
 			}
 
-			const auto arguments =
-				BuildCompileCommandArguments(options, generated_root, source_path, object_path);
+			const auto arguments = BuildCompileCommandArguments(
+				options, generated_root, source_path, object_path, extra_args);
 			const auto command = BuildCommand(arguments);
 			const auto process = RunCommand(arguments, options.command_timeout);
 			result.commands.push_back(GeneratedCompileCommandResult{
@@ -726,7 +739,7 @@ namespace mockfakegen
 								  std::span<const std::filesystem::path> object_paths,
 								  const std::filesystem::path& executable_path)
 		{
-			auto arguments = BaseCompileArguments(options, generated_root);
+			auto arguments = BaseCompileArguments(options, generated_root, options.extra_args);
 			for (const auto& object_path : object_paths)
 			{
 				arguments.push_back(object_path.string());
@@ -882,18 +895,6 @@ namespace mockfakegen
 			}
 		}
 
-		const auto smoke_source = tree.root / "mock_headers_smoke.cpp";
-		if (!WriteText(smoke_source, BuildMockHeadersSmokeSource(staged_files)))
-		{
-			AddDiagnostic(result,
-						  StageForMode(options.mode),
-						  smoke_source,
-						  artifact_path,
-						  "failed to write mock header smoke source.");
-			tree.keep = options.keep_failed_artifacts;
-			return result;
-		}
-
 		const auto& sorted_files = staged_files;
 		std::map<std::string, std::filesystem::path> fake_object_paths;
 		std::map<std::string, std::filesystem::path> object_sources_by_path;
@@ -927,16 +928,62 @@ namespace mockfakegen
 			}
 		}
 
-		RunCompileCommand(result,
-						  options,
-						  generated_root,
-						  smoke_source,
-						  tree.root / "mock_headers_smoke.o",
-						  artifact_path);
 		std::vector<std::filesystem::path> object_paths;
-		if (options.mode != ValidationMode::Syntax)
+		for (const auto& file : sorted_files)
 		{
-			object_paths.push_back(tree.root / "mock_headers_smoke.o");
+			if (file.kind != GeneratedFileKind::MockHeader)
+			{
+				continue;
+			}
+
+			const auto smoke_source = MockHeaderSmokeSourcePath(tree.root, file.relative_path);
+			if (!WriteText(smoke_source, BuildMockHeaderSmokeSource(file)))
+			{
+				AddDiagnostic(result,
+							  StageForMode(options.mode),
+							  smoke_source,
+							  artifact_path,
+							  "failed to write mock header smoke source.");
+				tree.keep = options.keep_failed_artifacts;
+				return result;
+			}
+
+			const auto object_path = MockHeaderObjectPath(tree.root, file.relative_path);
+			RunCompileCommand(result,
+							  options,
+							  generated_root,
+							  smoke_source,
+							  object_path,
+							  artifact_path,
+							  ValidationArgsForFile(options, file));
+			if (options.mode != ValidationMode::Syntax)
+			{
+				object_paths.push_back(object_path);
+			}
+		}
+
+		if (options.mode == ValidationMode::Link && options.link_files.empty())
+		{
+			const auto smoke_source = tree.root / "link_main_smoke.cpp";
+			if (!WriteText(smoke_source, BuildLinkMainSmokeSource()))
+			{
+				AddDiagnostic(result,
+							  GeneratedCompileValidationStage::Compile,
+							  smoke_source,
+							  artifact_path,
+							  "failed to write link main smoke source.");
+				tree.keep = options.keep_failed_artifacts;
+				return result;
+			}
+			const auto object_path = tree.root / "objects/link_main_smoke.o";
+			RunCompileCommand(result,
+							  options,
+							  generated_root,
+							  smoke_source,
+							  object_path,
+							  artifact_path,
+							  options.extra_args);
+			object_paths.push_back(object_path);
 		}
 
 		for (const auto& file : sorted_files)
@@ -950,8 +997,13 @@ namespace mockfakegen
 			const auto object_path = options.mode == ValidationMode::Syntax
 				? tree.root / (file.relative_path.stem().string() + ".o")
 				: fake_object_paths.at(file.relative_path.generic_string());
-			RunCompileCommand(
-				result, options, generated_root, source_path, object_path, artifact_path);
+			RunCompileCommand(result,
+							  options,
+							  generated_root,
+							  source_path,
+							  object_path,
+							  artifact_path,
+							  ValidationArgsForFile(options, file));
 			if (options.mode != ValidationMode::Syntax)
 			{
 				object_paths.push_back(object_path);

@@ -485,6 +485,80 @@ namespace
 			   "compile DB product mock should be generated");
 	}
 
+	void CompileValidationKeepsPerTuArgsSeparate(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "per-tu-args-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "per-tu-args-build";
+		const auto output_dir = temp_root / "per-tu-args-generated";
+		WriteText(include_dir / "A.h",
+				  "#pragma once\n"
+				  "#ifdef B_MODE\n"
+				  "#error A.h must not see B_MODE\n"
+				  "#endif\n"
+				  "class A {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		WriteText(include_dir / "B.h",
+				  "#pragma once\n"
+				  "#ifdef A_MODE\n"
+				  "#error B.h must not see A_MODE\n"
+				  "#endif\n"
+				  "class B {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		const auto source_a = source_dir / "A.cpp";
+		const auto source_b = source_dir / "B.cpp";
+		WriteText(source_a, "#include \"A.h\"\n");
+		WriteText(source_b, "#include \"B.h\"\n");
+		const auto command_a = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -DA_MODE -c " + ShellQuote(source_a.string()) +
+			" -o a.o";
+		const auto command_b = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -DB_MODE -c " + ShellQuote(source_b.string()) +
+			" -o b.o";
+		const auto json = std::string("[\n") + "  {\n" +
+			"    \"directory\": " + JsonString(product_root.string()) + ",\n" +
+			"    \"command\": " + JsonString(command_a) + ",\n" +
+			"    \"file\": " + JsonString(source_a.string()) + "\n" + "  },\n" + "  {\n" +
+			"    \"directory\": " + JsonString(product_root.string()) + ",\n" +
+			"    \"command\": " + JsonString(command_b) + ",\n" +
+			"    \"file\": " + JsonString(source_b.string()) + "\n" + "  }\n" + "]\n";
+		WriteText(build_dir / "compile_commands.json", json);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "per_tu_validation_args");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "per-TU validation args should not be globally unioned");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 4"),
+			   "per-TU validation should compile each mock header and each fake source");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "per-TU validation should not produce false validation errors");
+		Expect(std::filesystem::exists(output_dir / "FakeA.cpp"), "A fake should be published");
+		Expect(std::filesystem::exists(output_dir / "FakeB.cpp"), "B fake should be published");
+	}
+
 	void CompileValidationAcceptsDeclaratorAwareTypes(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "complex-types-product";
@@ -1870,6 +1944,7 @@ int main()
 	GeneratesAndValidatesFromRealCli(temp_root, product_dir, build_dir);
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
+	CompileValidationKeepsPerTuArgsSeparate(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
 	GeneratedNamesAvoidProductScopeCollisions(temp_root);

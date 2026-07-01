@@ -26,6 +26,7 @@ namespace mockfakegen
 		std::vector<std::filesystem::path> include_dirs;
 		std::vector<std::filesystem::path> link_files;
 		std::vector<std::string> extra_args;
+		std::vector<GeneratedSourceCompileArgs> source_args;
 		std::chrono::milliseconds command_timeout = std::chrono::seconds(30);
 		bool keep_failed_artifacts = false;
 		std::filesystem::path artifact_dir;

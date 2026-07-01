@@ -770,6 +770,11 @@ namespace mockfakegen
 
 				if (inserted)
 				{
+					result.validation_arg_sets.push_back(GeneratedSourceCompileArgs{
+						.qualified_name = class_model.qualified_name,
+						.source_header = class_model.source_header.include_spelling,
+						.args = attempt.compile_args,
+					});
 					result.project.classes.push_back(std::move(class_model));
 					continue;
 				}

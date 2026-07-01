@@ -262,6 +262,7 @@ namespace
 			.include_dirs = include_dirs,
 			.link_files = GMockLinkFiles(),
 			.extra_args = {},
+			.source_args = {},
 			.command_timeout = std::chrono::seconds(30),
 			.keep_failed_artifacts = false,
 			.artifact_dir = {},
