@@ -14,6 +14,13 @@ Fallback policy: `abort`.
 
 Do not link generated `FakeXXX.cpp` files together with the corresponding product `.cpp` files in the same test target. Link each generated fake source instead of the product implementation it replaces.
 
+Compile validation checks generated headers and fake sources as separate translation units; it does not prove that your test target performs correct link substitution. Use `--validate link` to link a smoke executable with generated fakes and gMock where practical.
+
+Usable fake sources for build-system integration:
+
+- `FakeAlpha.cpp`
+- `FakeBeta.cpp`
+
 ## Generated Classes
 
 | Class | Source header | Parse mode | Generation mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |

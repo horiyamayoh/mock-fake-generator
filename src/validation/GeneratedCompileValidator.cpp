@@ -438,6 +438,28 @@ namespace mockfakegen
 			return "generated output compile validation failed.";
 		}
 
+		[[nodiscard]] bool LooksLikeDuplicateSymbol(std::string_view stderr_summary)
+		{
+			return stderr_summary.find("multiple definition") != std::string_view::npos ||
+				stderr_summary.find("duplicate symbol") != std::string_view::npos ||
+				stderr_summary.find("already defined") != std::string_view::npos;
+		}
+
+		[[nodiscard]] std::string LinkFailureMessage(const ProcessResult& process,
+													 std::string_view stderr_summary)
+		{
+			if (process.timed_out)
+			{
+				return "generated output link validation timed out.";
+			}
+			if (LooksLikeDuplicateSymbol(stderr_summary))
+			{
+				return "generated output link validation failed; do not link product .cpp files "
+					   "together with generated FakeXXX.cpp files.";
+			}
+			return "generated output link validation failed.";
+		}
+
 		void RunCompileCommand(GeneratedCompileValidationResult& result,
 							   const GeneratedCompileValidationOptions& options,
 							   const std::filesystem::path& generated_root,
@@ -461,6 +483,70 @@ namespace mockfakegen
 							  source_path,
 							  artifact_path,
 							  FailureMessage(process, summary),
+							  command,
+							  summary);
+			}
+		}
+
+		[[nodiscard]] bool HasPthreadArg(const std::vector<std::string>& args)
+		{
+			return std::any_of(args.begin(),
+							   args.end(),
+							   [](const auto& arg)
+							   {
+								   return arg == "-pthread" || arg == "-lpthread";
+							   });
+		}
+
+		[[nodiscard]] std::vector<std::string>
+		BuildLinkCommandArguments(const GeneratedCompileValidationOptions& options,
+								  const std::filesystem::path& generated_root,
+								  std::span<const std::filesystem::path> object_paths,
+								  const std::filesystem::path& executable_path)
+		{
+			auto arguments = BaseCompileArguments(options, generated_root);
+			for (const auto& object_path : object_paths)
+			{
+				arguments.push_back(object_path.string());
+			}
+			for (const auto& link_file : options.link_files)
+			{
+				arguments.push_back(link_file.string());
+			}
+#if defined(__unix__)
+			if (!HasPthreadArg(arguments))
+			{
+				arguments.push_back("-pthread");
+			}
+#endif
+			arguments.push_back("-o");
+			arguments.push_back(executable_path.string());
+			return arguments;
+		}
+
+		void RunLinkCommand(GeneratedCompileValidationResult& result,
+							const GeneratedCompileValidationOptions& options,
+							const std::filesystem::path& generated_root,
+							std::span<const std::filesystem::path> object_paths,
+							const std::filesystem::path& executable_path,
+							const std::filesystem::path& artifact_path)
+		{
+			const auto arguments =
+				BuildLinkCommandArguments(options, generated_root, object_paths, executable_path);
+			const auto command = BuildCommand(arguments);
+			const auto process = RunCommand(arguments, options.command_timeout);
+			result.commands.push_back(GeneratedCompileCommandResult{
+				.source_path = executable_path,
+				.command = command,
+				.exit_code = process.exit_code,
+			});
+			if (process.exit_code != 0)
+			{
+				const auto summary = StderrSummary(process.output);
+				AddDiagnostic(result,
+							  executable_path,
+							  artifact_path,
+							  LinkFailureMessage(process, summary),
 							  command,
 							  summary);
 			}
@@ -523,6 +609,11 @@ namespace mockfakegen
 						  smoke_source,
 						  tree.root / "mock_headers_smoke.o",
 						  artifact_path);
+		std::vector<std::filesystem::path> object_paths;
+		if (options.mode != ValidationMode::Syntax)
+		{
+			object_paths.push_back(tree.root / "mock_headers_smoke.o");
+		}
 
 		const auto sorted_files = CxxFiles(files);
 		for (const auto& file : sorted_files)
@@ -536,6 +627,20 @@ namespace mockfakegen
 			const auto object_path = tree.root / (file.relative_path.stem().string() + ".o");
 			RunCompileCommand(
 				result, options, generated_root, source_path, object_path, artifact_path);
+			if (options.mode != ValidationMode::Syntax)
+			{
+				object_paths.push_back(object_path);
+			}
+		}
+
+		if (options.mode == ValidationMode::Link && result.ok())
+		{
+			RunLinkCommand(result,
+						   options,
+						   generated_root,
+						   object_paths,
+						   tree.root / "generated_link_smoke",
+						   artifact_path);
 		}
 
 		tree.keep = options.keep_failed_artifacts && !result.ok();

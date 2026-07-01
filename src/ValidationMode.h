@@ -10,6 +10,7 @@ namespace mockfakegen
 		None,
 		Syntax,
 		Compile,
+		Link,
 	};
 
 	[[nodiscard]] std::string_view ToString(ValidationMode mode) noexcept;

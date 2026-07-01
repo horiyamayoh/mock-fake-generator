@@ -12,6 +12,8 @@ namespace mockfakegen
 				return "syntax";
 			case ValidationMode::Compile:
 				return "compile";
+			case ValidationMode::Link:
+				return "link";
 		}
 
 		return "unknown";
@@ -30,6 +32,10 @@ namespace mockfakegen
 		if (text == "compile")
 		{
 			return ValidationMode::Compile;
+		}
+		if (text == "link")
+		{
+			return ValidationMode::Link;
 		}
 		return std::nullopt;
 	}

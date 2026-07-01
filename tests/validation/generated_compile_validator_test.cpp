@@ -107,6 +107,17 @@ namespace
 		return SplitPaths(MOCKFAKEGEN_GMOCK_INCLUDE_DIRS);
 	}
 
+	[[nodiscard]] std::vector<std::filesystem::path> GMockLinkFiles()
+	{
+		return SplitPaths(MOCKFAKEGEN_GMOCK_LINK_FILES);
+	}
+
+	[[nodiscard]] std::filesystem::path HogeProductSource()
+	{
+		return std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) /
+			"tests/fixtures/hoge/product/Hoge.cpp";
+	}
+
 	[[nodiscard]] mockfakegen::GeneratedFile ReadGeneratedFile(const std::filesystem::path& dir,
 															   std::string_view relative_path,
 															   mockfakegen::GeneratedFileKind kind)
@@ -192,6 +203,7 @@ namespace
 			.mode = mockfakegen::ValidationMode::Compile,
 			.compiler = MOCKFAKEGEN_CXX_COMPILER,
 			.include_dirs = include_dirs,
+			.link_files = GMockLinkFiles(),
 			.extra_args = {},
 			.command_timeout = std::chrono::seconds(30),
 			.keep_failed_artifacts = false,
@@ -224,6 +236,44 @@ namespace
 		Expect(result.ok(), "generated shared-owner output should compile");
 		Expect(!result.skipped, "shared-owner compile validation should not be skipped");
 		Expect(result.commands.size() == 2U, "mock header smoke and fake source should compile");
+	}
+
+	void LinkValidationBuildsSmokeExecutable()
+	{
+		auto options = CompileOptions();
+		options.mode = mockfakegen::ValidationMode::Link;
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(result.ok(), "link validation should link generated fakes with gMock");
+		Expect(!result.skipped, "link validation should not be skipped");
+		Expect(result.commands.size() == 3U,
+			   "link validation should compile smoke, compile fake, and link executable");
+		Expect(Contains(result.commands.back().command, "generated_link_smoke"),
+			   "link validation command should produce a smoke executable");
+		Expect(!Contains(result.commands.back().command, "third_party/ket"),
+			   "link validation should not pass ket include paths");
+		Expect(!Contains(result.commands.back().command, "mockfakegen_ket"),
+			   "link validation should not link mockfakegen_ket");
+	}
+
+	void LinkValidationReportsDuplicateProductImplementation()
+	{
+		auto options = CompileOptions();
+		options.mode = mockfakegen::ValidationMode::Link;
+		options.link_files.push_back(HogeProductSource());
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(!result.ok(), "linking product implementation with generated fake should fail");
+		Expect(result.commands.size() == 3U, "duplicate-symbol case should reach the link command");
+		Expect(!result.diagnostics.empty(), "duplicate-symbol link failure should diagnose");
+		Expect(Contains(result.diagnostics[0].message, "do not link product .cpp files"),
+			   "duplicate-symbol diagnostic should explain link substitution boundary");
+		Expect(Contains(result.diagnostics[0].command, HogeProductSource().string()),
+			   "duplicate-symbol diagnostic should keep the product source in the command");
 	}
 
 	void SyntaxValidationUsesSyntaxOnly()
@@ -357,6 +407,8 @@ int main()
 {
 	CompileValidationSucceedsForGeneratedFixture();
 	CompileValidationSucceedsForSharedOwnerGeneratedOutput();
+	LinkValidationBuildsSmokeExecutable();
+	LinkValidationReportsDuplicateProductImplementation();
 	SyntaxValidationUsesSyntaxOnly();
 	NoneValidationSkipsCompiler();
 	CompileValidationReportsCxxFailure();

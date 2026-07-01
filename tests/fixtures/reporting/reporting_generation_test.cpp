@@ -33,6 +33,33 @@ namespace
 		return buffer.str();
 	}
 
+	void WriteText(const std::filesystem::path& path, std::string_view content)
+	{
+		std::filesystem::create_directories(path.parent_path());
+		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		stream << content;
+		stream.close();
+		Expect(stream.good(), "fixture file should be writable");
+	}
+
+	[[nodiscard]] bool UpdateGoldens()
+	{
+		const auto* const value = std::getenv("MOCKFAKEGEN_UPDATE_GOLDENS");
+		return value != nullptr && std::string_view(value) == "1";
+	}
+
+	void ExpectGolden(const std::filesystem::path& path, std::string_view actual)
+	{
+		if (UpdateGoldens())
+		{
+			WriteText(path, actual);
+			return;
+		}
+
+		const auto expected = ReadText(path);
+		mockfakegen_fixture::ExpectGoldenTextEqual(actual, expected, path);
+	}
+
 	[[nodiscard]] std::vector<mockfakegen::ClassModel>
 	ExtractClasses(const std::filesystem::path& product_dir)
 	{
@@ -70,8 +97,7 @@ namespace
 		for (const auto& file : generated)
 		{
 			const auto path = generated_dir / file.relative_path;
-			const auto expected = ReadText(path);
-			mockfakegen_fixture::ExpectGoldenTextEqual(file.content, expected, path);
+			ExpectGolden(path, file.content);
 		}
 	}
 } // namespace

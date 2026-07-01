@@ -49,6 +49,50 @@ format check:
 cmake --build --preset dev --target check-format
 ```
 
+## Link substitution and validation
+
+`FakeXXX.cpp` is intended to replace the corresponding product implementation at link time.
+Do not link a generated `FakeXXX.cpp` and the product `.cpp` that defines the same class
+members into the same test target. That can produce duplicate symbols or accidentally keep the
+product implementation in use.
+
+Generated `CMakeLists.fragment.cmake` exposes:
+
+- `MOCKFAKE_GENERATED_SOURCES`: only link-ready generated fake sources.
+- `MOCKFAKE_GENERATED_INCLUDE_DIR`: the generated include directory.
+
+Use those variables in a test target while excluding the replaced product `.cpp` files:
+
+```cmake
+include(path/to/generated/CMakeLists.fragment.cmake)
+
+add_executable(MyTest
+    MyTest.cpp
+    ${MOCKFAKE_GENERATED_SOURCES}
+)
+
+target_include_directories(MyTest PRIVATE
+    path/to/product/include
+    ${MOCKFAKE_GENERATED_INCLUDE_DIR}
+)
+
+target_link_libraries(MyTest PRIVATE GTest::gmock_main)
+```
+
+`--validate compile` is the default validation mode. It checks generated mock headers and fake
+sources as separate translation units, but it does not prove that the final test target performs
+correct link substitution. Use `--validate link` to additionally link a generated-fake smoke
+executable with gMock where practical. The link mode can diagnose duplicate symbols when both a
+product `.cpp` and generated `FakeXXX.cpp` are present in the validation link inputs.
+
+When invoking the CLI outside this CMake test suite, link validation needs gMock include and link
+artifacts to be discoverable. The environment variables accepted by the validator are `|`-separated:
+
+```sh
+MOCKFAKEGEN_GMOCK_INCLUDE_DIRS=/path/to/googlemock/include\|/path/to/googletest/include
+MOCKFAKEGEN_GMOCK_LINK_FILES=/path/to/libgmock.a\|/path/to/libgtest.a
+```
+
 ## Runtime registry modes
 
 Generated fakes use `MockFakeRuntime.h` to find the active mock for each type.

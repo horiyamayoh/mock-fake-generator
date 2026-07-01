@@ -668,6 +668,22 @@ namespace mockfakegen
 			return count;
 		}
 
+		[[nodiscard]] std::vector<std::string>
+		UsableFakeSources(const std::vector<ClassReportEntry>& entries)
+		{
+			std::vector<std::string> sources;
+			for (const auto& entry : entries)
+			{
+				if (entry.link_ready && !entry.fake_source.empty())
+				{
+					sources.push_back(entry.fake_source);
+				}
+			}
+			std::sort(sources.begin(), sources.end());
+			sources.erase(std::unique(sources.begin(), sources.end()), sources.end());
+			return sources;
+		}
+
 		[[nodiscard]] GenerationReportMetadata
 		DefaultReportMetadata(std::span<const ClassModel> class_models)
 		{
@@ -1468,7 +1484,8 @@ namespace mockfakegen
 		std::ostringstream out;
 		out << "# Link generated FakeXXX.cpp files instead of the corresponding product .cpp "
 			   "files.\n"
-			<< "# Do not link both implementations in the same target.\n\n"
+			<< "# Do not link both implementations in the same target.\n"
+			<< "# Use mockfakegen --validate link when you want a generated-fake link smoke.\n\n"
 			<< "set(MOCKFAKE_GENERATED_SOURCES\n";
 		for (const auto& fake_source : fake_sources)
 		{
@@ -1497,6 +1514,7 @@ namespace mockfakegen
 		const auto component_summaries = SummarizeDiagnosticsByComponent(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(entries);
 		const auto unsupported_items = TotalUnsupportedItems(entries);
+		const auto usable_fake_sources = UsableFakeSources(entries);
 
 		std::ostringstream out;
 		out << "{\n"
@@ -1529,6 +1547,9 @@ namespace mockfakegen
 			<< JsonString(FallbackPolicyName(metadata.fallback_policy)) << ",\n"
 			<< "    \"diagnostics\": " << diagnostic_summary.total << ",\n"
 			<< "    \"validation_commands\": " << metadata.validation_commands.size() << ",\n"
+			<< "    \"usable_fake_sources\": ";
+		WriteJsonStringArray(out, usable_fake_sources, "    ");
+		out << ",\n"
 			<< "    \"diagnostic_summary\": {\n"
 			<< "      \"total\": " << diagnostic_summary.total << ",\n"
 			<< "      \"info\": " << diagnostic_summary.info << ",\n"
@@ -1612,6 +1633,7 @@ namespace mockfakegen
 		const auto diagnostic_summary = SummarizeDiagnostics(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(class_entries);
 		const auto unsupported_items = TotalUnsupportedItems(class_entries);
+		const auto usable_fake_sources = UsableFakeSources(class_entries);
 
 		std::ostringstream out;
 		out << "# mockfakegen generation report\n\n"
@@ -1645,7 +1667,24 @@ namespace mockfakegen
 			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
 			   "product `.cpp` files in the same test target. Link each generated fake "
 			   "source instead of the product implementation it replaces.\n\n"
-			<< "## Generated Classes\n\n"
+			<< "Compile validation checks generated headers and fake sources as separate "
+			   "translation units; it does not prove that your test target performs correct "
+			   "link substitution. Use `--validate link` to link a smoke executable with "
+			   "generated fakes and gMock where practical.\n\n"
+			<< "Usable fake sources for build-system integration:\n\n";
+		if (usable_fake_sources.empty())
+		{
+			out << "- none; no class is link-ready.\n\n";
+		}
+		else
+		{
+			for (const auto& fake_source : usable_fake_sources)
+			{
+				out << "- `" << fake_source << "`\n";
+			}
+			out << '\n';
+		}
+		out << "## Generated Classes\n\n"
 			<< "| Class | Source header | Parse mode | Generation mode | Mock header | Fake source "
 			   "| Link ready | "
 			   "Link-readiness reason | Generated methods | Unsupported items |\n"

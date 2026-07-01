@@ -211,6 +211,18 @@ namespace
 			   "validate should parse none");
 	}
 
+	void ParsesValidateLink()
+	{
+		auto args = ValidArgs();
+		args.push_back("--validate=link");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "validate link config should parse");
+		Expect(result.config->validate == mockfakegen::ValidationMode::Link,
+			   "validate should parse link");
+	}
+
 	void ParsesValidationControls()
 	{
 		auto args = ValidArgs();
@@ -393,14 +405,14 @@ namespace
 	void ReportsInvalidValidate()
 	{
 		auto args = ValidArgs();
-		args.push_back("--validate=link");
+		args.push_back("--validate=object");
 
 		const auto result = mockfakegen::ParseConfig(args);
 
 		Expect(!result.ok(), "invalid validate should fail");
 		Expect(result.errors.size() == 1U, "invalid validate should produce one error");
 		Expect(result.errors[0].option == "--validate", "invalid validate should identify option");
-		Expect(result.errors[0].message == "--validate must be none, syntax, or compile.",
+		Expect(result.errors[0].message == "--validate must be none, syntax, compile, or link.",
 			   "invalid validate diagnostic should be deterministic");
 	}
 
@@ -798,6 +810,7 @@ int main()
 	ParsesEmitCMakeFragmentFalse();
 	ParsesFormatStyleGoogle();
 	ParsesValidateNone();
+	ParsesValidateLink();
 	ParsesValidationControls();
 	ParsesScannerFilters();
 	RejectsInvalidHeaderFilterRegex();

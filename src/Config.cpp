@@ -713,7 +713,7 @@ namespace mockfakegen
 					AddError(result.errors,
 							 ConfigErrorCode::InvalidOptionValue,
 							 kValidateOption,
-							 "--validate must be none, syntax, or compile.");
+							 "--validate must be none, syntax, compile, or link.");
 					continue;
 				}
 
@@ -867,7 +867,7 @@ namespace mockfakegen
 			"  --emit-manifest <bool>  Generate manifest.json when true.\n"
 			"  --emit-cmake-fragment <bool> Generate CMakeLists.fragment.cmake when true.\n"
 			"  --format-style <style>  file, llvm, google, or none.\n"
-			"  --validate <mode>       none, syntax, or compile.\n"
+			"  --validate <mode>       none, syntax, compile, or link.\n"
 			"  --validation-timeout-ms <N> Compiler timeout per validation command.\n"
 			"  --validation-keep-artifacts Keep failed validation files for reproduction.\n"
 			"  --validation-artifact-dir <path> Directory for kept validation artifacts.\n"

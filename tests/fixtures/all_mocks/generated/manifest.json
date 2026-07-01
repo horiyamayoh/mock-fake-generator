@@ -11,6 +11,10 @@
     "fallback_policy": "abort",
     "diagnostics": 0,
     "validation_commands": 0,
+    "usable_fake_sources": [
+      "FakeAlpha.cpp",
+      "FakeBeta.cpp"
+    ],
     "diagnostic_summary": {
       "total": 0,
       "info": 0,

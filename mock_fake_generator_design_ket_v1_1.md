@@ -464,7 +464,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--emit-manifest <bool>` | bool value | `true` | implemented | CodeGenerator / OutputWriter | `true` / `false` 以外 invalid |
 | `--emit-cmake-fragment <bool>` | bool value | `true` | implemented | CodeGenerator | `true` / `false` 以外 invalid |
 | `--format-style <style>` | value | `file` | `file`, `llvm`, `google`, `none` | Formatter | 他値は invalid |
-| `--validate <mode>` | value | `compile` | `none`, `syntax`, `compile` | Validator / Runner | 他値は invalid |
+| `--validate <mode>` | value | `compile` | `none`, `syntax`, `compile`, `link` | Validator / Runner | 他値は invalid |
 | `--jobs <N>` | integer value | CPU 数 | positive integer | scheduler | 完全消費 parse 失敗、0、負数は invalid |
 
 ### 6.4 mode option interaction
@@ -1687,6 +1687,12 @@ CI 差分を安定させるため、以下を守る。
 ```
 
 gMock include path は設定または CMake integration で与える。
+
+`--validate link` は上記 compile validation に加えて、生成 fake object と gMock を使った
+smoke executable をリンクする。これは生成物側のリンク可能性を検証するためのものであり、
+ユーザーの最終テストターゲットの source list を自動検査するものではない。製品 `.cpp` と
+`FakeXXX.cpp` が同じ link input に含まれた場合は duplicate symbol を diagnostic として
+報告する。
 
 ### 21.5 PolicyEngine failure / publication matrix
 

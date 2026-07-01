@@ -184,6 +184,19 @@ namespace mockfakegen
 			return "c++";
 		}
 
+		[[nodiscard]] std::vector<std::filesystem::path> ValidationLinkFiles()
+		{
+			std::vector<std::filesystem::path> link_files;
+			if (const char* const env = std::getenv("MOCKFAKEGEN_GMOCK_LINK_FILES"); env != nullptr)
+			{
+				for (auto path : SplitPathList(env))
+				{
+					AppendUniquePath(link_files, std::move(path));
+				}
+			}
+			return link_files;
+		}
+
 		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const ConfigError& diagnostic)
 		{
 			RunDiagnostic result;
@@ -717,6 +730,7 @@ namespace mockfakegen
 				.mode = config.validate,
 				.compiler = ValidationCompiler(),
 				.include_dirs = ValidationIncludeDirs(config, resolve_result.project.headers),
+				.link_files = ValidationLinkFiles(),
 				.extra_args = resolve_result.validation_args,
 				.command_timeout = config.validation_timeout,
 				.keep_failed_artifacts = config.validation_keep_artifacts,

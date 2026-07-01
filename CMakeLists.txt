@@ -1078,6 +1078,8 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_all_mocks_generated_smoke COMMAND mockfakegen_all_mocks_generated_smoke)
 
 	include("${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/all_mocks/generated/CMakeLists.fragment.cmake")
+	# Product Alpha.cpp/Beta.cpp intentionally exist in this fixture but are not linked here:
+	# the generated fragment must provide the replacement fake sources for this test target.
 	add_executable(
 		mockfakegen_cmake_fragment_generated_smoke
 		tests/fixtures/all_mocks/all_mocks_generated_smoke_test.cpp
@@ -1201,6 +1203,7 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 			MOCKFAKEGEN_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
 			MOCKFAKEGEN_GMOCK_INCLUDE_DIRS="${MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS_TEXT}"
+			MOCKFAKEGEN_GMOCK_LINK_FILES="${MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES_TEXT}"
 	)
 	target_compile_features(mockfakegen_generated_compile_validator_test PRIVATE cxx_std_23)
 	set_target_properties(
