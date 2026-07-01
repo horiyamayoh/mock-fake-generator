@@ -593,6 +593,33 @@ namespace mockfakegen
 			SortGeneratedFiles(result);
 			return result;
 		}
+
+		[[nodiscard]] bool IsGeneratedUnsupportedReadinessReason(std::string_view reason) noexcept
+		{
+			return reason.starts_with("unsupported items remain");
+		}
+
+		void ApplyPolicyLinkReadiness(std::vector<ClassModel>& classes,
+									  std::span<const ClassLinkReadiness> readiness)
+		{
+			const auto count = std::min(classes.size(), readiness.size());
+			for (std::size_t index = 0U; index < count; ++index)
+			{
+				auto& class_model = classes[index];
+				const auto& class_readiness = readiness[index];
+				class_model.link_ready = class_readiness.link_ready;
+				class_model.link_readiness_reasons.clear();
+				for (const auto& reason : class_readiness.reasons)
+				{
+					if (!class_model.unsupported_items.empty() &&
+						IsGeneratedUnsupportedReadinessReason(reason))
+					{
+						continue;
+					}
+					class_model.link_readiness_reasons.push_back(reason);
+				}
+			}
+		}
 	} // namespace
 
 	int RunCli(int argc, const char* const* argv, std::ostream& out, std::ostream& err)
@@ -685,7 +712,7 @@ namespace mockfakegen
 		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);
 		PrintRunDiagnostics(err, run_diagnostics);
 
-		const auto report_classes = ResolveGeneratedClassFilenames(resolve_result.project.classes);
+		auto report_classes = ResolveGeneratedClassFilenames(resolve_result.project.classes);
 		auto generated_files =
 			GenerateMockFakeProject(report_classes,
 									ProjectGenerationOptions{
@@ -760,6 +787,7 @@ namespace mockfakegen
 				.validation_diagnostics = validation_result.diagnostics,
 				.generated_output_token_diagnostics = generated_output_check_result.diagnostics,
 			});
+		ApplyPolicyLinkReadiness(report_classes, policy_decision.class_link_readiness);
 		const auto unsupported_diagnostics = BuildUnsupportedItemDiagnostics(report_classes);
 		const auto top_level_unsupported_diagnostics =
 			BuildUnsupportedItemDiagnostics(resolve_result.project.unsupported_items);

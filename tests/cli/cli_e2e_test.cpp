@@ -1138,6 +1138,77 @@ namespace
 			   "validation artifact directory should be retained");
 	}
 
+	void FallbackIncompatibleOutputIsNotReportedUsable(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "fallback-incompatible-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "fallback-incompatible-build";
+		const auto output_dir = temp_root / "fallback-incompatible-generated";
+		WriteText(include_dir / "FallbackNoexcept.h",
+				  "#pragma once\n"
+				  "class FallbackNoexcept {\n"
+				  "public:\n"
+				  "  bool Save() noexcept;\n"
+				  "};\n");
+		const auto source = source_dir / "FallbackNoexcept.cpp";
+		WriteText(source,
+				  "#include \"FallbackNoexcept.h\"\n"
+				  "bool FallbackNoexcept::Save() noexcept { return true; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o fallback_noexcept.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--fallback-policy",
+				   "throw",
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "fallback_incompatible");
+
+		Expect(result.exit_code == 1, "fallback-incompatible output should fail policy");
+		Expect(!std::filesystem::exists(output_dir / "MockFallbackNoexcept.h"),
+			   "fallback-incompatible mock should not be published");
+		Expect(!std::filesystem::exists(output_dir / "FakeFallbackNoexcept.cpp"),
+			   "fallback-incompatible fake should not be published");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "fallback-incompatible run should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "fallback-incompatible run should emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"link_ready_classes\": 0"),
+			   "manifest should not count fallback-incompatible class as link-ready");
+		Expect(Contains(manifest, "\"not_link_ready_classes\": 1"),
+			   "manifest should count fallback-incompatible class as not link-ready");
+		Expect(Contains(manifest, "\"usable_fake_sources\": []"),
+			   "manifest should list no usable fake sources");
+		Expect(Contains(manifest, "\"link_ready\": false"),
+			   "manifest class entry should be not link-ready");
+		Expect(Contains(manifest, "throw fallback cannot be used for noexcept functions"),
+			   "manifest should include fallback incompatibility reason");
+		Expect(Contains(report, "- none; no class is link-ready."),
+			   "report should not advertise usable fake sources");
+		Expect(!Contains(report, "- `FakeFallbackNoexcept.cpp`"),
+			   "report usable source list should omit fallback-incompatible fake");
+	}
+
 	void LinkValidationFailureAppearsAsLinkDiagnostic(const std::filesystem::path& temp_root,
 													  const std::filesystem::path& product_dir,
 													  const std::filesystem::path& build_dir)
@@ -1338,6 +1409,7 @@ int main()
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);
+	FallbackIncompatibleOutputIsNotReportedUsable(temp_root);
 	LinkValidationFailureAppearsAsLinkDiagnostic(temp_root, product_dir, build_dir);
 	KetContaminatedGeneratedOutputFailsPolicy(temp_root);
 	InvalidValidationArtifactDirAppearsInManifest(temp_root, product_dir, build_dir);
