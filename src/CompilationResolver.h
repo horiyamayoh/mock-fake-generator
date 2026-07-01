@@ -44,6 +44,8 @@ namespace mockfakegen
 		std::filesystem::path header_path;
 		std::filesystem::path translation_unit;
 		std::string message;
+		std::string command;
+		std::string stderr_summary;
 	};
 
 	struct CompilationResolverOptions

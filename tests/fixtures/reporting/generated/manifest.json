@@ -87,6 +87,7 @@
       "mock_header": "MockService.h",
       "fake_source": "FakeService.cpp",
       "source_header": "Service.h",
+      "parse_mode": "synthetic-tu",
       "generated_methods": 1,
       "unsupported_methods": 2,
       "unsupported_items": 2,

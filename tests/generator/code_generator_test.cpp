@@ -427,6 +427,8 @@ namespace
 			   "manifest should include non-zero diagnostic count");
 		Expect(Contains(manifest.content, "\"validation_commands\": 0"),
 			   "manifest should include validation command count");
+		Expect(Contains(manifest.content, "\"parse_mode\": \"unknown\""),
+			   "manifest should include class parse mode");
 		Expect(Contains(manifest.content, "\"by_component\""),
 			   "manifest should group diagnostics by component");
 		Expect(Contains(manifest.content, "\"code\": \"unsupported_function_template\""),
@@ -659,8 +661,8 @@ namespace
 			   "report should include diagnostic summary");
 		Expect(Contains(report.content, "`FakeXXX.cpp`"), "report should include link warning");
 		Expect(Contains(report.content,
-						"| alpha::Alpha | include/Alpha.h | MockAlpha.h | FakeAlpha.cpp | no | "
-						"unsupported items remain | 2 | 1 |"),
+						"| alpha::Alpha | include/Alpha.h | unknown | MockAlpha.h | "
+						"FakeAlpha.cpp | no | unsupported items remain | 2 | 1 |"),
 			   "report should include generated class row");
 		Expect(Contains(report.content,
 						"| include/Alpha.h | alpha::Alpha | alpha::Alpha::Convert | function "

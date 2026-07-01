@@ -436,6 +436,20 @@ namespace mockfakegen
 					return false;
 				}
 
+				if (const auto file_entry_ref =
+						source_manager_.getFileEntryRefForID(source_manager_.getFileID(location)))
+				{
+					const auto real_path = file_entry_ref->getFileEntry().tryGetRealPathName();
+					if (!real_path.empty() && AbsoluteNormalized(real_path.str()) == target_path_)
+					{
+						return true;
+					}
+					if (AbsoluteNormalized(file_entry_ref->getName().str()) == target_path_)
+					{
+						return true;
+					}
+				}
+
 				const auto filename = source_manager_.getFilename(location);
 				if (filename.empty())
 				{

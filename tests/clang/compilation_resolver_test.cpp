@@ -65,8 +65,30 @@ namespace
 
 	struct CompileEntry
 	{
+		std::filesystem::path directory = {};
 		std::filesystem::path source;
 		std::vector<std::string> args;
+	};
+
+	class ScopedCurrentPath
+	{
+	  public:
+		explicit ScopedCurrentPath(const std::filesystem::path& path)
+			: previous_(std::filesystem::current_path())
+		{
+			std::filesystem::current_path(path);
+		}
+
+		ScopedCurrentPath(const ScopedCurrentPath&) = delete;
+		ScopedCurrentPath& operator=(const ScopedCurrentPath&) = delete;
+
+		~ScopedCurrentPath()
+		{
+			std::filesystem::current_path(previous_);
+		}
+
+	  private:
+		std::filesystem::path previous_;
 	};
 
 	[[nodiscard]] std::string JsonEscape(std::string text)
@@ -83,14 +105,17 @@ namespace
 		return escaped;
 	}
 
-	void WriteCompileCommands(const TempTree& tree, const std::vector<CompileEntry>& entries)
+	void WriteCompileCommandsAt(const TempTree& tree,
+								std::string_view build_relative_path,
+								const std::vector<CompileEntry>& entries)
 	{
 		std::string json = "[\n";
 		for (std::size_t entry_index = 0U; entry_index < entries.size(); ++entry_index)
 		{
 			const auto& entry = entries[entry_index];
+			const auto directory = entry.directory.empty() ? tree.root() : entry.directory;
 			json += "  {\n";
-			json += "    \"directory\": \"" + JsonEscape(tree.root().generic_string()) + "\",\n";
+			json += "    \"directory\": \"" + JsonEscape(directory.generic_string()) + "\",\n";
 			json += "    \"file\": \"" + JsonEscape(entry.source.generic_string()) + "\",\n";
 			json += "    \"arguments\": [";
 			for (std::size_t arg_index = 0U; arg_index < entry.args.size(); ++arg_index)
@@ -110,7 +135,14 @@ namespace
 			json += '\n';
 		}
 		json += "]\n";
-		tree.Write("build/compile_commands.json", json);
+		const auto compile_database_path =
+			(std::filesystem::path(build_relative_path) / "compile_commands.json").generic_string();
+		tree.Write(compile_database_path, json);
+	}
+
+	void WriteCompileCommands(const TempTree& tree, const std::vector<CompileEntry>& entries)
+	{
+		WriteCompileCommandsAt(tree, "build", entries);
 	}
 
 	[[nodiscard]] mockfakegen::HeaderModel Header(const TempTree& tree,
@@ -119,6 +151,19 @@ namespace
 		return mockfakegen::HeaderModel{
 			.absolute_path = std::filesystem::weakly_canonical(
 				tree.root() / std::filesystem::path(relative_path)),
+			.project_relative_path = std::filesystem::path(relative_path),
+			.include_spelling = std::filesystem::path(relative_path).generic_string(),
+			.parsed_by_real_tu = false,
+			.parsed_by_synthetic_tu = false,
+		};
+	}
+
+	[[nodiscard]] mockfakegen::HeaderModel HeaderAt(const std::filesystem::path& project_root,
+													std::string_view relative_path)
+	{
+		return mockfakegen::HeaderModel{
+			.absolute_path = std::filesystem::weakly_canonical(
+				project_root / std::filesystem::path(relative_path)),
 			.project_relative_path = std::filesystem::path(relative_path),
 			.include_spelling = std::filesystem::path(relative_path).generic_string(),
 			.parsed_by_real_tu = false,
@@ -139,6 +184,20 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] bool HasAdjacentCompileArg(const std::vector<std::string>& args,
+											 std::string_view option,
+											 std::string_view expected_value)
+	{
+		for (std::size_t index = 0U; index + 1U < args.size(); ++index)
+		{
+			if (args[index] == option && args[index + 1U] == expected_value)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	[[nodiscard]] bool
 	HasDiagnostic(const std::vector<mockfakegen::CompilationResolverDiagnostic>& diagnostics,
 				  mockfakegen::CompilationResolverDiagnosticCode code)
@@ -151,6 +210,20 @@ namespace
 			}
 		}
 		return false;
+	}
+
+	[[nodiscard]] const mockfakegen::CompilationResolverDiagnostic*
+	FindDiagnostic(const std::vector<mockfakegen::CompilationResolverDiagnostic>& diagnostics,
+				   mockfakegen::CompilationResolverDiagnosticCode code)
+	{
+		for (const auto& diagnostic : diagnostics)
+		{
+			if (diagnostic.code == code)
+			{
+				return &diagnostic;
+			}
+		}
+		return nullptr;
 	}
 
 	void ParsesHeaderThroughRealTu()
@@ -290,6 +363,206 @@ namespace
 			   "synthetic fallback should reuse nearest compile args");
 	}
 
+	[[nodiscard]] mockfakegen::CompilationResolveResult
+	ResolveOutOfTreeFixture(const TempTree& tree)
+	{
+		const auto project_root = tree.root() / "product";
+		const auto build_dir = tree.root() / "out/build";
+		return mockfakegen::ResolveCompilation({
+			.project_root = project_root,
+			.build_path = build_dir,
+			.headers = {HeaderAt(project_root, "include/ContextService.h")},
+		});
+	}
+
+	void ParsesOutOfTreeCompileDatabaseWithCommandDirectoryRelativePaths()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "product";
+		const auto build_dir = tree.root() / "out/build";
+		tree.Write("product/include/ContextService.h",
+				   "#pragma once\n"
+				   "#ifndef FORCED_FROM_BUILD_DIR\n"
+				   "#error expected forced include\n"
+				   "#endif\n"
+				   "#ifndef FROM_DIRECTORY_RELATIVE_DB\n"
+				   "#error expected compile database define\n"
+				   "#endif\n"
+				   "#include \"QuoteOnly.h\"\n"
+				   "#include <SystemOnly.h>\n"
+				   "class ContextService {\n"
+				   "public:\n"
+				   "  int Value(QuoteOnly quote, SystemOnly system);\n"
+				   "};\n");
+		tree.Write("product/src/context.cpp", "#include \"ContextService.h\"\n");
+		tree.Write("out/build/config/ForcedConfig.h",
+				   "#pragma once\n"
+				   "#define FORCED_FROM_BUILD_DIR 1\n");
+		tree.Write("out/build/generated/quote/QuoteOnly.h",
+				   "#pragma once\n"
+				   "struct QuoteOnly { int value; };\n");
+		tree.Write("out/build/generated/system/SystemOnly.h",
+				   "#pragma once\n"
+				   "struct SystemOnly { int value; };\n");
+		std::filesystem::create_directories(build_dir / "deps");
+		std::filesystem::create_directories(build_dir / "obj");
+
+		WriteCompileCommandsAt(tree,
+							   "out/build",
+							   {{
+								   .directory = build_dir,
+								   .source = "../../product/src/context.cpp",
+								   .args =
+									   {
+										   "c++",
+										   "-std=c++23",
+										   "-I../../product/include",
+										   "-iquote",
+										   "generated/quote",
+										   "-isystem",
+										   "generated/system",
+										   "-include",
+										   "config/ForcedConfig.h",
+										   "-DFROM_DIRECTORY_RELATIVE_DB",
+										   "-MD",
+										   "-MF",
+										   "deps/context.d",
+										   "-c",
+										   "../../product/src/context.cpp",
+										   "-o",
+										   "obj/context.o",
+									   },
+							   }});
+
+		mockfakegen::CompilationResolveResult from_project_root;
+		{
+			const ScopedCurrentPath scoped_path(tree.root());
+			from_project_root = ResolveOutOfTreeFixture(tree);
+		}
+
+		mockfakegen::CompilationResolveResult from_command_directory;
+		{
+			const ScopedCurrentPath scoped_path(build_dir);
+			from_command_directory = ResolveOutOfTreeFixture(tree);
+		}
+
+		const auto expected_include =
+			std::filesystem::weakly_canonical(build_dir / "../../product/include");
+		const auto expected_quote =
+			std::filesystem::weakly_canonical(build_dir / "generated/quote");
+		const auto expected_system =
+			std::filesystem::weakly_canonical(build_dir / "generated/system");
+		const auto expected_forced_include =
+			std::filesystem::weakly_canonical(build_dir / "config/ForcedConfig.h");
+
+		for (const auto& result : {from_project_root, from_command_directory})
+		{
+			Expect(result.ok(), "out-of-tree compile database should parse successfully");
+			Expect(result.project.classes.size() == 1U,
+				   "directory-relative fixture should extract one class");
+			Expect(result.project.classes[0].qualified_name == "ContextService",
+				   "directory-relative fixture should extract target class");
+			Expect(result.project.headers[0].parsed_by_real_tu,
+				   "directory-relative fixture should use real TU parsing");
+			Expect(!result.project.headers[0].parsed_by_synthetic_tu,
+				   "directory-relative fixture should not need synthetic fallback");
+			Expect(result.parse_attempts.size() == 1U,
+				   "directory-relative fixture should record one real attempt");
+			Expect(result.parse_attempts[0].success,
+				   "directory-relative real attempt should be successful");
+			Expect(HasCompileArg(result.parse_attempts[0].compile_args,
+								 "-I" + expected_include.generic_string()),
+				   "joined -I path should be resolved against command directory");
+			Expect(HasAdjacentCompileArg(result.parse_attempts[0].compile_args,
+										 "-iquote",
+										 expected_quote.generic_string()),
+				   "separate -iquote path should be resolved against command directory");
+			Expect(HasAdjacentCompileArg(result.parse_attempts[0].compile_args,
+										 "-isystem",
+										 expected_system.generic_string()),
+				   "separate -isystem path should be resolved against command directory");
+			Expect(HasAdjacentCompileArg(result.parse_attempts[0].compile_args,
+										 "-include",
+										 expected_forced_include.generic_string()),
+				   "-include path should be resolved against command directory");
+			Expect(!HasCompileArg(result.parse_attempts[0].compile_args, "-MF"),
+				   "dependency output option should be stripped from parse args");
+			Expect(!HasCompileArg(result.parse_attempts[0].compile_args, "deps/context.d"),
+				   "dependency output path should be stripped from parse args");
+			Expect(!HasCompileArg(result.parse_attempts[0].compile_args, "obj/context.o"),
+				   "object output path should be stripped from parse args");
+			Expect(!HasCompileArg(result.parse_attempts[0].compile_args,
+								  "../../product/src/context.cpp"),
+				   "source path should be stripped from reusable compile args");
+			Expect(HasAdjacentCompileArg(result.validation_args,
+										 "-include",
+										 expected_forced_include.generic_string()),
+				   "validation args should inherit resolved forced include path");
+		}
+
+		Expect(from_project_root.project.classes[0].qualified_name ==
+				   from_command_directory.project.classes[0].qualified_name,
+			   "fixture should parse identically from project root and command directory cwd");
+		Expect(from_project_root.project.classes[0].mock_methods.size() ==
+				   from_command_directory.project.classes[0].mock_methods.size(),
+			   "method extraction should be identical across cwd changes");
+	}
+
+	void RecordsRealTuParseFailuresAsAttempts()
+	{
+		TempTree tree;
+		tree.Write("include/Broken.h",
+				   "#pragma once\n"
+				   "class Broken { public: int Value(\n");
+		tree.Write("src/broken.cpp", "#include \"Broken.h\"\n");
+
+		const auto source = tree.root() / "src/broken.cpp";
+		WriteCompileCommands(tree,
+							 {{
+								 .source = source,
+								 .args =
+									 {
+										 "c++",
+										 "-std=c++23",
+										 "-Iinclude",
+										 "-DBROKEN_REAL_TU",
+										 "-c",
+										 "src/broken.cpp",
+									 },
+							 }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/Broken.h")},
+		});
+
+		Expect(!result.ok(), "broken real and synthetic parse should fail resolver status");
+		const auto* real_diagnostic = FindDiagnostic(
+			result.diagnostics, mockfakegen::CompilationResolverDiagnosticCode::RealTuParseFailure);
+		Expect(real_diagnostic != nullptr, "real TU parse failure should be diagnosed");
+		Expect(!real_diagnostic->command.empty(),
+			   "real TU parse failure diagnostic should include command");
+		Expect(!real_diagnostic->stderr_summary.empty(),
+			   "real TU parse failure diagnostic should include clang diagnostics");
+		Expect(result.parse_attempts.size() == 2U,
+			   "real failure and synthetic fallback attempts should both be reportable");
+		Expect(result.parse_attempts[0].mode == mockfakegen::HeaderParseMode::RealTu,
+			   "first failed attempt should be real TU");
+		Expect(!result.parse_attempts[0].success, "real TU failed attempt should record failure");
+		Expect(!result.parse_attempts[0].diagnostics.empty(),
+			   "real TU failed attempt should retain clang diagnostics");
+		Expect(result.parse_attempts[0].translation_unit ==
+				   std::filesystem::weakly_canonical(source),
+			   "real TU failed attempt should keep source path");
+		Expect(HasCompileArg(result.parse_attempts[0].compile_args, "-DBROKEN_REAL_TU"),
+			   "real TU failed attempt should keep compile args");
+		Expect(result.parse_attempts[1].mode == mockfakegen::HeaderParseMode::SyntheticTu,
+			   "synthetic fallback attempt should still be recorded after real failure");
+		Expect(!result.parse_attempts[1].success,
+			   "synthetic fallback should also record failure for broken header");
+	}
+
 	void ReportsConflictingCompileConfigs()
 	{
 		TempTree tree;
@@ -359,6 +632,8 @@ int main()
 	ParsesHeaderThroughRealTu();
 	FallsBackToSyntheticTuWithoutCompileDatabase();
 	FallsBackToSyntheticTuWhenRealTuDoesNotIncludeHeader();
+	ParsesOutOfTreeCompileDatabaseWithCommandDirectoryRelativePaths();
+	RecordsRealTuParseFailuresAsAttempts();
 	ReportsConflictingCompileConfigs();
 	return 0;
 }

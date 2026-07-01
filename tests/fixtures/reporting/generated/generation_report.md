@@ -12,9 +12,9 @@ Do not link generated `FakeXXX.cpp` files together with the corresponding produc
 
 ## Generated Classes
 
-| Class | Source header | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
-|---|---|---|---|---|---|---:|---:|
-| sample::Service | Service.h | MockService.h | FakeService.cpp | no | unsupported items remain | 1 | 2 |
+| Class | Source header | Parse mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
+|---|---|---|---|---|---|---|---:|---:|
+| sample::Service | Service.h | synthetic-tu | MockService.h | FakeService.cpp | no | unsupported items remain | 1 | 2 |
 
 ## Diagnostics
 

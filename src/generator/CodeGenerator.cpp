@@ -435,6 +435,7 @@ namespace mockfakegen
 			std::string default_mock_header;
 			std::string default_fake_source;
 			std::string source_header;
+			std::string parse_mode;
 			std::size_t generated_methods = 0U;
 			std::size_t unsupported_items = 0U;
 			bool link_ready = true;
@@ -451,6 +452,23 @@ namespace mockfakegen
 			std::string suggested_action;
 		};
 
+		[[nodiscard]] std::string ParseModeName(const HeaderModel& header)
+		{
+			if (header.parsed_by_real_tu && header.parsed_by_synthetic_tu)
+			{
+				return "real-tu+synthetic-tu";
+			}
+			if (header.parsed_by_real_tu)
+			{
+				return "real-tu";
+			}
+			if (header.parsed_by_synthetic_tu)
+			{
+				return "synthetic-tu";
+			}
+			return "unknown";
+		}
+
 		[[nodiscard]] ClassReportEntry MakeClassReportEntry(const ClassModel& class_model)
 		{
 			const auto mock_header = MockHeaderName(class_model);
@@ -466,6 +484,7 @@ namespace mockfakegen
 				.default_mock_header = default_mock_header,
 				.default_fake_source = default_fake_source,
 				.source_header = SourceHeaderName(class_model),
+				.parse_mode = ParseModeName(class_model.source_header),
 				.generated_methods = class_model.mock_methods.size(),
 				.unsupported_items = class_model.unsupported_items.size(),
 				.link_ready = IsLinkReady(class_model),
@@ -1370,6 +1389,7 @@ namespace mockfakegen
 					<< "      },\n";
 			}
 			out << "      \"source_header\": " << JsonString(entry.source_header) << ",\n"
+				<< "      \"parse_mode\": " << JsonString(entry.parse_mode) << ",\n"
 				<< "      \"generated_methods\": " << entry.generated_methods << ",\n"
 				<< "      \"unsupported_methods\": " << entry.unsupported_items << ",\n"
 				<< "      \"unsupported_items\": " << entry.unsupported_items << ",\n"
@@ -1443,9 +1463,9 @@ namespace mockfakegen
 			   "product `.cpp` files in the same test target. Link each generated fake "
 			   "source instead of the product implementation it replaces.\n\n"
 			<< "## Generated Classes\n\n"
-			<< "| Class | Source header | Mock header | Fake source | Link ready | Link-readiness "
-			   "reason | Generated methods | Unsupported items |\n"
-			<< "|---|---|---|---|---|---|---:|---:|\n";
+			<< "| Class | Source header | Parse mode | Mock header | Fake source | Link ready | "
+			   "Link-readiness reason | Generated methods | Unsupported items |\n"
+			<< "|---|---|---|---|---|---|---|---:|---:|\n";
 
 		for (const auto& entry : class_entries)
 		{
@@ -1461,10 +1481,11 @@ namespace mockfakegen
 			}
 
 			out << "| " << MarkdownCell(entry.qualified_name) << " | "
-				<< MarkdownCell(entry.source_header) << " | " << MarkdownCell(entry.mock_header)
-				<< " | " << MarkdownCell(entry.fake_source) << " | "
-				<< (entry.link_ready ? "yes" : "no") << " | " << MarkdownCell(link_readiness_reason)
-				<< " | " << entry.generated_methods << " | " << entry.unsupported_items << " |\n";
+				<< MarkdownCell(entry.source_header) << " | " << MarkdownCell(entry.parse_mode)
+				<< " | " << MarkdownCell(entry.mock_header) << " | "
+				<< MarkdownCell(entry.fake_source) << " | " << (entry.link_ready ? "yes" : "no")
+				<< " | " << MarkdownCell(link_readiness_reason) << " | " << entry.generated_methods
+				<< " | " << entry.unsupported_items << " |\n";
 		}
 
 		out << "\n## Diagnostics\n\n";

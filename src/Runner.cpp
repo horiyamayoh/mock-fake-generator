@@ -209,19 +209,44 @@ namespace mockfakegen
 			return result;
 		}
 
+		[[nodiscard]] std::string
+		CompilationResolverCodeName(CompilationResolverDiagnosticCode code)
+		{
+			switch (code)
+			{
+				case CompilationResolverDiagnosticCode::CompileDatabaseNotFound:
+					return "compile_database_not_found";
+				case CompilationResolverDiagnosticCode::CompileDatabaseLoadFailure:
+					return "compile_database_load_failure";
+				case CompilationResolverDiagnosticCode::TranslationUnitReadFailure:
+					return "translation_unit_read_failure";
+				case CompilationResolverDiagnosticCode::RealTuParseFailure:
+					return "real_tu_parse_failure";
+				case CompilationResolverDiagnosticCode::SyntheticTuParseFailure:
+					return "synthetic_tu_parse_failure";
+				case CompilationResolverDiagnosticCode::CompileConfigConflict:
+					return "compile_config_conflict";
+			}
+
+			return "unknown";
+		}
+
 		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const CompilationResolverDiagnostic& diagnostic)
 		{
 			RunDiagnostic result;
 			result.severity = diagnostic.severity;
 			result.component = "clang";
-			result.code = "compilation_resolver";
-			result.kind = std::to_string(static_cast<int>(diagnostic.code));
+			result.code = CompilationResolverCodeName(diagnostic.code);
+			result.kind = "compilation_resolver";
 			result.path = diagnostic.header_path.empty() ? diagnostic.translation_unit
 														 : diagnostic.header_path;
 			result.source_range.begin.file = diagnostic.header_path;
 			result.message = diagnostic.message;
 			result.suggested_action = "inspect compile_commands.json or the synthetic TU fallback";
-			result.command = diagnostic.translation_unit.generic_string();
+			result.command = diagnostic.command.empty()
+				? diagnostic.translation_unit.generic_string()
+				: diagnostic.command;
+			result.stderr_summary = diagnostic.stderr_summary;
 			return result;
 		}
 

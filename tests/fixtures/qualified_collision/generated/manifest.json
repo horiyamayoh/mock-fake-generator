@@ -31,6 +31,7 @@
         "resolved_fake_source": "Fake_a_Hoge.cpp"
       },
       "source_header": "a/Hoge.h",
+      "parse_mode": "synthetic-tu",
       "generated_methods": 1,
       "unsupported_methods": 0,
       "unsupported_items": 0,
@@ -55,6 +56,7 @@
         "resolved_fake_source": "Fake_b_Hoge.cpp"
       },
       "source_header": "b/Hoge.h",
+      "parse_mode": "synthetic-tu",
       "generated_methods": 1,
       "unsupported_methods": 0,
       "unsupported_items": 0,

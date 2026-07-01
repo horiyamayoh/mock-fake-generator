@@ -540,6 +540,73 @@ namespace
 			   "manifest should include consteval unsupported diagnostic code");
 	}
 
+	void RealTuFailureSurvivesSyntheticFallbackInManifest(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "real-tu-failure-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "real-tu-failure-build";
+		const auto output_dir = temp_root / "real-tu-failure-generated";
+		WriteText(include_dir / "Stable.h",
+				  "#pragma once\n"
+				  "#ifndef FROM_REAL_TU_FAILURE_DB\n"
+				  "#error expected compile database args for synthetic fallback\n"
+				  "#endif\n"
+				  "class Stable { public: bool Run(); };\n");
+		const auto source = source_dir / "Broken.cpp";
+		WriteText(source,
+				  "#include \"MissingFromRealTu.h\"\n"
+				  "int broken_real_tu() { return 0; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -DFROM_REAL_TU_FAILURE_DB -c " +
+			ShellQuote(source.string()) + " -o broken.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "real_tu_failure_fallback");
+		Expect(result.exit_code == 0,
+			   "best-effort generation should succeed through synthetic fallback");
+		Expect(std::filesystem::exists(output_dir / "MockStable.h"),
+			   "synthetic fallback should publish generated mock");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "fallback run should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "fallback run should emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"code\": \"real_tu_parse_failure\""),
+			   "manifest should retain real TU failure diagnostic");
+		Expect(Contains(manifest, "\"parse_mode\": \"synthetic-tu\""),
+			   "manifest should record that synthetic fallback produced the class");
+		Expect(Contains(manifest, "\"command\": \"cd "),
+			   "manifest should include failed real TU command");
+		Expect(Contains(manifest, "MissingFromRealTu.h"),
+			   "manifest should include clang diagnostic summary");
+		Expect(Contains(report, "real_tu_parse_failure"),
+			   "report should retain real TU failure diagnostic");
+		Expect(Contains(report, "synthetic-tu"),
+			   "report should record synthetic fallback parse mode");
+		Expect(Contains(report, "MissingFromRealTu.h"),
+			   "report should include clang diagnostic summary");
+	}
+
 	void RegistryModeAffectsRuntime(const std::filesystem::path& temp_root,
 									const std::filesystem::path& product_dir,
 									const std::filesystem::path& build_dir)
@@ -665,6 +732,7 @@ int main()
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
 	StrictModeFailsUnsupportedInput(temp_root, product_dir, build_dir);
 	TopLevelUnsupportedAppearsInManifest(temp_root);
+	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);

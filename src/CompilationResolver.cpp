@@ -7,6 +7,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -14,6 +15,7 @@
 #include <clang/Frontend/TextDiagnosticBuffer.h>
 #include <clang/Tooling/CompilationDatabase.h>
 #include <clang/Tooling/Tooling.h>
+#include <llvm/ADT/StringRef.h>
 
 #include "clang/ClassExtractor.h"
 
@@ -24,8 +26,11 @@ namespace mockfakegen
 		struct ParsedTranslationUnit
 		{
 			std::filesystem::path source_path;
+			std::filesystem::path command_directory;
 			std::vector<std::string> compile_args;
+			std::vector<std::string> tool_args;
 			std::string parse_command;
+			bool read_failure = false;
 			std::vector<ClangParseDiagnostic> diagnostics;
 			std::unique_ptr<clang::ASTUnit> ast;
 		};
@@ -34,6 +39,30 @@ namespace mockfakegen
 		{
 			std::string fingerprint;
 			HeaderParseAttempt attempt;
+			SourceRange source_range;
+		};
+
+		class SingleCompileCommandDatabase final : public clang::tooling::CompilationDatabase
+		{
+		  public:
+			explicit SingleCompileCommandDatabase(clang::tooling::CompileCommand command)
+				: command_(std::move(command))
+			{
+			}
+
+			[[nodiscard]] std::vector<clang::tooling::CompileCommand>
+			getCompileCommands(llvm::StringRef /*file_path*/) const override
+			{
+				return {command_};
+			}
+
+			[[nodiscard]] std::vector<std::string> getAllFiles() const override
+			{
+				return {command_.Filename};
+			}
+
+		  private:
+			clang::tooling::CompileCommand command_;
 		};
 
 		[[nodiscard]] std::filesystem::path AbsoluteNormalized(const std::filesystem::path& path)
@@ -60,28 +89,39 @@ namespace mockfakegen
 			return normalized;
 		}
 
-		[[nodiscard]] std::string ReadFileText(const std::filesystem::path& path)
+		[[nodiscard]] std::filesystem::path
+		CommandDirectory(const clang::tooling::CompileCommand& command)
 		{
-			std::ifstream stream(path, std::ios::binary);
-			if (!stream)
-			{
-				return {};
-			}
-
-			std::ostringstream buffer;
-			buffer << stream.rdbuf();
-			return buffer.str();
+			return AbsoluteNormalized(std::filesystem::path(command.Directory));
 		}
 
-		[[nodiscard]] std::string JoinCommand(std::filesystem::path executable,
-											  const std::vector<std::string>& args)
+		[[nodiscard]] std::filesystem::path
+		CommandRelativePath(const clang::tooling::CompileCommand& command,
+							const std::filesystem::path& path)
 		{
-			std::string command = std::move(executable).generic_string();
+			if (path.is_absolute())
+			{
+				return AbsoluteNormalized(path);
+			}
+			return AbsoluteNormalized(CommandDirectory(command) / path);
+		}
+
+		[[nodiscard]] std::string JoinCommand(const std::filesystem::path& directory,
+											  const std::filesystem::path& executable,
+											  const std::vector<std::string>& args,
+											  const std::filesystem::path& source_path)
+		{
+			std::string command = "cd ";
+			command += directory.generic_string();
+			command += " && ";
+			command += executable.empty() ? std::string("clang++") : executable.generic_string();
 			for (const auto& arg : args)
 			{
 				command += ' ';
 				command += arg;
 			}
+			command += ' ';
+			command += source_path.generic_string();
 			return command;
 		}
 
@@ -109,12 +149,46 @@ namespace mockfakegen
 							   });
 		}
 
+		[[nodiscard]] std::string ToString(ClangDiagnosticSeverity severity)
+		{
+			switch (severity)
+			{
+				case ClangDiagnosticSeverity::Error:
+					return "error";
+				case ClangDiagnosticSeverity::Warning:
+					return "warning";
+				case ClangDiagnosticSeverity::Note:
+					return "note";
+			}
+
+			return "unknown";
+		}
+
+		[[nodiscard]] std::string
+		ClangDiagnosticsSummary(const std::vector<ClangParseDiagnostic>& diagnostics)
+		{
+			std::string summary;
+			for (const auto& diagnostic : diagnostics)
+			{
+				if (!summary.empty())
+				{
+					summary += '\n';
+				}
+				summary += ToString(diagnostic.severity);
+				summary += ": ";
+				summary += diagnostic.message;
+			}
+			return summary;
+		}
+
 		void AddResolverDiagnostic(std::vector<CompilationResolverDiagnostic>& diagnostics,
 								   DiagnosticSeverity severity,
 								   CompilationResolverDiagnosticCode code,
 								   std::filesystem::path header_path,
 								   std::filesystem::path translation_unit,
-								   std::string message)
+								   std::string message,
+								   std::string command = {},
+								   std::string stderr_summary = {})
 		{
 			diagnostics.push_back(CompilationResolverDiagnostic{
 				.severity = severity,
@@ -122,6 +196,8 @@ namespace mockfakegen
 				.header_path = std::move(header_path),
 				.translation_unit = std::move(translation_unit),
 				.message = std::move(message),
+				.command = std::move(command),
+				.stderr_summary = std::move(stderr_summary),
 			});
 		}
 
@@ -154,8 +230,8 @@ namespace mockfakegen
 
 			const auto absolute_argument = argument_path.is_absolute()
 				? AbsoluteNormalized(argument_path)
-				: AbsoluteNormalized(std::filesystem::path(command.Directory) / argument_path);
-			return absolute_argument == AbsoluteNormalized(command.Filename);
+				: CommandRelativePath(command, argument_path);
+			return absolute_argument == CommandRelativePath(command, command.Filename);
 		}
 
 		[[nodiscard]] bool HasStdArg(const std::vector<std::string>& args)
@@ -168,8 +244,97 @@ namespace mockfakegen
 							   });
 		}
 
+		[[nodiscard]] bool IsRelativePathLike(const std::string& value)
+		{
+			if (value.empty() || value.starts_with('='))
+			{
+				return false;
+			}
+			return !std::filesystem::path(value).is_absolute();
+		}
+
+		[[nodiscard]] std::string
+		ResolveCommandPathArgument(const clang::tooling::CompileCommand& command,
+								   const std::string& value)
+		{
+			if (!IsRelativePathLike(value))
+			{
+				return value;
+			}
+			return CommandRelativePath(command, value).generic_string();
+		}
+
+		[[nodiscard]] bool IsSeparatePathOption(const std::string& arg)
+		{
+			return arg == "-I" || arg == "-iquote" || arg == "-isystem" || arg == "-idirafter" ||
+				arg == "-iframework" || arg == "-F" || arg == "-include" || arg == "-imacros" ||
+				arg == "-include-pch" || arg == "-ivfsoverlay" || arg == "-isysroot" ||
+				arg == "--sysroot" || arg == "-resource-dir";
+		}
+
+		[[nodiscard]] std::optional<std::string>
+		RewriteJoinedPathOption(const clang::tooling::CompileCommand& command,
+								const std::string& arg)
+		{
+			const auto rewrite_after_prefix =
+				[&](std::string_view prefix) -> std::optional<std::string>
+			{
+				if (!arg.starts_with(prefix) || arg.size() == prefix.size())
+				{
+					return std::nullopt;
+				}
+				const auto value = arg.substr(prefix.size());
+				return std::string(prefix) + ResolveCommandPathArgument(command, value);
+			};
+
+			if (auto rewritten = rewrite_after_prefix("-I"); rewritten.has_value())
+			{
+				return rewritten;
+			}
+			if (auto rewritten = rewrite_after_prefix("-F"); rewritten.has_value())
+			{
+				return rewritten;
+			}
+			if (auto rewritten = rewrite_after_prefix("-isystem"); rewritten.has_value())
+			{
+				return rewritten;
+			}
+
+			const auto rewrite_after_equals =
+				[&](std::string_view prefix) -> std::optional<std::string>
+			{
+				if (!arg.starts_with(prefix))
+				{
+					return std::nullopt;
+				}
+				const auto value = arg.substr(prefix.size());
+				return std::string(prefix) + ResolveCommandPathArgument(command, value);
+			};
+			if (auto rewritten = rewrite_after_equals("--sysroot="); rewritten.has_value())
+			{
+				return rewritten;
+			}
+			if (auto rewritten = rewrite_after_equals("-fmodule-map-file="); rewritten.has_value())
+			{
+				return rewritten;
+			}
+			if (auto rewritten = rewrite_after_equals("-fmodules-cache-path=");
+				rewritten.has_value())
+			{
+				return rewritten;
+			}
+			if (auto rewritten = rewrite_after_equals("-fprebuilt-module-path=");
+				rewritten.has_value())
+			{
+				return rewritten;
+			}
+
+			return std::nullopt;
+		}
+
 		[[nodiscard]] std::vector<std::string>
-		SanitizeCompileCommandArgs(const clang::tooling::CompileCommand& command)
+		SanitizeCompileCommandArgs(const clang::tooling::CompileCommand& command,
+								   bool resolve_path_arguments)
 		{
 			std::vector<std::string> args;
 			for (std::size_t index = 1U; index < command.CommandLine.size(); ++index)
@@ -197,6 +362,24 @@ namespace mockfakegen
 					continue;
 				}
 
+				if (IsSeparatePathOption(arg) && index + 1U < command.CommandLine.size())
+				{
+					args.push_back(arg);
+					++index;
+					args.push_back(resolve_path_arguments ? ResolveCommandPathArgument(
+																command, command.CommandLine[index])
+														  : command.CommandLine[index]);
+					continue;
+				}
+				if (resolve_path_arguments)
+				{
+					if (auto rewritten = RewriteJoinedPathOption(command, arg);
+						rewritten.has_value())
+					{
+						args.push_back(std::move(*rewritten));
+						continue;
+					}
+				}
 				args.push_back(arg);
 			}
 
@@ -212,30 +395,54 @@ namespace mockfakegen
 		ParseTranslationUnit(const clang::tooling::CompileCommand& command)
 		{
 			ParsedTranslationUnit result;
-			result.source_path = AbsoluteNormalized(command.Filename);
-			result.compile_args = SanitizeCompileCommandArgs(command);
-			result.parse_command = JoinCommand(result.source_path, result.compile_args);
+			result.source_path = CommandRelativePath(command, command.Filename);
+			result.command_directory = CommandDirectory(command);
+			result.tool_args = SanitizeCompileCommandArgs(command, false);
+			result.compile_args = SanitizeCompileCommandArgs(command, true);
+			const auto executable = command.CommandLine.empty()
+				? std::filesystem::path("clang++")
+				: std::filesystem::path(command.CommandLine.front());
+			result.parse_command = JoinCommand(
+				result.command_directory, executable, result.tool_args, result.source_path);
 
-			const auto source = ReadFileText(result.source_path);
-			if (source.empty())
+			std::error_code status_error;
+			const auto status = std::filesystem::status(result.source_path, status_error);
+			if (status_error || !std::filesystem::is_regular_file(status))
 			{
+				result.read_failure = true;
 				result.diagnostics.push_back(ClangParseDiagnostic{
 					.severity = ClangDiagnosticSeverity::Error,
-					.message = "translation unit could not be read or is empty",
+					.message = "translation unit could not be read",
 				});
 				return result;
 			}
 
+			std::vector<std::string> command_line;
+			command_line.reserve(result.tool_args.size() + 2U);
+			command_line.push_back(executable.generic_string());
+			command_line.insert(
+				command_line.end(), result.tool_args.begin(), result.tool_args.end());
+			command_line.push_back(result.source_path.generic_string());
+
 			clang::TextDiagnosticBuffer diagnostic_buffer;
-			result.ast = clang::tooling::buildASTFromCodeWithArgs(
-				source,
-				result.compile_args,
-				result.source_path.generic_string(),
-				"mockfakegen-clang-tool",
-				std::make_shared<clang::PCHContainerOperations>(),
-				clang::tooling::getClangStripDependencyFileAdjuster(),
-				clang::tooling::FileContentMappings(),
-				&diagnostic_buffer);
+			const SingleCompileCommandDatabase database(
+				clang::tooling::CompileCommand(result.command_directory.string(),
+											   result.source_path.generic_string(),
+											   std::move(command_line),
+											   ""));
+			clang::tooling::ClangTool tool(
+				database,
+				std::vector<std::string>{result.source_path.generic_string()},
+				std::make_shared<clang::PCHContainerOperations>());
+			tool.setDiagnosticConsumer(&diagnostic_buffer);
+			tool.setPrintErrorMessage(false);
+
+			std::vector<std::unique_ptr<clang::ASTUnit>> asts;
+			const auto exit_code = tool.buildASTs(asts);
+			if (!asts.empty())
+			{
+				result.ast = std::move(asts.front());
+			}
 
 			AppendDiagnostics(result.diagnostics,
 							  ClangDiagnosticSeverity::Error,
@@ -249,6 +456,13 @@ namespace mockfakegen
 							  ClangDiagnosticSeverity::Note,
 							  diagnostic_buffer.note_begin(),
 							  diagnostic_buffer.note_end());
+			if (exit_code != 0 && result.diagnostics.empty())
+			{
+				result.diagnostics.push_back(ClangParseDiagnostic{
+					.severity = ClangDiagnosticSeverity::Error,
+					.message = "ClangTool failed without a diagnostic",
+				});
+			}
 
 			return result;
 		}
@@ -316,6 +530,53 @@ namespace mockfakegen
 			return value;
 		}
 
+		[[nodiscard]] SourceRange PrimarySourceRange(const ClassModel& class_model)
+		{
+			if (!class_model.mock_methods.empty())
+			{
+				return class_model.mock_methods.front().source_range;
+			}
+			if (!class_model.fake_methods.empty())
+			{
+				return class_model.fake_methods.front().source_range;
+			}
+			if (!class_model.static_data_members.empty())
+			{
+				return class_model.static_data_members.front().source_range;
+			}
+			if (!class_model.unsupported_items.empty())
+			{
+				return class_model.unsupported_items.front().source_range;
+			}
+
+			return SourceRange{
+				.begin =
+					SourceLocation{
+						.file = class_model.source_header.absolute_path,
+					},
+				.end =
+					SourceLocation{
+						.file = class_model.source_header.absolute_path,
+					},
+			};
+		}
+
+		[[nodiscard]] std::string SourceLocationSummary(const SourceRange& range)
+		{
+			std::string summary = range.begin.file.generic_string();
+			if (range.begin.line != 0U)
+			{
+				summary += ':';
+				summary += std::to_string(range.begin.line);
+				if (range.begin.column != 0U)
+				{
+					summary += ':';
+					summary += std::to_string(range.begin.column);
+				}
+			}
+			return summary;
+		}
+
 		[[nodiscard]] std::string UnsupportedFingerprint(const UnsupportedItem& unsupported)
 		{
 			return unsupported.kind + "|" + unsupported.member_signature + "|" +
@@ -367,11 +628,13 @@ namespace mockfakegen
 				class_model.source_header = header;
 				const auto key = ClassKey(class_model);
 				const auto fingerprint = ClassFingerprint(class_model);
+				const auto source_range = PrimarySourceRange(class_model);
 				const auto [iterator, inserted] =
 					observations.emplace(key,
 										 ClassObservation{
 											 .fingerprint = fingerprint,
 											 .attempt = attempt,
+											 .source_range = source_range,
 										 });
 
 				if (inserted)
@@ -383,13 +646,22 @@ namespace mockfakegen
 				if (iterator->second.fingerprint != fingerprint)
 				{
 					const auto message = "class " + class_model.qualified_name +
-						" has different declarations across compile configurations.";
+						" has different declarations across compile configurations; first "
+						"command: " +
+						iterator->second.attempt.parse_command +
+						"; conflicting command: " + attempt.parse_command +
+						"; first source: " + SourceLocationSummary(iterator->second.source_range) +
+						"; conflicting source: " + SourceLocationSummary(source_range) + ".";
+					const auto command_summary =
+						"first: " + iterator->second.attempt.parse_command +
+						"\nconflicting: " + attempt.parse_command;
 					AddResolverDiagnostic(result.diagnostics,
 										  DiagnosticSeverity::Error,
 										  CompilationResolverDiagnosticCode::CompileConfigConflict,
 										  header.absolute_path,
 										  attempt.translation_unit,
-										  message);
+										  message,
+										  command_summary);
 					AddProjectDiagnostic(result.project, DiagnosticSeverity::Error, message);
 				}
 			}
@@ -432,10 +704,29 @@ namespace mockfakegen
 							 commands.end(),
 							 [](const auto& lhs, const auto& rhs)
 							 {
-								 return AbsoluteNormalized(lhs.Filename).generic_string() <
-									 AbsoluteNormalized(rhs.Filename).generic_string();
+								 return CommandRelativePath(lhs, lhs.Filename).generic_string() <
+									 CommandRelativePath(rhs, rhs.Filename).generic_string();
 							 });
 			return commands;
+		}
+
+		void AppendProjectRootInclude(std::vector<std::string>& args,
+									  const std::filesystem::path& project_root)
+		{
+			const auto include_arg = "-I" + project_root.generic_string();
+			const auto has_joined_include =
+				std::find(args.begin(), args.end(), include_arg) != args.end();
+			const auto has_separate_include =
+				std::adjacent_find(args.begin(),
+								   args.end(),
+								   [&project_root](const auto& lhs, const auto& rhs)
+								   {
+									   return lhs == "-I" && rhs == project_root.generic_string();
+								   }) != args.end();
+			if (!has_joined_include && !has_separate_include)
+			{
+				args.push_back(include_arg);
+			}
 		}
 
 		[[nodiscard]] std::vector<std::string>
@@ -449,7 +740,8 @@ namespace mockfakegen
 
 			for (const auto& command : commands)
 			{
-				const auto source_parent = AbsoluteNormalized(command.Filename).parent_path();
+				const auto source_parent =
+					CommandRelativePath(command, command.Filename).parent_path();
 				std::size_t score = 0U;
 				auto header_iterator = header_parent.begin();
 				auto source_iterator = source_parent.begin();
@@ -465,13 +757,15 @@ namespace mockfakegen
 				if (!best_args.has_value() || score > best_score)
 				{
 					best_score = score;
-					best_args = SanitizeCompileCommandArgs(command);
+					best_args = SanitizeCompileCommandArgs(command, true);
 				}
 			}
 
 			if (best_args.has_value())
 			{
-				return *best_args;
+				auto args = *best_args;
+				AppendProjectRootInclude(args, project_root);
+				return args;
 			}
 
 			return BuildSyntheticTuFallbackArgs(project_root);
@@ -491,6 +785,7 @@ namespace mockfakegen
 				}
 			}
 		}
+
 	} // namespace
 
 	bool CompilationResolveResult::ok() const noexcept
@@ -530,16 +825,31 @@ namespace mockfakegen
 			auto parsed = ParseTranslationUnit(command);
 			if (!ParseSucceeded(parsed))
 			{
-				const auto code = parsed.ast == nullptr
+				const auto code = parsed.read_failure
 					? CompilationResolverDiagnosticCode::TranslationUnitReadFailure
 					: CompilationResolverDiagnosticCode::RealTuParseFailure;
+				for (const auto& header : result.project.headers)
+				{
+					auto failed_header = header;
+					result.parse_attempts.push_back(HeaderParseAttempt{
+						.header = failed_header,
+						.mode = HeaderParseMode::RealTu,
+						.translation_unit = parsed.source_path,
+						.compile_args = parsed.compile_args,
+						.parse_command = parsed.parse_command,
+						.success = false,
+						.diagnostics = parsed.diagnostics,
+					});
+				}
 				AddResolverDiagnostic(result.diagnostics,
 									  DiagnosticSeverity::Warning,
 									  code,
 									  {},
 									  parsed.source_path,
 									  "real translation unit parse failed: " +
-										  parsed.source_path.generic_string());
+										  parsed.source_path.generic_string(),
+									  parsed.parse_command,
+									  ClangDiagnosticsSummary(parsed.diagnostics));
 				continue;
 			}
 			AppendUniqueValidationArgs(result.validation_args, parsed.compile_args);
@@ -606,13 +916,16 @@ namespace mockfakegen
 
 			if (!synthetic.success || synthetic.ast == nullptr)
 			{
+				const auto synthetic_command = "synthetic-tu " + synthetic.synthetic_code;
 				AddResolverDiagnostic(result.diagnostics,
 									  DiagnosticSeverity::Error,
 									  CompilationResolverDiagnosticCode::SyntheticTuParseFailure,
 									  synthetic_header.absolute_path,
 									  {},
 									  "synthetic TU parse failed: " +
-										  synthetic_header.absolute_path.generic_string());
+										  synthetic_header.absolute_path.generic_string(),
+									  synthetic_command,
+									  ClangDiagnosticsSummary(synthetic.diagnostics));
 				continue;
 			}
 			AppendUniqueValidationArgs(result.validation_args, synthetic.compile_args);
