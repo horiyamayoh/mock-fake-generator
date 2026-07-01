@@ -13,6 +13,7 @@
 #include "CompilationResolver.h"
 #include "Config.h"
 #include "HeaderScanner.h"
+#include "diagnostics/RunDiagnostic.h"
 #include "generator/CodeGenerator.h"
 #include "generator/GeneratedFormatter.h"
 #include "model/GeneratedFile.h"
@@ -25,21 +26,6 @@ namespace mockfakegen
 {
 	namespace
 	{
-		[[nodiscard]] std::string_view ToString(DiagnosticSeverity severity) noexcept
-		{
-			switch (severity)
-			{
-				case DiagnosticSeverity::Info:
-					return "info";
-				case DiagnosticSeverity::Warning:
-					return "warning";
-				case DiagnosticSeverity::Error:
-					return "error";
-			}
-
-			return "unknown";
-		}
-
 		[[nodiscard]] std::string_view ToString(OutputWriteStatus status) noexcept
 		{
 			switch (status)
@@ -54,6 +40,31 @@ namespace mockfakegen
 					return "skipped-existing";
 				case OutputWriteStatus::Failed:
 					return "failed";
+			}
+
+			return "unknown";
+		}
+
+		[[nodiscard]] std::string_view ToString(GenerationPolicyDiagnosticKind kind) noexcept
+		{
+			switch (kind)
+			{
+				case GenerationPolicyDiagnosticKind::ParseFailure:
+					return "parse_failure";
+				case GenerationPolicyDiagnosticKind::UnsupportedItem:
+					return "unsupported_item";
+				case GenerationPolicyDiagnosticKind::WriteFailure:
+					return "write_failure";
+				case GenerationPolicyDiagnosticKind::FormatFailure:
+					return "format_failure";
+				case GenerationPolicyDiagnosticKind::KetContamination:
+					return "ket_contamination";
+				case GenerationPolicyDiagnosticKind::ValidationFailure:
+					return "validation_failure";
+				case GenerationPolicyDiagnosticKind::FallbackIncompatibility:
+					return "fallback_incompatibility";
+				case GenerationPolicyDiagnosticKind::LinkReadinessFailure:
+					return "link_readiness_failure";
 			}
 
 			return "unknown";
@@ -173,46 +184,220 @@ namespace mockfakegen
 			return "c++";
 		}
 
-		void PrintHeaderScanDiagnostics(std::ostream& err,
-										std::span<const HeaderScanDiagnostic> diagnostics)
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const ConfigError& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = DiagnosticSeverity::Error;
+			result.component = "config";
+			result.code = "config_error";
+			result.kind = diagnostic.option;
+			result.message = diagnostic.message;
+			result.suggested_action = "fix the command line option and rerun mockfakegen";
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const HeaderScanDiagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = DiagnosticSeverity::Error;
+			result.component = "scanner";
+			result.code = "scanner_error";
+			result.kind = std::to_string(static_cast<int>(diagnostic.code));
+			result.path = diagnostic.path;
+			result.message = diagnostic.message;
+			result.suggested_action = "check --input-root, --project-root, and filesystem access";
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const CompilationResolverDiagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = diagnostic.severity;
+			result.component = "clang";
+			result.code = "compilation_resolver";
+			result.kind = std::to_string(static_cast<int>(diagnostic.code));
+			result.path = diagnostic.header_path.empty() ? diagnostic.translation_unit
+														 : diagnostic.header_path;
+			result.source_range.begin.file = diagnostic.header_path;
+			result.message = diagnostic.message;
+			result.suggested_action = "inspect compile_commands.json or the synthetic TU fallback";
+			result.command = diagnostic.translation_unit.generic_string();
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const Diagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = diagnostic.severity;
+			result.component = "clang";
+			result.code = "extractor";
+			result.kind = std::to_string(static_cast<int>(diagnostic.code));
+			result.path = diagnostic.source_range.begin.file;
+			result.source_range = diagnostic.source_range;
+			result.message = diagnostic.message;
+			result.suggested_action = "inspect the unsupported item details in the report";
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const GeneratedFormatDiagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = DiagnosticSeverity::Error;
+			result.component = "formatter";
+			result.code = "format_failure";
+			result.kind = "clang_format";
+			result.path = diagnostic.path;
+			result.message = diagnostic.message;
+			result.suggested_action =
+				"fix generated C++ spelling or choose a different format style";
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const GeneratedCompileDiagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = DiagnosticSeverity::Error;
+			result.component = "validation";
+			result.code = "compile_validation_failure";
+			result.kind = "compile";
+			result.path = diagnostic.source_path;
+			result.message = diagnostic.message;
+			result.suggested_action =
+				"rerun the recorded compiler command and fix the generated input";
+			result.command = diagnostic.command;
+			result.stderr_summary = diagnostic.stderr_summary;
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const GenerationPolicyDiagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = diagnostic.kind == GenerationPolicyDiagnosticKind::UnsupportedItem ||
+					diagnostic.kind == GenerationPolicyDiagnosticKind::LinkReadinessFailure
+				? DiagnosticSeverity::Warning
+				: DiagnosticSeverity::Error;
+			result.component = "policy";
+			result.code = "generation_policy";
+			result.kind = std::string(ToString(diagnostic.kind));
+			result.message = diagnostic.message;
+			result.suggested_action = "inspect policy inputs and the referenced generated class";
+			result.command = diagnostic.command;
+			result.stderr_summary = diagnostic.stderr_summary;
+			return result;
+		}
+
+		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const OutputWriteDiagnostic& diagnostic)
+		{
+			RunDiagnostic result;
+			result.severity = DiagnosticSeverity::Error;
+			result.component = "writer";
+			result.code = "write_failure";
+			result.kind = "output_write";
+			result.path = diagnostic.path;
+			result.message = diagnostic.message;
+			result.suggested_action = "check --output-dir, --overwrite, and filesystem permissions";
+			return result;
+		}
+
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const HeaderScanDiagnostic> diagnostics)
 		{
 			for (const auto& diagnostic : diagnostics)
 			{
-				err << "error [scanner]";
-				if (!diagnostic.path.empty())
-				{
-					err << " " << diagnostic.path.generic_string();
-				}
-				err << ": " << diagnostic.message << '\n';
+				out.push_back(ToRunDiagnostic(diagnostic));
 			}
 		}
 
-		void PrintResolverDiagnostics(std::ostream& err,
-									  std::span<const CompilationResolverDiagnostic> diagnostics)
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const CompilationResolverDiagnostic> diagnostics)
 		{
 			for (const auto& diagnostic : diagnostics)
 			{
-				err << ToString(diagnostic.severity) << " [clang]";
-				if (!diagnostic.header_path.empty())
-				{
-					err << " header=" << diagnostic.header_path.generic_string();
-				}
-				if (!diagnostic.translation_unit.empty())
-				{
-					err << " tu=" << diagnostic.translation_unit.generic_string();
-				}
-				err << ": " << diagnostic.message << '\n';
+				out.push_back(ToRunDiagnostic(diagnostic));
 			}
 		}
 
-		void PrintProjectDiagnostics(std::ostream& err, std::span<const Diagnostic> diagnostics)
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const Diagnostic> diagnostics)
 		{
 			for (const auto& diagnostic : diagnostics)
 			{
-				err << ToString(diagnostic.severity) << " [extractor]";
-				if (!diagnostic.source_range.begin.file.empty())
+				if (diagnostic.code == DiagnosticCode::UnsupportedConstruct)
 				{
-					err << " " << diagnostic.source_range.begin.file.generic_string();
+					continue;
+				}
+				out.push_back(ToRunDiagnostic(diagnostic));
+			}
+		}
+
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const GeneratedFormatDiagnostic> diagnostics)
+		{
+			for (const auto& diagnostic : diagnostics)
+			{
+				out.push_back(ToRunDiagnostic(diagnostic));
+			}
+		}
+
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const GeneratedCompileDiagnostic> diagnostics)
+		{
+			for (const auto& diagnostic : diagnostics)
+			{
+				out.push_back(ToRunDiagnostic(diagnostic));
+			}
+		}
+
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const GenerationPolicyDiagnostic> diagnostics)
+		{
+			for (const auto& diagnostic : diagnostics)
+			{
+				out.push_back(ToRunDiagnostic(diagnostic));
+			}
+		}
+
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const OutputWriteDiagnostic> diagnostics)
+		{
+			for (const auto& diagnostic : diagnostics)
+			{
+				out.push_back(ToRunDiagnostic(diagnostic));
+			}
+		}
+
+		void AppendRunDiagnostics(std::vector<RunDiagnostic>& out,
+								  std::span<const RunDiagnostic> diagnostics)
+		{
+			out.insert(out.end(), diagnostics.begin(), diagnostics.end());
+		}
+
+		[[nodiscard]] std::vector<RunCommand>
+		ToRunCommands(std::span<const GeneratedCompileCommandResult> commands)
+		{
+			std::vector<RunCommand> run_commands;
+			run_commands.reserve(commands.size());
+			for (const auto& command : commands)
+			{
+				run_commands.push_back(RunCommand{
+					.source_path = command.source_path,
+					.command = command.command,
+					.exit_code = command.exit_code,
+				});
+			}
+			return run_commands;
+		}
+
+		void PrintRunDiagnostics(std::ostream& err, std::span<const RunDiagnostic> diagnostics)
+		{
+			for (const auto& diagnostic : SortedRunDiagnostics(diagnostics))
+			{
+				err << ToString(diagnostic.severity) << " [" << diagnostic.component << "]";
+				const auto path =
+					diagnostic.path.empty() ? diagnostic.source_range.begin.file : diagnostic.path;
+				if (!path.empty())
+				{
+					err << " " << path.generic_string();
 					if (diagnostic.source_range.begin.line != 0U)
 					{
 						err << ':' << diagnostic.source_range.begin.line;
@@ -222,27 +407,11 @@ namespace mockfakegen
 						}
 					}
 				}
+				if (!diagnostic.member.empty())
+				{
+					err << " " << diagnostic.member;
+				}
 				err << ": " << diagnostic.message << '\n';
-			}
-		}
-
-		void PrintFormatDiagnostics(std::ostream& err,
-									std::span<const GeneratedFormatDiagnostic> diagnostics)
-		{
-			for (const auto& diagnostic : diagnostics)
-			{
-				err << "error [formatter] " << diagnostic.path.generic_string() << ": "
-					<< diagnostic.message << '\n';
-			}
-		}
-
-		void PrintValidationDiagnostics(std::ostream& err,
-										std::span<const GeneratedCompileDiagnostic> diagnostics)
-		{
-			for (const auto& diagnostic : diagnostics)
-			{
-				err << "error [validation] " << diagnostic.source_path.generic_string() << ": "
-					<< diagnostic.message << '\n';
 				if (!diagnostic.command.empty())
 				{
 					err << "  command: " << diagnostic.command << '\n';
@@ -251,33 +420,6 @@ namespace mockfakegen
 				{
 					err << "  stderr:\n" << diagnostic.stderr_summary << '\n';
 				}
-			}
-		}
-
-		void PrintPolicyDiagnostics(std::ostream& err,
-									std::span<const GenerationPolicyDiagnostic> diagnostics)
-		{
-			for (const auto& diagnostic : diagnostics)
-			{
-				err << "warning [policy]: " << diagnostic.message << '\n';
-				if (!diagnostic.command.empty())
-				{
-					err << "  command: " << diagnostic.command << '\n';
-				}
-				if (!diagnostic.stderr_summary.empty())
-				{
-					err << "  stderr:\n" << diagnostic.stderr_summary << '\n';
-				}
-			}
-		}
-
-		void PrintOutputDiagnostics(std::ostream& err,
-									std::span<const OutputWriteDiagnostic> diagnostics)
-		{
-			for (const auto& diagnostic : diagnostics)
-			{
-				err << "error [writer] " << diagnostic.path.generic_string() << ": "
-					<< diagnostic.message << '\n';
 			}
 		}
 
@@ -341,6 +483,22 @@ namespace mockfakegen
 			SortGeneratedFiles(selected);
 			return selected;
 		}
+
+		[[nodiscard]] std::vector<GeneratedFile>
+		AppendDiagnosticArtifacts(std::span<const GeneratedFile> files,
+								  std::span<const ClassModel> classes,
+								  const GenerationReportMetadata& metadata,
+								  bool emit_manifest)
+		{
+			std::vector<GeneratedFile> result(files.begin(), files.end());
+			if (emit_manifest)
+			{
+				result.push_back(GenerateManifestJson(classes, metadata));
+			}
+			result.push_back(GenerateGenerationReport(classes, metadata));
+			SortGeneratedFiles(result);
+			return result;
+		}
 	} // namespace
 
 	int RunCli(int argc, const char* const* argv, std::ostream& out, std::ostream& err)
@@ -354,7 +512,13 @@ namespace mockfakegen
 
 		if (!result.errors.empty())
 		{
-			PrintConfigErrors(err, result.errors);
+			std::vector<RunDiagnostic> diagnostics;
+			diagnostics.reserve(result.errors.size());
+			for (const auto& diagnostic : result.errors)
+			{
+				diagnostics.push_back(ToRunDiagnostic(diagnostic));
+			}
+			PrintRunDiagnostics(err, diagnostics);
 			err << '\n' << BuildUsage(result.program_name);
 			return 2;
 		}
@@ -365,9 +529,28 @@ namespace mockfakegen
 			.project_root = config.project_root,
 			.output_dir = config.output_dir,
 		});
-		PrintHeaderScanDiagnostics(err, scan_result.diagnostics);
+		std::vector<RunDiagnostic> run_diagnostics;
+		AppendRunDiagnostics(run_diagnostics, scan_result.diagnostics);
+		PrintRunDiagnostics(err, run_diagnostics);
 		if (!scan_result.ok())
 		{
+			const std::vector<ClassModel> no_classes;
+			const auto diagnostic_files =
+				AppendDiagnosticArtifacts({},
+										  no_classes,
+										  GenerationReportMetadata{
+											  .diagnostics = run_diagnostics,
+											  .validation_commands = {},
+										  },
+										  config.emit_manifest);
+			const auto write_result = WriteGeneratedFiles(
+				OutputWriterOptions{
+					.output_dir = config.output_dir,
+					.dry_run = config.dry_run,
+					.overwrite = config.overwrite,
+				},
+				diagnostic_files);
+			PrintOutputSummary(out, write_result);
 			return 1;
 		}
 
@@ -382,8 +565,9 @@ namespace mockfakegen
 			.fake_static_data = config.fake_static_data,
 			.interface_mock = config.interface_mock,
 		});
-		PrintResolverDiagnostics(err, resolve_result.diagnostics);
-		PrintProjectDiagnostics(err, resolve_result.project.diagnostics);
+		AppendRunDiagnostics(run_diagnostics, resolve_result.diagnostics);
+		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);
+		PrintRunDiagnostics(err, run_diagnostics);
 
 		auto generated_files =
 			GenerateMockFakeProject(resolve_result.project.classes,
@@ -391,8 +575,8 @@ namespace mockfakegen
 										.registry_mode = config.registry_mode,
 										.emit_all_mocks = config.emit_all_mocks,
 										.emit_cmake_fragment = config.emit_cmake_fragment,
-										.emit_manifest = config.emit_manifest,
-										.emit_report = true,
+										.emit_manifest = false,
+										.emit_report = false,
 										.interface_mock = config.interface_mock,
 									});
 
@@ -402,9 +586,26 @@ namespace mockfakegen
 				.style_search_root = config.project_root,
 			},
 			generated_files);
-		PrintFormatDiagnostics(err, format_result.diagnostics);
+		AppendRunDiagnostics(run_diagnostics, format_result.diagnostics);
+		PrintRunDiagnostics(err, run_diagnostics);
 		if (!format_result.ok())
 		{
+			const auto diagnostic_files =
+				AppendDiagnosticArtifacts({},
+										  resolve_result.project.classes,
+										  GenerationReportMetadata{
+											  .diagnostics = run_diagnostics,
+											  .validation_commands = {},
+										  },
+										  config.emit_manifest);
+			const auto write_result = WriteGeneratedFiles(
+				OutputWriterOptions{
+					.output_dir = config.output_dir,
+					.dry_run = config.dry_run,
+					.overwrite = config.overwrite,
+				},
+				diagnostic_files);
+			PrintOutputSummary(out, write_result);
 			return 1;
 		}
 
@@ -416,7 +617,7 @@ namespace mockfakegen
 				.extra_args = {},
 			},
 			format_result.files);
-		PrintValidationDiagnostics(err, validation_result.diagnostics);
+		AppendRunDiagnostics(run_diagnostics, validation_result.diagnostics);
 
 		const auto parse_diagnostics = PolicyParseDiagnostics(resolve_result);
 		const auto policy_decision =
@@ -426,9 +627,21 @@ namespace mockfakegen
 										 .parse_diagnostics = parse_diagnostics,
 										 .validation_diagnostics = validation_result.diagnostics,
 									 });
-		PrintPolicyDiagnostics(err, policy_decision.diagnostics);
+		const auto unsupported_diagnostics =
+			BuildUnsupportedItemDiagnostics(resolve_result.project.classes);
+		AppendRunDiagnostics(run_diagnostics, unsupported_diagnostics);
+		AppendRunDiagnostics(run_diagnostics, policy_decision.diagnostics);
+		PrintRunDiagnostics(err, run_diagnostics);
 
-		const auto selected_files = FilesSelectedByPolicy(format_result.files, policy_decision);
+		const auto final_files = AppendDiagnosticArtifacts(
+			format_result.files,
+			resolve_result.project.classes,
+			GenerationReportMetadata{
+				.diagnostics = run_diagnostics,
+				.validation_commands = ToRunCommands(validation_result.commands),
+			},
+			config.emit_manifest);
+		const auto selected_files = FilesSelectedByPolicy(final_files, policy_decision);
 		auto write_result = WriteGeneratedFiles(
 			OutputWriterOptions{
 				.output_dir = config.output_dir,
@@ -436,7 +649,9 @@ namespace mockfakegen
 				.overwrite = config.overwrite,
 			},
 			selected_files);
-		PrintOutputDiagnostics(err, write_result.diagnostics);
+		std::vector<RunDiagnostic> writer_diagnostics;
+		AppendRunDiagnostics(writer_diagnostics, write_result.diagnostics);
+		PrintRunDiagnostics(err, writer_diagnostics);
 		PrintOutputSummary(out, write_result);
 
 		out << "mockfakegen: extracted " << resolve_result.project.classes.size()

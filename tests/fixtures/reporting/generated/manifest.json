@@ -1,15 +1,86 @@
 {
+  "schema_version": 1,
   "summary": {
     "classes": 1,
     "link_ready_classes": 0,
     "not_link_ready_classes": 1,
     "generated_methods": 1,
     "unsupported_items": 2,
+    "diagnostics": 2,
+    "validation_commands": 0,
     "diagnostic_summary": {
+      "total": 2,
+      "info": 0,
       "warnings": 2,
-      "errors": 0
+      "errors": 0,
+      "by_component": [
+        {
+          "component": "clang",
+          "summary": {
+            "total": 2,
+            "info": 0,
+            "warnings": 2,
+            "errors": 0
+          }
+        }
+      ]
     }
   },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_function_template",
+      "kind": "function_template",
+      "path": "Service.h",
+      "source_range": {
+        "begin": {
+          "file": "Service.h",
+          "line": 11,
+          "column": 3
+        },
+        "end": {
+          "file": "Service.h",
+          "line": 11,
+          "column": 20
+        }
+      },
+      "class": "sample::Service",
+      "member": "sample::Service::Convert",
+      "message": "function template member is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_overloaded_operator",
+      "kind": "overloaded_operator",
+      "path": "Service.h",
+      "source_range": {
+        "begin": {
+          "file": "Service.h",
+          "line": 13,
+          "column": 3
+        },
+        "end": {
+          "file": "Service.h",
+          "line": 13,
+          "column": 32
+        }
+      },
+      "class": "sample::Service",
+      "member": "sample::Service::operator+=",
+      "message": "overloaded operator is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    }
+  ],
+  "validation_commands": [],
   "classes": [
     {
       "qualified_name": "sample::Service",
@@ -24,6 +95,8 @@
         "unsupported items remain"
       ],
       "diagnostic_summary": {
+        "total": 2,
+        "info": 0,
         "warnings": 2,
         "errors": 0
       }

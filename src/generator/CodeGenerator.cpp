@@ -563,6 +563,151 @@ namespace mockfakegen
 			return count;
 		}
 
+		[[nodiscard]] GenerationReportMetadata
+		DefaultReportMetadata(std::span<const ClassModel> class_models)
+		{
+			return GenerationReportMetadata{
+				.diagnostics = BuildUnsupportedItemDiagnostics(class_models),
+				.validation_commands = {},
+			};
+		}
+
+		[[nodiscard]] std::filesystem::path DiagnosticPath(const RunDiagnostic& diagnostic)
+		{
+			if (!diagnostic.path.empty())
+			{
+				return diagnostic.path;
+			}
+			return diagnostic.source_range.begin.file;
+		}
+
+		void WriteJsonSourceRange(std::ostringstream& out, const SourceRange& range)
+		{
+			out << "{\n"
+				<< "        \"begin\": {\n"
+				<< "          \"file\": " << JsonString(range.begin.file.generic_string()) << ",\n"
+				<< "          \"line\": " << range.begin.line << ",\n"
+				<< "          \"column\": " << range.begin.column << "\n"
+				<< "        },\n"
+				<< "        \"end\": {\n"
+				<< "          \"file\": " << JsonString(range.end.file.generic_string()) << ",\n"
+				<< "          \"line\": " << range.end.line << ",\n"
+				<< "          \"column\": " << range.end.column << "\n"
+				<< "        }\n"
+				<< "      }";
+		}
+
+		void WriteJsonDiagnosticSummary(std::ostringstream& out,
+										const DiagnosticSummary& summary,
+										std::string_view indent)
+		{
+			out << "{\n"
+				<< indent << "  \"total\": " << summary.total << ",\n"
+				<< indent << "  \"info\": " << summary.info << ",\n"
+				<< indent << "  \"warnings\": " << summary.warnings << ",\n"
+				<< indent << "  \"errors\": " << summary.errors << "\n"
+				<< indent << "}";
+		}
+
+		void WriteJsonComponentSummaries(std::ostringstream& out,
+										 std::span<const ComponentDiagnosticSummary> summaries,
+										 std::string_view indent)
+		{
+			if (summaries.empty())
+			{
+				out << "[]";
+				return;
+			}
+
+			out << "[\n";
+			for (std::size_t index = 0U; index < summaries.size(); ++index)
+			{
+				const auto& summary = summaries[index];
+				out << indent << "  {\n"
+					<< indent << "    \"component\": " << JsonString(summary.component) << ",\n"
+					<< indent << "    \"summary\": ";
+				WriteJsonDiagnosticSummary(out, summary.summary, std::string(indent) + "    ");
+				out << "\n" << indent << "  }";
+				if (index + 1U != summaries.size())
+				{
+					out << ',';
+				}
+				out << '\n';
+			}
+			out << indent << ']';
+		}
+
+		void WriteJsonDiagnostics(std::ostringstream& out,
+								  std::span<const RunDiagnostic> diagnostics)
+		{
+			if (diagnostics.empty())
+			{
+				out << "[]";
+				return;
+			}
+
+			out << "[\n";
+			for (std::size_t index = 0U; index < diagnostics.size(); ++index)
+			{
+				const auto& diagnostic = diagnostics[index];
+				out << "    {\n"
+					<< "      \"severity\": " << JsonString(ToString(diagnostic.severity)) << ",\n"
+					<< "      \"component\": " << JsonString(diagnostic.component) << ",\n"
+					<< "      \"code\": " << JsonString(diagnostic.code) << ",\n"
+					<< "      \"kind\": " << JsonString(diagnostic.kind) << ",\n"
+					<< "      \"path\": " << JsonString(DiagnosticPath(diagnostic).generic_string())
+					<< ",\n"
+					<< "      \"source_range\": ";
+				WriteJsonSourceRange(out, diagnostic.source_range);
+				out << ",\n"
+					<< "      \"class\": " << JsonString(diagnostic.class_name) << ",\n"
+					<< "      \"member\": " << JsonString(diagnostic.member) << ",\n"
+					<< "      \"message\": " << JsonString(diagnostic.message) << ",\n"
+					<< "      \"suggested_action\": " << JsonString(diagnostic.suggested_action)
+					<< ",\n"
+					<< "      \"command\": " << JsonString(diagnostic.command) << ",\n"
+					<< "      \"stderr_summary\": " << JsonString(diagnostic.stderr_summary)
+					<< ",\n"
+					<< "      \"validation_artifact_path\": "
+					<< JsonString(diagnostic.validation_artifact_path.generic_string()) << "\n"
+					<< "    }";
+				if (index + 1U != diagnostics.size())
+				{
+					out << ',';
+				}
+				out << '\n';
+			}
+			out << "  ]";
+		}
+
+		void WriteJsonValidationCommands(std::ostringstream& out,
+										 std::span<const RunCommand> commands)
+		{
+			if (commands.empty())
+			{
+				out << "[]";
+				return;
+			}
+
+			out << "[\n";
+			for (std::size_t index = 0U; index < commands.size(); ++index)
+			{
+				const auto& command = commands[index];
+				out << "    {\n"
+					<< "      \"source_path\": " << JsonString(command.source_path.generic_string())
+					<< ",\n"
+					<< "      \"command\": " << JsonString(command.command) << ",\n"
+					<< "      \"exit_code\": " << command.exit_code << "\n"
+					<< "    }";
+				if (index + 1U != commands.size())
+				{
+					out << ',';
+				}
+				out << '\n';
+			}
+			out << "  ]";
+		}
+
 		[[nodiscard]] std::string GMockParameterType(const SimpleParameterModel& parameter)
 		{
 			if (!parameter.gmock_type.empty())
@@ -1148,12 +1293,22 @@ namespace mockfakegen
 
 	GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models)
 	{
+		return GenerateManifestJson(class_models, DefaultReportMetadata(class_models));
+	}
+
+	GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models,
+									   const GenerationReportMetadata& metadata)
+	{
 		const auto entries = SortedClassReportEntries(class_models);
+		const auto diagnostics = SortedRunDiagnostics(metadata.diagnostics);
+		const auto diagnostic_summary = SummarizeDiagnostics(diagnostics);
+		const auto component_summaries = SummarizeDiagnosticsByComponent(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(entries);
 		const auto unsupported_items = TotalUnsupportedItems(entries);
 
 		std::ostringstream out;
 		out << "{\n"
+			<< "  \"schema_version\": 1,\n"
 			<< "  \"summary\": {\n"
 			<< "    \"classes\": " << entries.size() << ",\n"
 			<< "    \"link_ready_classes\": "
@@ -1174,11 +1329,24 @@ namespace mockfakegen
 			<< ",\n"
 			<< "    \"generated_methods\": " << generated_methods << ",\n"
 			<< "    \"unsupported_items\": " << unsupported_items << ",\n"
+			<< "    \"diagnostics\": " << diagnostic_summary.total << ",\n"
+			<< "    \"validation_commands\": " << metadata.validation_commands.size() << ",\n"
 			<< "    \"diagnostic_summary\": {\n"
-			<< "      \"warnings\": " << unsupported_items << ",\n"
-			<< "      \"errors\": 0\n"
+			<< "      \"total\": " << diagnostic_summary.total << ",\n"
+			<< "      \"info\": " << diagnostic_summary.info << ",\n"
+			<< "      \"warnings\": " << diagnostic_summary.warnings << ",\n"
+			<< "      \"errors\": " << diagnostic_summary.errors << ",\n"
+			<< "      \"by_component\": ";
+		WriteJsonComponentSummaries(out, component_summaries, "      ");
+		out << "\n"
 			<< "    }\n"
 			<< "  },\n"
+			<< "  \"diagnostics\": ";
+		WriteJsonDiagnostics(out, diagnostics);
+		out << ",\n"
+			<< "  \"validation_commands\": ";
+		WriteJsonValidationCommands(out, metadata.validation_commands);
+		out << ",\n"
 			<< "  \"classes\": [\n";
 
 		for (std::size_t index = 0U; index < entries.size(); ++index)
@@ -1210,6 +1378,8 @@ namespace mockfakegen
 			WriteJsonStringArray(out, entry.link_readiness_reasons, "      ");
 			out << ",\n"
 				<< "      \"diagnostic_summary\": {\n"
+				<< "        \"total\": " << entry.unsupported_items << ",\n"
+				<< "        \"info\": 0,\n"
 				<< "        \"warnings\": " << entry.unsupported_items << ",\n"
 				<< "        \"errors\": 0\n"
 				<< "      }\n"
@@ -1230,8 +1400,16 @@ namespace mockfakegen
 
 	GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models)
 	{
+		return GenerateGenerationReport(class_models, DefaultReportMetadata(class_models));
+	}
+
+	GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models,
+										   const GenerationReportMetadata& metadata)
+	{
 		const auto class_entries = SortedClassReportEntries(class_models);
 		const auto unsupported_entries = SortedUnsupportedReportEntries(class_models);
+		const auto diagnostics = SortedRunDiagnostics(metadata.diagnostics);
+		const auto diagnostic_summary = SummarizeDiagnostics(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(class_entries);
 		const auto unsupported_items = TotalUnsupportedItems(class_entries);
 
@@ -1239,8 +1417,9 @@ namespace mockfakegen
 		out << "# mockfakegen generation report\n\n"
 			<< "## Summary\n\n"
 			<< "| Classes | Link-ready classes | Not link-ready classes | Generated methods | "
-			   "Unsupported items | Warnings | Errors |\n"
-			<< "|---:|---:|---:|---:|---:|---:|---:|\n"
+			   "Unsupported items | Diagnostics | Info | Warnings | Errors | Validation commands "
+			   "|\n"
+			<< "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
 			<< "| " << class_entries.size() << " | "
 			<< std::count_if(class_entries.begin(),
 							 class_entries.end(),
@@ -1256,7 +1435,9 @@ namespace mockfakegen
 								 return !entry.link_ready;
 							 })
 			<< " | " << generated_methods << " | " << unsupported_items << " | "
-			<< unsupported_items << " | 0 |\n\n"
+			<< diagnostic_summary.total << " | " << diagnostic_summary.info << " | "
+			<< diagnostic_summary.warnings << " | " << diagnostic_summary.errors << " | "
+			<< metadata.validation_commands.size() << " |\n\n"
 			<< "## Link Replacement Notice\n\n"
 			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
 			   "product `.cpp` files in the same test target. Link each generated fake "
@@ -1284,6 +1465,47 @@ namespace mockfakegen
 				<< " | " << MarkdownCell(entry.fake_source) << " | "
 				<< (entry.link_ready ? "yes" : "no") << " | " << MarkdownCell(link_readiness_reason)
 				<< " | " << entry.generated_methods << " | " << entry.unsupported_items << " |\n";
+		}
+
+		out << "\n## Diagnostics\n\n";
+		if (diagnostics.empty())
+		{
+			out << "No diagnostics.\n";
+		}
+		else
+		{
+			out << "| Severity | Component | Code | Kind | Path | Class | Member | Message | "
+				   "Suggested action | Command | Stderr summary | Validation artifact |\n"
+				<< "|---|---|---|---|---|---|---|---|---|---|---|---|\n";
+			for (const auto& diagnostic : diagnostics)
+			{
+				out << "| " << MarkdownCell(ToString(diagnostic.severity)) << " | "
+					<< MarkdownCell(diagnostic.component) << " | " << MarkdownCell(diagnostic.code)
+					<< " | " << MarkdownCell(diagnostic.kind) << " | "
+					<< MarkdownCell(DiagnosticPath(diagnostic).generic_string()) << " | "
+					<< MarkdownCell(diagnostic.class_name) << " | "
+					<< MarkdownCell(diagnostic.member) << " | " << MarkdownCell(diagnostic.message)
+					<< " | " << MarkdownCell(diagnostic.suggested_action) << " | "
+					<< MarkdownCell(diagnostic.command) << " | "
+					<< MarkdownCell(diagnostic.stderr_summary) << " | "
+					<< MarkdownCell(diagnostic.validation_artifact_path.generic_string()) << " |\n";
+			}
+		}
+
+		out << "\n## Validation Commands\n\n";
+		if (metadata.validation_commands.empty())
+		{
+			out << "No validation commands recorded.\n";
+		}
+		else
+		{
+			out << "| Source | Exit code | Command |\n"
+				<< "|---|---:|---|\n";
+			for (const auto& command : metadata.validation_commands)
+			{
+				out << "| " << MarkdownCell(command.source_path.generic_string()) << " | "
+					<< command.exit_code << " | " << MarkdownCell(command.command) << " |\n";
+			}
 		}
 
 		out << "\n## Unsupported Items\n\n";

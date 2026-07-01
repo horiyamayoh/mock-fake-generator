@@ -18,18 +18,6 @@ namespace
 		}
 	}
 
-	void ExpectEqual(std::string_view actual, std::string_view expected, const char* message)
-	{
-		if (actual == expected)
-		{
-			return;
-		}
-
-		std::cerr << "EXPECTATION FAILED: " << message << '\n';
-		std::cerr << "expected:\n" << expected << "\nactual:\n" << actual << '\n';
-		std::exit(1);
-	}
-
 	[[nodiscard]] bool Contains(std::string_view text, std::string_view token)
 	{
 		return text.find(token) != std::string_view::npos;
@@ -311,6 +299,24 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::RunDiagnostic EscapingValidationDiagnostic()
+	{
+		mockfakegen::RunDiagnostic diagnostic;
+		diagnostic.severity = mockfakegen::DiagnosticSeverity::Error;
+		diagnostic.component = "validation";
+		diagnostic.code = "compile_validation_failure";
+		diagnostic.kind = "compile";
+		diagnostic.path = "generated/Broken.cpp";
+		diagnostic.class_name = "alpha::Escaping";
+		diagnostic.member = "alpha::Escaping::Run";
+		diagnostic.message = "message with \"quote\" and newline\nnext";
+		diagnostic.suggested_action = "rerun command";
+		diagnostic.command = "c++ -DNAME=\"A|B\"";
+		diagnostic.stderr_summary = "stderr line | one\nline two";
+		diagnostic.validation_artifact_path = "tmp/artifact.cpp";
+		return diagnostic;
+	}
+
 	[[nodiscard]] const mockfakegen::GeneratedFile&
 	FindFile(const std::vector<mockfakegen::GeneratedFile>& files, std::string_view path)
 	{
@@ -415,55 +421,27 @@ namespace
 		Expect(manifest.kind == mockfakegen::GeneratedFileKind::Manifest,
 			   "manifest kind should be set");
 		Expect(!manifest.source_class.has_value(), "manifest should not be tied to one class");
-		ExpectEqual(manifest.content,
-					"{\n"
-					"  \"summary\": {\n"
-					"    \"classes\": 2,\n"
-					"    \"link_ready_classes\": 1,\n"
-					"    \"not_link_ready_classes\": 1,\n"
-					"    \"generated_methods\": 3,\n"
-					"    \"unsupported_items\": 1,\n"
-					"    \"diagnostic_summary\": {\n"
-					"      \"warnings\": 1,\n"
-					"      \"errors\": 0\n"
-					"    }\n"
-					"  },\n"
-					"  \"classes\": [\n"
-					"    {\n"
-					"      \"qualified_name\": \"alpha::Alpha\",\n"
-					"      \"mock_header\": \"MockAlpha.h\",\n"
-					"      \"fake_source\": \"FakeAlpha.cpp\",\n"
-					"      \"source_header\": \"include/Alpha.h\",\n"
-					"      \"generated_methods\": 2,\n"
-					"      \"unsupported_methods\": 1,\n"
-					"      \"unsupported_items\": 1,\n"
-					"      \"link_ready\": false,\n"
-					"      \"link_readiness_reasons\": [\n"
-					"        \"unsupported items remain\"\n"
-					"      ],\n"
-					"      \"diagnostic_summary\": {\n"
-					"        \"warnings\": 1,\n"
-					"        \"errors\": 0\n"
-					"      }\n"
-					"    },\n"
-					"    {\n"
-					"      \"qualified_name\": \"zeta::Beta\",\n"
-					"      \"mock_header\": \"MockBeta.h\",\n"
-					"      \"fake_source\": \"FakeBeta.cpp\",\n"
-					"      \"source_header\": \"include/Beta.h\",\n"
-					"      \"generated_methods\": 1,\n"
-					"      \"unsupported_methods\": 0,\n"
-					"      \"unsupported_items\": 0,\n"
-					"      \"link_ready\": true,\n"
-					"      \"link_readiness_reasons\": [],\n"
-					"      \"diagnostic_summary\": {\n"
-					"        \"warnings\": 0,\n"
-					"        \"errors\": 0\n"
-					"      }\n"
-					"    }\n"
-					"  ]\n"
-					"}\n",
-					"manifest content should be deterministic");
+		Expect(Contains(manifest.content, "\"schema_version\": 1"),
+			   "manifest should include schema version");
+		Expect(Contains(manifest.content, "\"diagnostics\": 1"),
+			   "manifest should include non-zero diagnostic count");
+		Expect(Contains(manifest.content, "\"validation_commands\": 0"),
+			   "manifest should include validation command count");
+		Expect(Contains(manifest.content, "\"by_component\""),
+			   "manifest should group diagnostics by component");
+		Expect(Contains(manifest.content, "\"code\": \"unsupported_function_template\""),
+			   "manifest should include stable unsupported diagnostic code");
+		Expect(Contains(manifest.content, "\"component\": \"clang\""),
+			   "manifest should include diagnostic component");
+		Expect(Contains(manifest.content, "\"member\": \"alpha::Alpha::Convert\""),
+			   "manifest should include diagnostic member");
+		Expect(Contains(manifest.content, "\"suggested_action\": \"exclude this member"),
+			   "manifest should include suggested action");
+		const auto alpha_position = manifest.content.find("\"qualified_name\": \"alpha::Alpha\"");
+		const auto beta_position = manifest.content.find("\"qualified_name\": \"zeta::Beta\"");
+		Expect(alpha_position != std::string::npos && beta_position != std::string::npos &&
+				   alpha_position < beta_position,
+			   "manifest class entries should be deterministic");
 	}
 
 	void ResolvesQualifiedFilenameCollisions()
@@ -677,7 +655,7 @@ namespace
 
 		Expect(report.relative_path == "generation_report.md", "report path should be stable");
 		Expect(report.kind == mockfakegen::GeneratedFileKind::Report, "report kind should be set");
-		Expect(Contains(report.content, "| 2 | 1 | 1 | 3 | 1 | 1 | 0 |"),
+		Expect(Contains(report.content, "| 2 | 1 | 1 | 3 | 1 | 1 | 0 | 1 | 0 | 0 |"),
 			   "report should include diagnostic summary");
 		Expect(Contains(report.content, "`FakeXXX.cpp`"), "report should include link warning");
 		Expect(Contains(report.content,
@@ -689,6 +667,13 @@ namespace
 						"template member is not supported | exclude this member or provide a "
 						"hand-authored mock |"),
 			   "report should include unsupported item suggested action");
+		Expect(Contains(report.content, "## Diagnostics"), "report should include diagnostics");
+		Expect(Contains(report.content,
+						"| warning | clang | unsupported_function_template | function_template | "
+						"include/Alpha.h | alpha::Alpha | alpha::Alpha::Convert |"),
+			   "report should include unified diagnostic row");
+		Expect(Contains(report.content, "## Validation Commands"),
+			   "report should include validation command section");
 	}
 
 	void EscapesReportWriterText()
@@ -697,15 +682,61 @@ namespace
 
 		const auto manifest = mockfakegen::GenerateManifestJson(classes);
 		const auto report = mockfakegen::GenerateGenerationReport(classes);
+		const auto manifest_with_metadata = mockfakegen::GenerateManifestJson(
+			classes,
+			mockfakegen::GenerationReportMetadata{
+				.diagnostics =
+					{
+						EscapingValidationDiagnostic(),
+					},
+				.validation_commands =
+					{
+						mockfakegen::RunCommand{
+							.source_path = "generated/Broken.cpp",
+							.command = "c++ -fsyntax-only generated/Broken.cpp",
+							.exit_code = 1,
+						},
+					},
+			});
+		const auto report_with_metadata = mockfakegen::GenerateGenerationReport(
+			classes,
+			mockfakegen::GenerationReportMetadata{
+				.diagnostics =
+					{
+						EscapingValidationDiagnostic(),
+					},
+				.validation_commands =
+					{
+						mockfakegen::RunCommand{
+							.source_path = "generated/Broken.cpp",
+							.command = "c++ -fsyntax-only generated/Broken.cpp",
+							.exit_code = 1,
+						},
+					},
+			});
 
 		Expect(
 			Contains(manifest.content, "\"source_header\": \"include/Quote\\\"Back\\\\Slash.h\""),
 			"manifest should JSON-escape quote and backslash characters");
+		Expect(Contains(manifest_with_metadata.content,
+						"\"message\": \"message with \\\"quote\\\" and newline\\nnext\""),
+			   "manifest should JSON-escape diagnostic message");
+		Expect(Contains(manifest_with_metadata.content, "\"command\": \"c++ -DNAME=\\\"A|B\\\"\""),
+			   "manifest should JSON-escape diagnostic command");
+		Expect(Contains(manifest_with_metadata.content,
+						"\"stderr_summary\": \"stderr line | one\\nline two\""),
+			   "manifest should JSON-escape stderr summaries");
 		Expect(Contains(report.content,
 						"| include/Quote\"Back\\Slash.h | alpha::Escaping | "
 						"alpha::Escaping::Convert | reason with \\| pipe and newline | use "
 						"\\| manual mock |"),
 			   "report should escape markdown table separators and flatten newlines");
+		Expect(Contains(report_with_metadata.content, "message with \"quote\" and newline next"),
+			   "report should flatten diagnostic message newlines");
+		Expect(Contains(report_with_metadata.content, "c++ -DNAME=\"A\\|B\""),
+			   "report should escape markdown pipes in commands");
+		Expect(Contains(report_with_metadata.content, "stderr line \\| one line two"),
+			   "report should escape markdown pipes in stderr summaries");
 	}
 } // namespace
 

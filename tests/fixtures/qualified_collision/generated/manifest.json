@@ -1,15 +1,23 @@
 {
+  "schema_version": 1,
   "summary": {
     "classes": 2,
     "link_ready_classes": 2,
     "not_link_ready_classes": 0,
     "generated_methods": 2,
     "unsupported_items": 0,
+    "diagnostics": 0,
+    "validation_commands": 0,
     "diagnostic_summary": {
+      "total": 0,
+      "info": 0,
       "warnings": 0,
-      "errors": 0
+      "errors": 0,
+      "by_component": []
     }
   },
+  "diagnostics": [],
+  "validation_commands": [],
   "classes": [
     {
       "qualified_name": "a::Hoge",
@@ -29,6 +37,8 @@
       "link_ready": true,
       "link_readiness_reasons": [],
       "diagnostic_summary": {
+        "total": 0,
+        "info": 0,
         "warnings": 0,
         "errors": 0
       }
@@ -51,6 +61,8 @@
       "link_ready": true,
       "link_readiness_reasons": [],
       "diagnostic_summary": {
+        "total": 0,
+        "info": 0,
         "warnings": 0,
         "errors": 0
       }

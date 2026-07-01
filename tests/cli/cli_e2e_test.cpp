@@ -382,6 +382,72 @@ namespace
 		Expect(Contains(runtime, "std::lock_guard<std::mutex>"),
 			   "global-mutex runtime should use mutex locking");
 	}
+
+	void ScannerFailureAppearsInManifest(const std::filesystem::path& temp_root,
+										 const std::filesystem::path& build_dir)
+	{
+		const auto output_dir = temp_root / "scanner-failure";
+		const auto missing_input = temp_root / "does-not-exist";
+		auto args = BaseArgs(missing_input, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "scanner_failure");
+		Expect(result.exit_code == 1, "scanner failure should return non-zero");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "scanner failure should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "scanner failure should emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"component\": \"scanner\""),
+			   "scanner diagnostic should appear in manifest");
+		Expect(Contains(manifest, "input root does not exist"),
+			   "scanner diagnostic message should appear in manifest");
+	}
+
+	void ValidationFailureAppearsInManifest(const std::filesystem::path& temp_root,
+											const std::filesystem::path& product_dir,
+											const std::filesystem::path& build_dir)
+	{
+#if defined(__unix__)
+		unsetenv("MOCKFAKEGEN_GMOCK_INCLUDE_DIRS");
+#endif
+		const auto output_dir = temp_root / "validation-failure";
+		auto args = BaseArgs(product_dir, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+				   "--fake-special-members",
+				   "true",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "validation_failure");
+#if defined(__unix__)
+		setenv("MOCKFAKEGEN_GMOCK_INCLUDE_DIRS", MOCKFAKEGEN_GMOCK_INCLUDE_DIRS, 1);
+#endif
+		Expect(result.exit_code == 1, "validation failure should return non-zero");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "validation failure should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "validation failure should emit report");
+		Expect(!std::filesystem::exists(output_dir / "MockHoge.h"),
+			   "validation failure should not publish generated mock header");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"component\": \"validation\""),
+			   "validation diagnostic should appear in manifest");
+		Expect(Contains(manifest, "\"validation_commands\": 2"),
+			   "manifest should include validation command count");
+		Expect(Contains(manifest, "gMock include path is missing"),
+			   "validation diagnostic message should appear in manifest");
+	}
 } // namespace
 
 int main()
@@ -405,6 +471,8 @@ int main()
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
 	StrictModeFailsUnsupportedInput(temp_root, product_dir, build_dir);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
+	ScannerFailureAppearsInManifest(temp_root, build_dir);
+	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);
 
 	std::error_code remove_error;
 	std::filesystem::remove_all(temp_root, remove_error);

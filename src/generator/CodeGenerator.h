@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Config.h"
+#include "diagnostics/RunDiagnostic.h"
 #include "model/GeneratedFile.h"
 #include "model/ProjectModel.h"
 
@@ -80,7 +81,11 @@ namespace mockfakegen
 	[[nodiscard]] GeneratedFile GenerateAllMocksHeader(std::span<const GeneratedFile> files);
 	[[nodiscard]] GeneratedFile GenerateCMakeFragment(std::span<const GeneratedFile> files);
 	[[nodiscard]] GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models);
+	[[nodiscard]] GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models,
+													 const GenerationReportMetadata& metadata);
 	[[nodiscard]] GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models);
+	[[nodiscard]] GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models,
+														 const GenerationReportMetadata& metadata);
 	[[nodiscard]] std::vector<GeneratedFile>
 	GenerateMockFakeProject(std::span<const ClassModel> class_models,
 							ProjectGenerationOptions options = {});

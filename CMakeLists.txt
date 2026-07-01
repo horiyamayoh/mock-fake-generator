@@ -129,6 +129,7 @@ add_library(
 	mockfakegen_core
 		src/CompilationResolver.cpp
 		src/Config.cpp
+		src/diagnostics/RunDiagnostic.cpp
 		src/FormatStyle.cpp
 		src/ValidationMode.cpp
 		src/clang/ClassExtractor.cpp
@@ -334,6 +335,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_sanitizers(mockfakegen_header_scanner_test)
 
 	add_test(NAME mockfakegen_header_scanner_test COMMAND mockfakegen_header_scanner_test)
+
+	add_executable(mockfakegen_run_diagnostic_test tests/diagnostics/run_diagnostic_test.cpp)
+	target_link_libraries(mockfakegen_run_diagnostic_test PRIVATE mockfakegen_core)
+	target_compile_features(mockfakegen_run_diagnostic_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_run_diagnostic_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_run_diagnostic_test)
+	mockfakegen_apply_sanitizers(mockfakegen_run_diagnostic_test)
+
+	add_test(NAME mockfakegen_run_diagnostic_test COMMAND mockfakegen_run_diagnostic_test)
 
 	add_executable(mockfakegen_generated_file_test tests/model/generated_file_test.cpp)
 	target_link_libraries(mockfakegen_generated_file_test PRIVATE mockfakegen_core)
