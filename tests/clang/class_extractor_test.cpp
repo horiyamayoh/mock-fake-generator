@@ -240,6 +240,28 @@ namespace
 		std::exit(1);
 	}
 
+	void AvoidsGeneratedNameCollisionsInProductScope()
+	{
+		TempTree tree;
+		tree.Write("include/CollidingNames.h",
+				   "#pragma once\n"
+				   "namespace app {\n"
+				   "class Service { public: void Run(); };\n"
+				   "class MockService {};\n"
+				   "using ScopedMockService = int;\n"
+				   "} // namespace app\n");
+
+		const auto result = ParseAndExtract(tree, "include/CollidingNames.h");
+
+		const auto& service = FindClass(result, "Service");
+		Expect(service.qualified_name == "app::Service",
+			   "target class should be extracted in namespace");
+		Expect(service.mock_name == "MockFakeService",
+			   "mock class name should avoid product declaration collision");
+		Expect(service.scoped_mock_name == "ScopedMockFakeService",
+			   "scoped mock alias should avoid product alias collision");
+	}
+
 	void RecordsClassTemplateSpecializationsAsUnsupported()
 	{
 		TempTree tree;
@@ -1022,6 +1044,7 @@ int main()
 {
 	ExtractsGlobalClass();
 	ExtractsNamespacedClass();
+	AvoidsGeneratedNameCollisionsInProductScope();
 	SkipsForwardDeclarationAnonymousStructAndSystemHeaders();
 	IgnoresDefaultedSpecialMembersWithoutFakeSpecialMembers();
 	RecordsClassTemplateAsUnsupported();

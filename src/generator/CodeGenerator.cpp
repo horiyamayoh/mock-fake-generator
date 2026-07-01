@@ -17,6 +17,10 @@ namespace mockfakegen
 	{
 		[[nodiscard]] std::string MockClassName(const SimpleClassModel& class_model)
 		{
+			if (!class_model.mock_name.empty())
+			{
+				return class_model.mock_name;
+			}
 			return "Mock" + class_model.name;
 		}
 
@@ -137,6 +141,10 @@ namespace mockfakegen
 
 		[[nodiscard]] std::string ScopedMockAliasName(const SimpleClassModel& class_model)
 		{
+			if (!class_model.scoped_mock_name.empty())
+			{
+				return class_model.scoped_mock_name;
+			}
 			return "ScopedMock" + class_model.name;
 		}
 
@@ -1352,6 +1360,8 @@ namespace mockfakegen
 				.name = class_model.name,
 				.namespaces = class_model.namespaces,
 				.header_include = class_model.source_header.include_spelling,
+				.mock_name = class_model.mock_name,
+				.scoped_mock_name = class_model.scoped_mock_name,
 				.mock_header_name = MockHeaderName(class_model),
 				.fake_source_name = FakeSourceName(class_model),
 				.methods = {},

@@ -177,7 +177,8 @@ namespace mockfakegen
 		std::string name;
 		std::string qualified_name;
 		std::vector<std::string> namespaces;
-		std::string mock_name;
+		std::string mock_name = {};
+		std::string scoped_mock_name = {};
 		std::string mock_header_name;
 		std::string fake_source_name;
 		HeaderModel source_header;
@@ -205,6 +206,7 @@ namespace mockfakegen
 	[[nodiscard]] std::string BuildQualifiedName(const std::vector<std::string>& namespaces,
 												 const std::string& name);
 	[[nodiscard]] std::string DefaultMockName(const std::string& class_name);
+	[[nodiscard]] std::string DefaultScopedMockName(const std::string& class_name);
 	[[nodiscard]] std::string DefaultMockHeaderName(const std::string& class_name);
 	[[nodiscard]] std::string DefaultFakeSourceName(const std::string& class_name);
 	void SortProjectModel(ProjectModel& project);

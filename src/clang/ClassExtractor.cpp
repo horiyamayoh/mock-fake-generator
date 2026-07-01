@@ -173,6 +173,45 @@ namespace mockfakegen
 			return "copy assignment operator fake generation is not supported";
 		}
 
+		[[nodiscard]] bool HasNameInDeclContext(const clang::DeclContext* context,
+												std::string_view name)
+		{
+			if (context == nullptr)
+			{
+				return false;
+			}
+			for (const auto* declaration : context->decls())
+			{
+				const auto* named = llvm::dyn_cast<clang::NamedDecl>(declaration);
+				if (named == nullptr || named->isImplicit())
+				{
+					continue;
+				}
+				if (named->getNameAsString() == std::string(name))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		[[nodiscard]] std::string FirstAvailableGeneratedName(const clang::DeclContext* context,
+															  std::string default_name,
+															  const std::string& fallback_base)
+		{
+			if (!HasNameInDeclContext(context, default_name))
+			{
+				return default_name;
+			}
+
+			auto candidate = fallback_base;
+			for (int suffix = 2; HasNameInDeclContext(context, candidate); ++suffix)
+			{
+				candidate = fallback_base + std::to_string(suffix);
+			}
+			return candidate;
+		}
+
 		[[nodiscard]] bool HasAccessibleDefaultConstructor(const clang::CXXRecordDecl& record)
 		{
 			if (!record.hasDefinition())
@@ -406,12 +445,19 @@ namespace mockfakegen
 
 				const auto namespaces = NamespaceParts(declaration->getDeclContext());
 				const auto name = declaration->getNameAsString();
+				const auto mock_name = FirstAvailableGeneratedName(
+					declaration->getDeclContext(), DefaultMockName(name), "MockFake" + name);
+				const auto scoped_mock_name =
+					FirstAvailableGeneratedName(declaration->getDeclContext(),
+												DefaultScopedMockName(name),
+												"ScopedMockFake" + name);
 				const auto interface_mock = ShouldUseInterfaceMockMode(*declaration);
 				auto class_model = ClassModel{
 					.name = name,
 					.qualified_name = BuildQualifiedName(namespaces, name),
 					.namespaces = namespaces,
-					.mock_name = DefaultMockName(name),
+					.mock_name = mock_name,
+					.scoped_mock_name = scoped_mock_name,
 					.mock_header_name = DefaultMockHeaderName(name),
 					.fake_source_name = DefaultFakeSourceName(name),
 					.source_header = target_header_,

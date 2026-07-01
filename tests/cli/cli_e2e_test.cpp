@@ -590,6 +590,71 @@ namespace
 			   "manifest should explain final interface unsupported reason");
 	}
 
+	void GeneratedNamesAvoidProductScopeCollisions(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "generated-name-collision-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "generated-name-collision-build";
+		const auto output_dir = temp_root / "generated-name-collision-generated";
+		WriteText(include_dir / "Service.h",
+				  "#pragma once\n"
+				  "class Service {\n"
+				  "public:\n"
+				  "  void Run();\n"
+				  "};\n"
+				  "class MockService {};\n"
+				  "using ScopedMockService = int;\n");
+		const auto source = source_dir / "Service.cpp";
+		WriteText(source,
+				  "#include \"Service.h\"\n"
+				  "void Service::Run() {}\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o service.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "generated_name_collision");
+
+		Expect(result.exit_code == 0, "generated name collision run should compile validate");
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(!Contains(stderr_text, "redefinition"),
+			   "generated safe names should avoid class redefinition");
+		Expect(!Contains(stderr_text, "conflicting declaration"),
+			   "generated safe names should avoid alias conflict");
+		const auto mock_header = ReadText(output_dir / "MockService.h");
+		const auto fake_source = ReadText(output_dir / "FakeService.cpp");
+		Expect(Contains(mock_header, "class MockFakeService"),
+			   "mock header should use safe mock class name");
+		Expect(!Contains(mock_header, "class MockService\n"),
+			   "mock header should not redeclare product mock name");
+		Expect(Contains(mock_header,
+						"using ScopedMockFakeService = ::mockfake::ScopedMock<MockFakeService>;"),
+			   "mock header should use safe scoped mock alias");
+		Expect(!Contains(mock_header, "using ScopedMockService = ::mockfake"),
+			   "mock header should not redeclare product scoped alias");
+		Expect(Contains(fake_source, "MockFakeService"),
+			   "fake source should use safe mock class name");
+	}
+
 	void NestedGeneratedOutputIsNotReingested(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "scanner-generated-product";
@@ -1464,6 +1529,7 @@ int main()
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
+	GeneratedNamesAvoidProductScopeCollisions(temp_root);
 	NestedGeneratedOutputIsNotReingested(temp_root);
 	QualifiedFilenameCollisionsAppearInCliArtifacts(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);

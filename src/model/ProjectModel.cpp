@@ -80,6 +80,11 @@ namespace mockfakegen
 		return "Mock" + class_name;
 	}
 
+	std::string DefaultScopedMockName(const std::string& class_name)
+	{
+		return "ScopedMock" + class_name;
+	}
+
 	std::string DefaultMockHeaderName(const std::string& class_name)
 	{
 		return DefaultMockName(class_name) + ".h";
