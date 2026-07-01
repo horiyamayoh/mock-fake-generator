@@ -529,6 +529,11 @@ namespace mockfakegen
 			std::size_t generated_methods = 0U;
 			std::size_t unsupported_items = 0U;
 			bool link_ready = true;
+			bool structural_link_ready = true;
+			bool mock_header_published = true;
+			bool fake_source_published = true;
+			std::string mock_header_publication_status = "selected";
+			std::string fake_source_publication_status = "selected";
 			std::vector<std::string> link_readiness_reasons;
 			bool filename_collision = false;
 		};
@@ -572,19 +577,121 @@ namespace mockfakegen
 			return "unknown";
 		}
 
-		[[nodiscard]] ClassReportEntry MakeClassReportEntry(const ClassModel& class_model)
+		[[nodiscard]] std::string_view
+		PublicationStatusName(GeneratedFilePublicationStatus status) noexcept
+		{
+			switch (status)
+			{
+				case GeneratedFilePublicationStatus::Selected:
+					return "selected";
+				case GeneratedFilePublicationStatus::SuppressedByPolicy:
+					return "suppressed_by_policy";
+				case GeneratedFilePublicationStatus::Planned:
+					return "planned";
+				case GeneratedFilePublicationStatus::Written:
+					return "written";
+				case GeneratedFilePublicationStatus::Unchanged:
+					return "unchanged";
+				case GeneratedFilePublicationStatus::SkippedExisting:
+					return "skipped_existing";
+				case GeneratedFilePublicationStatus::Failed:
+					return "failed";
+			}
+
+			return "unknown";
+		}
+
+		[[nodiscard]] bool IsPublishedStatus(GeneratedFilePublicationStatus status) noexcept
+		{
+			return status == GeneratedFilePublicationStatus::Written ||
+				status == GeneratedFilePublicationStatus::Unchanged;
+		}
+
+		[[nodiscard]] const GeneratedFilePublication*
+		FindPublication(const GenerationReportMetadata& metadata,
+						GeneratedFileKind kind,
+						std::string_view path,
+						std::string_view source_class)
+		{
+			for (const auto& publication : metadata.file_publications)
+			{
+				if (publication.kind == kind && publication.path.generic_string() == path &&
+					publication.source_class == source_class)
+				{
+					return &publication;
+				}
+			}
+			return nullptr;
+		}
+
+		[[nodiscard]] std::string
+		PublicationStatusOrDefault(const GeneratedFilePublication* publication,
+								   GeneratedFilePublicationStatus default_status =
+									   GeneratedFilePublicationStatus::Selected)
+		{
+			if (publication == nullptr)
+			{
+				return std::string(PublicationStatusName(default_status));
+			}
+			return std::string(PublicationStatusName(publication->status));
+		}
+
+		[[nodiscard]] bool PublishedOrDefault(const GeneratedFilePublication* publication,
+											  bool default_value) noexcept
+		{
+			if (publication == nullptr)
+			{
+				return default_value;
+			}
+			return IsPublishedStatus(publication->status);
+		}
+
+		[[nodiscard]] ClassReportEntry
+		MakeClassReportEntry(const ClassModel& class_model,
+							 const GenerationReportMetadata& metadata)
 		{
 			const auto mock_header = MockHeaderName(class_model);
 			const auto fake_source = FakeSourceName(class_model);
 			const auto default_mock_header = DefaultMockHeaderName(class_model.name);
 			const auto has_fake_source = HasFakeSource(class_model);
+			const auto qualified_name = QualifiedClassName(class_model);
 			const auto default_fake_source =
 				has_fake_source ? DefaultFakeSourceName(class_model.name) : std::string{};
 			const auto generation_mode = class_model.interface_mock
 				? std::string("interface-mock")
 				: (has_fake_source ? std::string("link-replacement") : std::string("mock-only"));
+			const auto structural_link_ready = IsLinkReady(class_model);
+			auto link_readiness_reasons = LinkReadinessReasons(class_model);
+			const auto has_publication_metadata = !metadata.file_publications.empty();
+			const auto* mock_header_publication = FindPublication(
+				metadata, GeneratedFileKind::MockHeader, mock_header, qualified_name);
+			const auto* fake_source_publication = has_fake_source
+				? FindPublication(
+					  metadata, GeneratedFileKind::FakeSource, fake_source, qualified_name)
+				: nullptr;
+			const auto mock_header_published =
+				PublishedOrDefault(mock_header_publication, !has_publication_metadata);
+			const auto fake_source_published = !has_fake_source ||
+				PublishedOrDefault(fake_source_publication, !has_publication_metadata);
+			if (structural_link_ready && has_publication_metadata)
+			{
+				if (!mock_header_published)
+				{
+					link_readiness_reasons.push_back(
+						"mock header was not published: " +
+						PublicationStatusOrDefault(mock_header_publication,
+												   GeneratedFilePublicationStatus::Failed));
+				}
+				if (has_fake_source && !fake_source_published)
+				{
+					link_readiness_reasons.push_back(
+						"fake source was not published: " +
+						PublicationStatusOrDefault(fake_source_publication,
+												   GeneratedFilePublicationStatus::Failed));
+				}
+			}
 			return ClassReportEntry{
-				.qualified_name = QualifiedClassName(class_model),
+				.qualified_name = qualified_name,
 				.mock_header = mock_header,
 				.fake_source = fake_source,
 				.default_mock_header = default_mock_header,
@@ -594,21 +701,31 @@ namespace mockfakegen
 				.generation_mode = generation_mode,
 				.generated_methods = class_model.mock_methods.size(),
 				.unsupported_items = class_model.unsupported_items.size(),
-				.link_ready = IsLinkReady(class_model),
-				.link_readiness_reasons = LinkReadinessReasons(class_model),
+				.link_ready =
+					structural_link_ready && mock_header_published && fake_source_published,
+				.structural_link_ready = structural_link_ready,
+				.mock_header_published = mock_header_published,
+				.fake_source_published = fake_source_published,
+				.mock_header_publication_status =
+					PublicationStatusOrDefault(mock_header_publication),
+				.fake_source_publication_status = has_fake_source
+					? PublicationStatusOrDefault(fake_source_publication)
+					: std::string("not_applicable"),
+				.link_readiness_reasons = std::move(link_readiness_reasons),
 				.filename_collision =
 					mock_header != default_mock_header || fake_source != default_fake_source,
 			};
 		}
 
 		[[nodiscard]] std::vector<ClassReportEntry>
-		SortedClassReportEntries(std::span<const ClassModel> class_models)
+		SortedClassReportEntries(std::span<const ClassModel> class_models,
+								 const GenerationReportMetadata& metadata)
 		{
 			std::vector<ClassReportEntry> entries;
 			entries.reserve(class_models.size());
 			for (const auto& class_model : class_models)
 			{
-				entries.push_back(MakeClassReportEntry(class_model));
+				entries.push_back(MakeClassReportEntry(class_model, metadata));
 			}
 
 			std::sort(entries.begin(),
@@ -704,6 +821,31 @@ namespace mockfakegen
 			std::sort(sources.begin(), sources.end());
 			sources.erase(std::unique(sources.begin(), sources.end()), sources.end());
 			return sources;
+		}
+
+		[[nodiscard]] std::size_t
+		PublishedFileCount(std::span<const GeneratedFilePublication> publications,
+						   GeneratedFileKind kind)
+		{
+			return static_cast<std::size_t>(std::count_if(
+				publications.begin(),
+				publications.end(),
+				[kind](const auto& publication)
+				{
+					return publication.kind == kind && IsPublishedStatus(publication.status);
+				}));
+		}
+
+		[[nodiscard]] std::size_t
+		PublicationStatusCount(std::span<const GeneratedFilePublication> publications,
+							   GeneratedFilePublicationStatus status)
+		{
+			return static_cast<std::size_t>(std::count_if(publications.begin(),
+														  publications.end(),
+														  [status](const auto& publication)
+														  {
+															  return publication.status == status;
+														  }));
 		}
 
 		[[nodiscard]] GenerationReportMetadata
@@ -1567,13 +1709,14 @@ namespace mockfakegen
 	GeneratedFile GenerateManifestJson(std::span<const ClassModel> class_models,
 									   const GenerationReportMetadata& metadata)
 	{
-		const auto entries = SortedClassReportEntries(class_models);
+		const auto entries = SortedClassReportEntries(class_models, metadata);
 		const auto diagnostics = SortedRunDiagnostics(metadata.diagnostics);
 		const auto diagnostic_summary = SummarizeDiagnostics(diagnostics);
 		const auto component_summaries = SummarizeDiagnosticsByComponent(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(entries);
 		const auto unsupported_items = TotalUnsupportedItems(entries, metadata.unsupported_items);
 		const auto usable_fake_sources = UsableFakeSources(entries);
+		const auto has_publication_metadata = !metadata.file_publications.empty();
 
 		std::ostringstream out;
 		out << "{\n"
@@ -1595,8 +1738,37 @@ namespace mockfakegen
 							 {
 								 return !entry.link_ready;
 							 })
-			<< ",\n"
-			<< "    \"generated_methods\": " << generated_methods << ",\n"
+			<< ",\n";
+		if (has_publication_metadata)
+		{
+			out << "    \"structurally_link_ready_classes\": "
+				<< std::count_if(entries.begin(),
+								 entries.end(),
+								 [](const auto& entry)
+								 {
+									 return entry.structural_link_ready;
+								 })
+				<< ",\n"
+				<< "    \"published_mock_headers\": "
+				<< PublishedFileCount(metadata.file_publications, GeneratedFileKind::MockHeader)
+				<< ",\n"
+				<< "    \"published_fake_sources\": "
+				<< PublishedFileCount(metadata.file_publications, GeneratedFileKind::FakeSource)
+				<< ",\n"
+				<< "    \"suppressed_generated_files\": "
+				<< PublicationStatusCount(metadata.file_publications,
+										  GeneratedFilePublicationStatus::SuppressedByPolicy)
+				<< ",\n"
+				<< "    \"skipped_generated_files\": "
+				<< PublicationStatusCount(metadata.file_publications,
+										  GeneratedFilePublicationStatus::SkippedExisting)
+				<< ",\n"
+				<< "    \"failed_generated_files\": "
+				<< PublicationStatusCount(metadata.file_publications,
+										  GeneratedFilePublicationStatus::Failed)
+				<< ",\n";
+		}
+		out << "    \"generated_methods\": " << generated_methods << ",\n"
 			<< "    \"unsupported_items\": " << unsupported_items << ",\n"
 			<< "    \"registry_mode\": " << JsonString(RegistryModeName(metadata.registry_mode))
 			<< ",\n"
@@ -1634,6 +1806,25 @@ namespace mockfakegen
 				<< "      \"qualified_name\": " << JsonString(entry.qualified_name) << ",\n"
 				<< "      \"mock_header\": " << JsonString(entry.mock_header) << ",\n"
 				<< "      \"fake_source\": " << JsonString(entry.fake_source) << ",\n";
+			if (has_publication_metadata)
+			{
+				out << "      \"publication\": {\n"
+					<< "        \"mock_header\": {\n"
+					<< "          \"path\": " << JsonString(entry.mock_header) << ",\n"
+					<< "          \"status\": " << JsonString(entry.mock_header_publication_status)
+					<< ",\n"
+					<< "          \"published\": "
+					<< (entry.mock_header_published ? "true" : "false") << "\n"
+					<< "        },\n"
+					<< "        \"fake_source\": {\n"
+					<< "          \"path\": " << JsonString(entry.fake_source) << ",\n"
+					<< "          \"status\": " << JsonString(entry.fake_source_publication_status)
+					<< ",\n"
+					<< "          \"published\": "
+					<< (entry.fake_source_published ? "true" : "false") << "\n"
+					<< "        }\n"
+					<< "      },\n";
+			}
 			if (entry.filename_collision)
 			{
 				out << "      \"filename_collision\": {\n"
@@ -1653,8 +1844,13 @@ namespace mockfakegen
 				<< "      \"generated_methods\": " << entry.generated_methods << ",\n"
 				<< "      \"unsupported_methods\": " << entry.unsupported_items << ",\n"
 				<< "      \"unsupported_items\": " << entry.unsupported_items << ",\n"
-				<< "      \"link_ready\": " << (entry.link_ready ? "true" : "false") << ",\n"
-				<< "      \"link_readiness_reasons\": ";
+				<< "      \"link_ready\": " << (entry.link_ready ? "true" : "false") << ",\n";
+			if (has_publication_metadata)
+			{
+				out << "      \"structural_link_ready\": "
+					<< (entry.structural_link_ready ? "true" : "false") << ",\n";
+			}
+			out << "      \"link_readiness_reasons\": ";
 			WriteJsonStringArray(out, entry.link_readiness_reasons, "      ");
 			out << ",\n"
 				<< "      \"diagnostic_summary\": {\n"
@@ -1686,7 +1882,7 @@ namespace mockfakegen
 	GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models,
 										   const GenerationReportMetadata& metadata)
 	{
-		const auto class_entries = SortedClassReportEntries(class_models);
+		const auto class_entries = SortedClassReportEntries(class_models, metadata);
 		const auto unsupported_entries =
 			SortedUnsupportedReportEntries(class_models, metadata.unsupported_items);
 		const auto diagnostics = SortedRunDiagnostics(metadata.diagnostics);
@@ -1695,6 +1891,7 @@ namespace mockfakegen
 		const auto unsupported_items =
 			TotalUnsupportedItems(class_entries, metadata.unsupported_items);
 		const auto usable_fake_sources = UsableFakeSources(class_entries);
+		const auto has_publication_metadata = !metadata.file_publications.empty();
 
 		std::ostringstream out;
 		out << "# mockfakegen generation report\n\n"
@@ -1742,6 +1939,22 @@ namespace mockfakegen
 			for (const auto& fake_source : usable_fake_sources)
 			{
 				out << "- `" << fake_source << "`\n";
+			}
+			out << '\n';
+		}
+		if (has_publication_metadata)
+		{
+			out << "Generated file publication statuses:\n\n"
+				<< "| Kind | Path | Class | Status | Published |\n"
+				<< "|---|---|---|---|---|\n";
+			for (const auto& publication : metadata.file_publications)
+			{
+				const auto published = IsPublishedStatus(publication.status);
+				out << "| " << MarkdownCell(ToString(publication.kind)) << " | "
+					<< MarkdownCell(publication.path.generic_string()) << " | "
+					<< MarkdownCell(publication.source_class) << " | "
+					<< MarkdownCell(PublicationStatusName(publication.status)) << " | "
+					<< (published ? "yes" : "no") << " |\n";
 			}
 			out << '\n';
 		}

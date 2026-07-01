@@ -926,11 +926,26 @@ namespace
 			   "unrelated class mock should be published");
 		Expect(std::filesystem::exists(output_dir / "FakeOther.cpp"),
 			   "unrelated class fake should be published");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"published_fake_sources\": 1"),
+			   "manifest should count only actually published fake sources");
+		Expect(Contains(manifest, "\"skipped_generated_files\": 1"),
+			   "manifest should count skipped conflicting files");
+		Expect(Contains(manifest, "\"failed_generated_files\": 1"),
+			   "manifest should count same-class files blocked by the conflict");
+		Expect(Contains(manifest, "\"status\": \"skipped_existing\""),
+			   "manifest should record skipped existing output status");
+		Expect(Contains(manifest, "\"status\": \"failed\""),
+			   "manifest should record same-class blocked output status");
 		const auto report = ReadText(output_dir / "generation_report.md");
 		Expect(Contains(report, "output_conflict"),
 			   "partial conflict report should include writer diagnostic");
 		Expect(Contains(report, "MockGood.h"),
 			   "partial conflict report should name conflicting file");
+		Expect(Contains(report, "- `FakeOther.cpp`"),
+			   "report should advertise the published unrelated fake source");
+		Expect(!Contains(report, "- `FakeGood.cpp`"),
+			   "report should not advertise the unpublished same-class fake source");
 	}
 
 	void EmitOptionsControlOptionalArtifacts(const std::filesystem::path& temp_root,
@@ -1580,6 +1595,19 @@ namespace
 			   "validation diagnostic message should appear in manifest");
 		Expect(Contains(manifest, artifact_dir.generic_string()),
 			   "manifest should include kept validation artifact path");
+		Expect(Contains(manifest, "\"usable_fake_sources\": []"),
+			   "validation failure manifest should not advertise unpublished fake sources");
+		Expect(Contains(manifest, "\"structural_link_ready\": true"),
+			   "validation failure manifest should preserve structural readiness");
+		Expect(Contains(manifest, "\"link_ready\": false"),
+			   "validation failure manifest should mark unpublished class not usable");
+		Expect(Contains(manifest, "\"status\": \"suppressed_by_policy\""),
+			   "validation failure manifest should record policy-suppressed outputs");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(!Contains(report, "- `FakeHoge.cpp`"),
+			   "validation failure report should not advertise unpublished fake sources");
+		Expect(Contains(report, "suppressed_by_policy"),
+			   "validation failure report should include publication status");
 		Expect(std::filesystem::exists(artifact_dir),
 			   "validation artifact directory should be retained");
 	}

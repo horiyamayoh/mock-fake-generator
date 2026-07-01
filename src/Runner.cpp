@@ -559,6 +559,84 @@ namespace mockfakegen
 							   });
 		}
 
+		[[nodiscard]] GeneratedFilePublicationStatus
+		ToPublicationStatus(OutputWriteStatus status) noexcept
+		{
+			switch (status)
+			{
+				case OutputWriteStatus::Planned:
+					return GeneratedFilePublicationStatus::Planned;
+				case OutputWriteStatus::Written:
+					return GeneratedFilePublicationStatus::Written;
+				case OutputWriteStatus::Unchanged:
+					return GeneratedFilePublicationStatus::Unchanged;
+				case OutputWriteStatus::SkippedExisting:
+					return GeneratedFilePublicationStatus::SkippedExisting;
+				case OutputWriteStatus::Failed:
+					return GeneratedFilePublicationStatus::Failed;
+			}
+
+			return GeneratedFilePublicationStatus::Failed;
+		}
+
+		[[nodiscard]] std::string SourceClassName(const GeneratedFile& file)
+		{
+			if (!file.source_class.has_value())
+			{
+				return {};
+			}
+			return file.source_class->qualified_name;
+		}
+
+		[[nodiscard]] bool SamePublicationTarget(const GeneratedFile& lhs, const GeneratedFile& rhs)
+		{
+			return lhs.kind == rhs.kind &&
+				lhs.relative_path.generic_string() == rhs.relative_path.generic_string() &&
+				SourceClassName(lhs) == SourceClassName(rhs);
+		}
+
+		[[nodiscard]] GeneratedFilePublication
+		MakeFilePublication(const GeneratedFile& file, GeneratedFilePublicationStatus status)
+		{
+			return GeneratedFilePublication{
+				.kind = file.kind,
+				.path = file.relative_path,
+				.source_class = SourceClassName(file),
+				.status = status,
+			};
+		}
+
+		[[nodiscard]] std::vector<GeneratedFilePublication>
+		BuildFilePublications(std::span<const GeneratedFile> generated_files,
+							  std::span<const GeneratedFile> selected_files,
+							  const OutputWriteResult* write_result)
+		{
+			std::vector<GeneratedFilePublication> publications;
+			publications.reserve(generated_files.size());
+			std::vector<bool> selected_used(selected_files.size(), false);
+			for (const auto& file : generated_files)
+			{
+				auto status = GeneratedFilePublicationStatus::SuppressedByPolicy;
+				for (std::size_t index = 0U; index < selected_files.size(); ++index)
+				{
+					if (selected_used[index] || !SamePublicationTarget(file, selected_files[index]))
+					{
+						continue;
+					}
+
+					selected_used[index] = true;
+					status = GeneratedFilePublicationStatus::Selected;
+					if (write_result != nullptr && index < write_result->files.size())
+					{
+						status = ToPublicationStatus(write_result->files[index].status);
+					}
+					break;
+				}
+				publications.push_back(MakeFilePublication(file, status));
+			}
+			return publications;
+		}
+
 		[[nodiscard]] Diagnostic ToParseDiagnostic(const CompilationResolverDiagnostic& diagnostic)
 		{
 			Diagnostic result;
@@ -840,18 +918,24 @@ namespace mockfakegen
 		AppendRunDiagnostics(run_diagnostics, policy_decision.diagnostics);
 		print_new_run_diagnostics();
 
-		const auto final_files = AppendDiagnosticArtifacts(
-			format_result.files,
-			report_classes,
-			GenerationReportMetadata{
-				.diagnostics = run_diagnostics,
-				.validation_commands = ToRunCommands(validation_result.commands),
-				.unsupported_items = resolve_result.project.unsupported_items,
-				.registry_mode = config.registry_mode,
-				.fallback_policy = config.fallback_policy,
-			},
-			config.emit_manifest);
-		const auto selected_files = FilesSelectedByPolicy(final_files, policy_decision);
+		auto report_metadata = GenerationReportMetadata{
+			.diagnostics = run_diagnostics,
+			.validation_commands = ToRunCommands(validation_result.commands),
+			.unsupported_items = resolve_result.project.unsupported_items,
+			.registry_mode = config.registry_mode,
+			.fallback_policy = config.fallback_policy,
+		};
+		auto final_files = AppendDiagnosticArtifacts(
+			format_result.files, report_classes, report_metadata, config.emit_manifest);
+		auto selected_files = FilesSelectedByPolicy(final_files, policy_decision);
+		if (!policy_decision.publish_generated_files)
+		{
+			report_metadata.file_publications =
+				BuildFilePublications(final_files, selected_files, nullptr);
+			final_files = AppendDiagnosticArtifacts(
+				format_result.files, report_classes, report_metadata, config.emit_manifest);
+			selected_files = FilesSelectedByPolicy(final_files, policy_decision);
+		}
 		auto write_result = WriteGeneratedFiles(
 			OutputWriterOptions{
 				.output_dir = config.output_dir,
@@ -867,27 +951,44 @@ namespace mockfakegen
 
 		if (!write_result.ok() && !config.dry_run)
 		{
-			const auto diagnostic_report = GenerateGenerationReport(
-				report_classes,
-				GenerationReportMetadata{
-					.diagnostics = run_diagnostics,
-					.validation_commands = ToRunCommands(validation_result.commands),
-					.unsupported_items = resolve_result.project.unsupported_items,
-					.registry_mode = config.registry_mode,
-					.fallback_policy = config.fallback_policy,
-				});
-			const auto report_write_result = WriteGeneratedFiles(
-				OutputWriterOptions{
-					.output_dir = config.output_dir,
-					.dry_run = false,
-					.overwrite = config.overwrite ||
-						WroteGeneratedFileKind(write_result, GeneratedFileKind::Report),
-				},
-				std::span<const GeneratedFile>(&diagnostic_report, 1U));
-			std::vector<RunDiagnostic> report_writer_diagnostics;
-			AppendRunDiagnostics(report_writer_diagnostics, report_write_result.diagnostics);
-			PrintRunDiagnostics(err, report_writer_diagnostics);
-			PrintOutputSummary(out, report_write_result);
+			auto final_report_metadata = GenerationReportMetadata{
+				.diagnostics = run_diagnostics,
+				.validation_commands = ToRunCommands(validation_result.commands),
+				.unsupported_items = resolve_result.project.unsupported_items,
+				.registry_mode = config.registry_mode,
+				.fallback_policy = config.fallback_policy,
+			};
+			final_report_metadata.file_publications =
+				BuildFilePublications(final_files, selected_files, &write_result);
+
+			std::vector<GeneratedFile> diagnostic_artifacts;
+			if (config.emit_manifest && policy_decision.emit_manifest)
+			{
+				diagnostic_artifacts.push_back(
+					GenerateManifestJson(report_classes, final_report_metadata));
+			}
+			if (policy_decision.emit_report)
+			{
+				diagnostic_artifacts.push_back(
+					GenerateGenerationReport(report_classes, final_report_metadata));
+			}
+
+			for (const auto& artifact : diagnostic_artifacts)
+			{
+				const auto artifact_write_result = WriteGeneratedFiles(
+					OutputWriterOptions{
+						.output_dir = config.output_dir,
+						.dry_run = false,
+						.overwrite =
+							config.overwrite || WroteGeneratedFileKind(write_result, artifact.kind),
+					},
+					std::span<const GeneratedFile>(&artifact, 1U));
+				std::vector<RunDiagnostic> artifact_writer_diagnostics;
+				AppendRunDiagnostics(artifact_writer_diagnostics,
+									 artifact_write_result.diagnostics);
+				PrintRunDiagnostics(err, artifact_writer_diagnostics);
+				PrintOutputSummary(out, artifact_write_result);
+			}
 		}
 
 		out << "mockfakegen: extracted " << resolve_result.project.classes.size()

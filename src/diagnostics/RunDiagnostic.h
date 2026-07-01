@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Config.h"
+#include "model/GeneratedFile.h"
 #include "model/ProjectModel.h"
 
 namespace mockfakegen
@@ -38,6 +39,25 @@ namespace mockfakegen
 		int exit_code = 0;
 	};
 
+	enum class GeneratedFilePublicationStatus
+	{
+		Selected,
+		SuppressedByPolicy,
+		Planned,
+		Written,
+		Unchanged,
+		SkippedExisting,
+		Failed,
+	};
+
+	struct GeneratedFilePublication
+	{
+		GeneratedFileKind kind = GeneratedFileKind::MockHeader;
+		std::filesystem::path path;
+		std::string source_class;
+		GeneratedFilePublicationStatus status = GeneratedFilePublicationStatus::Selected;
+	};
+
 	struct DiagnosticSummary
 	{
 		std::size_t total = 0U;
@@ -57,6 +77,7 @@ namespace mockfakegen
 		std::vector<RunDiagnostic> diagnostics;
 		std::vector<RunCommand> validation_commands;
 		std::vector<UnsupportedItem> unsupported_items = {};
+		std::vector<GeneratedFilePublication> file_publications = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		FallbackPolicy fallback_policy = FallbackPolicy::Abort;
 	};
