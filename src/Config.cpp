@@ -545,20 +545,20 @@ namespace mockfakegen
 				{
 					config.fallback_policy = FallbackPolicy::Abort;
 				}
-				else if (*value == "default-return" || *value == "throw" ||
-						 *value == "compile-error")
+				else if (*value == "default-return")
 				{
-					AddDeferredError(result.errors,
-									 kFallbackPolicyOption,
-									 "fallback policy '" + *value + "' is deferred.");
+					config.fallback_policy = FallbackPolicy::DefaultReturn;
+				}
+				else if (*value == "throw")
+				{
+					config.fallback_policy = FallbackPolicy::Throw;
 				}
 				else
 				{
 					AddError(result.errors,
 							 ConfigErrorCode::InvalidOptionValue,
 							 kFallbackPolicyOption,
-							 "--fallback-policy must be abort, default-return, throw, or "
-							 "compile-error.");
+							 "--fallback-policy must be abort, default-return, or throw.");
 				}
 			}
 			else if (option == kMockNamespaceModeOption)
@@ -850,7 +850,7 @@ namespace mockfakegen
 			"  --access <policy>       public only; protected/private are deferred.\n"
 			"  --include-struct <bool> false only; true is deferred.\n"
 			"  --registry-mode <mode>  thread-local, global-mutex, or shared-owner.\n"
-			"  --fallback-policy <p>   abort; other policies are deferred.\n"
+			"  --fallback-policy <p>   abort, default-return, or throw.\n"
 			"  --mock-namespace-mode <mode> same-as-product.\n"
 			"  --collision-policy <policy> qualified-filename.\n"
 			"  --fake-special-members <bool> Generate safe constructor/destructor fakes.\n"

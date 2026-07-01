@@ -43,7 +43,6 @@ namespace mockfakegen
 		Abort,
 		DefaultReturn,
 		Throw,
-		CompileError,
 	};
 
 	enum class MockNamespaceMode

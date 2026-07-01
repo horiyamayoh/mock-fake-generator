@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "Config.h"
 #include "model/ProjectModel.h"
 
 namespace mockfakegen
@@ -55,6 +56,7 @@ namespace mockfakegen
 	{
 		std::vector<RunDiagnostic> diagnostics;
 		std::vector<RunCommand> validation_commands;
+		FallbackPolicy fallback_policy = FallbackPolicy::Abort;
 	};
 
 	[[nodiscard]] std::string_view ToString(DiagnosticSeverity severity) noexcept;

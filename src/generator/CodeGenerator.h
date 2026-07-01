@@ -73,6 +73,7 @@ namespace mockfakegen
 	struct ProjectGenerationOptions
 	{
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
+		FallbackPolicy fallback_policy = FallbackPolicy::Abort;
 		bool emit_all_mocks = true;
 		bool emit_cmake_fragment = true;
 		bool emit_manifest = true;

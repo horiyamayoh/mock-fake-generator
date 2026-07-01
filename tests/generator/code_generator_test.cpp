@@ -453,6 +453,8 @@ namespace
 			   "manifest should include non-zero diagnostic count");
 		Expect(Contains(manifest.content, "\"validation_commands\": 0"),
 			   "manifest should include validation command count");
+		Expect(Contains(manifest.content, "\"fallback_policy\": \"abort\""),
+			   "manifest should include fallback policy");
 		Expect(Contains(manifest.content, "\"parse_mode\": \"unknown\""),
 			   "manifest should include class parse mode");
 		Expect(Contains(manifest.content, "\"generation_mode\": \"link-replacement\""),
@@ -581,6 +583,29 @@ namespace
 			   "shared-owner fake should retain a shared_ptr copy while forwarding");
 		Expect(!Contains(fake.content, "if (auto* mock = ::mockfake::CurrentMock<MockBeta>())"),
 			   "shared-owner fake should not expect a raw pointer registry");
+	}
+
+	void ProjectOptionsSelectFallbackPolicyRuntimeAndArtifacts()
+	{
+		const std::vector classes = {ReportBetaModel()};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(
+			classes,
+			mockfakegen::ProjectGenerationOptions{
+				.fallback_policy = mockfakegen::FallbackPolicy::DefaultReturn,
+			});
+
+		const auto& runtime = FindFile(files, "MockFakeRuntime.h");
+		Expect(Contains(runtime.content, "return R{};"),
+			   "default-return project should generate default-return runtime");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"fallback_policy\": \"default-return\""),
+			   "manifest should record fallback policy");
+
+		const auto& report = FindFile(files, "generation_report.md");
+		Expect(Contains(report.content, "Fallback policy: `default-return`."),
+			   "report should record fallback policy");
 	}
 
 	void SeparatesMockAndFakeMethods()
@@ -843,6 +868,7 @@ int main()
 	KeepsShortFilenamesWithoutCollision();
 	ProjectOptionsSelectGlobalMutexRuntime();
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
+	ProjectOptionsSelectFallbackPolicyRuntimeAndArtifacts();
 	SeparatesMockAndFakeMethods();
 	GeneratesMixedInterfaceAndConcreteProject();
 	GeneratesSpecialMemberFakes();

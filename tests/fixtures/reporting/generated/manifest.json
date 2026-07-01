@@ -6,6 +6,7 @@
     "not_link_ready_classes": 1,
     "generated_methods": 1,
     "unsupported_items": 2,
+    "fallback_policy": "abort",
     "diagnostics": 2,
     "validation_commands": 0,
     "diagnostic_summary": {

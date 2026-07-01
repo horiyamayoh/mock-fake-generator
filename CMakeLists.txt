@@ -1227,6 +1227,62 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_runtime_header_smoke COMMAND mockfakegen_runtime_header_smoke)
 
 	add_executable(
+		mockfakegen_runtime_default_return_header_smoke
+		tests/runtime/mock_fake_runtime_default_return_header_smoke.cpp
+	)
+	target_include_directories(
+		mockfakegen_runtime_default_return_header_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime_default_return"
+	)
+	target_link_libraries(
+		mockfakegen_runtime_default_return_header_smoke
+		PRIVATE
+			${MOCKFAKEGEN_GMOCK_MAIN_TARGET}
+	)
+	target_compile_features(mockfakegen_runtime_default_return_header_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_runtime_default_return_header_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_runtime_default_return_header_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_runtime_default_return_header_smoke)
+
+	add_test(
+		NAME mockfakegen_runtime_default_return_header_smoke
+		COMMAND mockfakegen_runtime_default_return_header_smoke
+	)
+
+	add_executable(
+		mockfakegen_runtime_throw_header_smoke
+		tests/runtime/mock_fake_runtime_throw_header_smoke.cpp
+	)
+	target_include_directories(
+		mockfakegen_runtime_throw_header_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime_throw"
+	)
+	target_link_libraries(
+		mockfakegen_runtime_throw_header_smoke
+		PRIVATE
+			${MOCKFAKEGEN_GMOCK_MAIN_TARGET}
+	)
+	target_compile_features(mockfakegen_runtime_throw_header_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_runtime_throw_header_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_runtime_throw_header_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_runtime_throw_header_smoke)
+
+	add_test(
+		NAME mockfakegen_runtime_throw_header_smoke
+		COMMAND mockfakegen_runtime_throw_header_smoke
+	)
+
+	add_executable(
 		mockfakegen_runtime_global_mutex_header_smoke
 		tests/runtime/mock_fake_runtime_global_mutex_header_smoke.cpp
 	)

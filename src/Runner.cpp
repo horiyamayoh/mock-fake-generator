@@ -603,6 +603,7 @@ namespace mockfakegen
 											  GenerationReportMetadata{
 												  .diagnostics = diagnostics,
 												  .validation_commands = {},
+												  .fallback_policy = result.config->fallback_policy,
 											  },
 											  result.config->emit_manifest);
 				const auto write_result = WriteGeneratedFiles(
@@ -637,6 +638,7 @@ namespace mockfakegen
 										  GenerationReportMetadata{
 											  .diagnostics = run_diagnostics,
 											  .validation_commands = {},
+											  .fallback_policy = config.fallback_policy,
 										  },
 										  config.emit_manifest);
 			const auto write_result = WriteGeneratedFiles(
@@ -669,6 +671,7 @@ namespace mockfakegen
 			GenerateMockFakeProject(resolve_result.project.classes,
 									ProjectGenerationOptions{
 										.registry_mode = config.registry_mode,
+										.fallback_policy = config.fallback_policy,
 										.emit_all_mocks = config.emit_all_mocks,
 										.emit_cmake_fragment = config.emit_cmake_fragment,
 										.emit_manifest = false,
@@ -692,6 +695,7 @@ namespace mockfakegen
 										  GenerationReportMetadata{
 											  .diagnostics = run_diagnostics,
 											  .validation_commands = {},
+											  .fallback_policy = config.fallback_policy,
 										  },
 										  config.emit_manifest);
 			const auto write_result = WriteGeneratedFiles(
@@ -742,6 +746,7 @@ namespace mockfakegen
 			GenerationReportMetadata{
 				.diagnostics = run_diagnostics,
 				.validation_commands = ToRunCommands(validation_result.commands),
+				.fallback_policy = config.fallback_policy,
 			},
 			config.emit_manifest);
 		const auto selected_files = FilesSelectedByPolicy(final_files, policy_decision);
@@ -765,6 +770,7 @@ namespace mockfakegen
 				GenerationReportMetadata{
 					.diagnostics = run_diagnostics,
 					.validation_commands = ToRunCommands(validation_result.commands),
+					.fallback_policy = config.fallback_policy,
 				});
 			const auto report_write_result = WriteGeneratedFiles(
 				OutputWriterOptions{

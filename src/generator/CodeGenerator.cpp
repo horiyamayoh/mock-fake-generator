@@ -183,6 +183,20 @@ namespace mockfakegen
 			return BuildQualifiedName(class_model.namespaces, class_model.name);
 		}
 
+		[[nodiscard]] std::string_view FallbackPolicyName(FallbackPolicy fallback_policy)
+		{
+			switch (fallback_policy)
+			{
+				case FallbackPolicy::Abort:
+					return "abort";
+				case FallbackPolicy::DefaultReturn:
+					return "default-return";
+				case FallbackPolicy::Throw:
+					return "throw";
+			}
+			return "abort";
+		}
+
 		[[nodiscard]] std::string
 		UnsupportedItemsLinkReadinessReason(std::span<const UnsupportedItem> unsupported_items)
 		{
@@ -628,6 +642,7 @@ namespace mockfakegen
 			return GenerationReportMetadata{
 				.diagnostics = BuildUnsupportedItemDiagnostics(class_models),
 				.validation_commands = {},
+				.fallback_policy = FallbackPolicy::Abort,
 			};
 		}
 
@@ -1473,6 +1488,8 @@ namespace mockfakegen
 			<< ",\n"
 			<< "    \"generated_methods\": " << generated_methods << ",\n"
 			<< "    \"unsupported_items\": " << unsupported_items << ",\n"
+			<< "    \"fallback_policy\": "
+			<< JsonString(FallbackPolicyName(metadata.fallback_policy)) << ",\n"
 			<< "    \"diagnostics\": " << diagnostic_summary.total << ",\n"
 			<< "    \"validation_commands\": " << metadata.validation_commands.size() << ",\n"
 			<< "    \"diagnostic_summary\": {\n"
@@ -1584,6 +1601,7 @@ namespace mockfakegen
 			<< diagnostic_summary.total << " | " << diagnostic_summary.info << " | "
 			<< diagnostic_summary.warnings << " | " << diagnostic_summary.errors << " | "
 			<< metadata.validation_commands.size() << " |\n\n"
+			<< "Fallback policy: `" << FallbackPolicyName(metadata.fallback_policy) << "`.\n\n"
 			<< "## Link Replacement Notice\n\n"
 			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
 			   "product `.cpp` files in the same test target. Link each generated fake "
@@ -1699,7 +1717,7 @@ namespace mockfakegen
 
 		if (has_fake_source)
 		{
-			files.push_back(MakeRuntimeHeader(options.registry_mode));
+			files.push_back(MakeRuntimeHeader(options.registry_mode, options.fallback_policy));
 		}
 		if (options.emit_all_mocks)
 		{
@@ -1711,11 +1729,23 @@ namespace mockfakegen
 		}
 		if (options.emit_manifest)
 		{
-			files.push_back(GenerateManifestJson(resolved_class_models));
+			files.push_back(GenerateManifestJson(
+				resolved_class_models,
+				GenerationReportMetadata{
+					.diagnostics = BuildUnsupportedItemDiagnostics(resolved_class_models),
+					.validation_commands = {},
+					.fallback_policy = options.fallback_policy,
+				}));
 		}
 		if (options.emit_report)
 		{
-			files.push_back(GenerateGenerationReport(resolved_class_models));
+			files.push_back(GenerateGenerationReport(
+				resolved_class_models,
+				GenerationReportMetadata{
+					.diagnostics = BuildUnsupportedItemDiagnostics(resolved_class_models),
+					.validation_commands = {},
+					.fallback_policy = options.fallback_policy,
+				}));
 		}
 
 		SortGeneratedFiles(files);

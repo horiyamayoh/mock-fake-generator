@@ -6,6 +6,8 @@
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2 | 2 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 |
 
+Fallback policy: `abort`.
+
 ## Link Replacement Notice
 
 Do not link generated `FakeXXX.cpp` files together with the corresponding product `.cpp` files in the same test target. Link each generated fake source instead of the product implementation it replaces.

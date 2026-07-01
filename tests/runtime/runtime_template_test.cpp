@@ -122,6 +122,28 @@ namespace
 			   "runtime mode selection should expose shared ownership API");
 	}
 
+	void RuntimeFallbackPolicySelectionUsesDefaultReturn()
+	{
+		const auto file =
+			mockfakegen::MakeThreadLocalRuntimeHeader(mockfakegen::FallbackPolicy::DefaultReturn);
+		Expect(Contains(file.content, "#include <type_traits>"),
+			   "default-return runtime should include type traits");
+		Expect(Contains(file.content, "return R{};"),
+			   "default-return runtime should default construct values");
+		Expect(!Contains(file.content, "[[noreturn]] R MissingMockReturn"),
+			   "default-return runtime should not mark fallback noreturn");
+	}
+
+	void RuntimeFallbackPolicySelectionUsesThrow()
+	{
+		const auto file = mockfakegen::MakeRuntimeHeader(mockfakegen::RegistryMode::ThreadLocal,
+														 mockfakegen::FallbackPolicy::Throw);
+		Expect(Contains(file.content, "#include <stdexcept>"),
+			   "throw runtime should include stdexcept");
+		Expect(Contains(file.content, "throw std::runtime_error"),
+			   "throw runtime should throw runtime_error");
+	}
+
 	void MatchesGeneratedFixture()
 	{
 		const auto expected = ReadText(std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) /
@@ -149,6 +171,27 @@ namespace
 		Expect(file.content == expected,
 			   "shared-owner runtime template output should match generated fixture");
 	}
+
+	void MatchesDefaultReturnGeneratedFixture()
+	{
+		const auto expected =
+			ReadText(std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) /
+					 "tests/fixtures/generated_runtime_default_return/MockFakeRuntime.h");
+		const auto file =
+			mockfakegen::MakeThreadLocalRuntimeHeader(mockfakegen::FallbackPolicy::DefaultReturn);
+		Expect(file.content == expected,
+			   "default-return runtime template output should match generated fixture");
+	}
+
+	void MatchesThrowGeneratedFixture()
+	{
+		const auto expected = ReadText(std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR) /
+									   "tests/fixtures/generated_runtime_throw/MockFakeRuntime.h");
+		const auto file =
+			mockfakegen::MakeThreadLocalRuntimeHeader(mockfakegen::FallbackPolicy::Throw);
+		Expect(file.content == expected,
+			   "throw runtime template output should match generated fixture");
+	}
 } // namespace
 
 int main()
@@ -158,8 +201,12 @@ int main()
 	BuildsSharedOwnerRuntimeGeneratedFile();
 	RuntimeModeSelectionUsesGlobalMutex();
 	RuntimeModeSelectionUsesSharedOwner();
+	RuntimeFallbackPolicySelectionUsesDefaultReturn();
+	RuntimeFallbackPolicySelectionUsesThrow();
 	MatchesGeneratedFixture();
 	MatchesGlobalMutexGeneratedFixture();
 	MatchesSharedOwnerGeneratedFixture();
+	MatchesDefaultReturnGeneratedFixture();
+	MatchesThrowGeneratedFixture();
 	return 0;
 }

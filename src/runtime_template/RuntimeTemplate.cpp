@@ -1,10 +1,82 @@
 #include "runtime_template/RuntimeTemplate.h"
 
+#include <string>
+#include <string_view>
+
 namespace mockfakegen
 {
-	std::string BuildThreadLocalRuntimeHeaderContent()
+	namespace
 	{
-		return R"(#pragma once
+		void ReplaceFirst(std::string& text, std::string_view from, std::string_view to)
+		{
+			const auto position = text.find(from);
+			if (position != std::string::npos)
+			{
+				text.replace(position, from.size(), to);
+			}
+		}
+
+		[[nodiscard]] std::string ApplyFallbackPolicy(std::string content,
+													  FallbackPolicy fallback_policy)
+		{
+			constexpr std::string_view abort_missing_mock_return =
+				R"(	template <typename R>
+	[[noreturn]] R MissingMockReturn(std::string_view function_name = {})
+	{
+		detail::AbortMissingMock(function_name);
+	}
+)";
+			switch (fallback_policy)
+			{
+				case FallbackPolicy::Abort:
+					return content;
+				case FallbackPolicy::DefaultReturn:
+					ReplaceFirst(content,
+								 "#include <string_view>\n",
+								 "#include <string_view>\n#include <type_traits>\n");
+					ReplaceFirst(content,
+								 abort_missing_mock_return,
+								 R"(	template <typename R>
+	R MissingMockReturn(std::string_view function_name = {})
+	{
+		(void)function_name;
+		if constexpr (std::is_void_v<R>)
+		{
+			return;
+		}
+		else
+		{
+			return R{};
+		}
+	}
+)");
+					return content;
+				case FallbackPolicy::Throw:
+					ReplaceFirst(
+						content,
+						"#include <string_view>\n",
+						"#include <stdexcept>\n#include <string>\n#include <string_view>\n");
+					ReplaceFirst(content,
+								 abort_missing_mock_return,
+								 R"(	template <typename R>
+	[[noreturn]] R MissingMockReturn(std::string_view function_name = {})
+	{
+		if (!function_name.empty())
+		{
+			throw std::runtime_error("mockfake: missing mock for " + std::string(function_name));
+		}
+		throw std::runtime_error("mockfake: missing mock");
+	}
+)");
+					return content;
+			}
+			return content;
+		}
+	} // namespace
+
+	std::string BuildThreadLocalRuntimeHeaderContent(FallbackPolicy fallback_policy)
+	{
+		return ApplyFallbackPolicy(R"(#pragma once
 
 #include <cstdio>
 #include <cstdlib>
@@ -108,12 +180,13 @@ namespace mockfake
 		detail::AbortMissingMock(function_name);
 	}
 } // namespace mockfake
-)";
+)",
+								   fallback_policy);
 	}
 
-	std::string BuildGlobalMutexRuntimeHeaderContent()
+	std::string BuildGlobalMutexRuntimeHeaderContent(FallbackPolicy fallback_policy)
 	{
-		return R"(#pragma once
+		return ApplyFallbackPolicy(R"(#pragma once
 
 #include <cstdio>
 #include <cstdlib>
@@ -227,12 +300,13 @@ namespace mockfake
 		detail::AbortMissingMock(function_name);
 	}
 } // namespace mockfake
-)";
+)",
+								   fallback_policy);
 	}
 
-	std::string BuildSharedOwnerRuntimeHeaderContent()
+	std::string BuildSharedOwnerRuntimeHeaderContent(FallbackPolicy fallback_policy)
 	{
-		return R"(#pragma once
+		return ApplyFallbackPolicy(R"(#pragma once
 
 #include <cstdio>
 #include <cstdlib>
@@ -359,42 +433,43 @@ namespace mockfake
 		detail::AbortMissingMock(function_name);
 	}
 } // namespace mockfake
-)";
+)",
+								   fallback_policy);
 	}
 
-	GeneratedFile MakeThreadLocalRuntimeHeader()
+	GeneratedFile MakeThreadLocalRuntimeHeader(FallbackPolicy fallback_policy)
 	{
 		return MakeGeneratedFile("MockFakeRuntime.h",
-								 BuildThreadLocalRuntimeHeaderContent(),
+								 BuildThreadLocalRuntimeHeaderContent(fallback_policy),
 								 GeneratedFileKind::RuntimeHeader);
 	}
 
-	GeneratedFile MakeGlobalMutexRuntimeHeader()
+	GeneratedFile MakeGlobalMutexRuntimeHeader(FallbackPolicy fallback_policy)
 	{
 		return MakeGeneratedFile("MockFakeRuntime.h",
-								 BuildGlobalMutexRuntimeHeaderContent(),
+								 BuildGlobalMutexRuntimeHeaderContent(fallback_policy),
 								 GeneratedFileKind::RuntimeHeader);
 	}
 
-	GeneratedFile MakeSharedOwnerRuntimeHeader()
+	GeneratedFile MakeSharedOwnerRuntimeHeader(FallbackPolicy fallback_policy)
 	{
 		return MakeGeneratedFile("MockFakeRuntime.h",
-								 BuildSharedOwnerRuntimeHeaderContent(),
+								 BuildSharedOwnerRuntimeHeaderContent(fallback_policy),
 								 GeneratedFileKind::RuntimeHeader);
 	}
 
-	GeneratedFile MakeRuntimeHeader(RegistryMode registry_mode)
+	GeneratedFile MakeRuntimeHeader(RegistryMode registry_mode, FallbackPolicy fallback_policy)
 	{
 		switch (registry_mode)
 		{
 			case RegistryMode::ThreadLocal:
-				return MakeThreadLocalRuntimeHeader();
+				return MakeThreadLocalRuntimeHeader(fallback_policy);
 			case RegistryMode::GlobalMutex:
-				return MakeGlobalMutexRuntimeHeader();
+				return MakeGlobalMutexRuntimeHeader(fallback_policy);
 			case RegistryMode::SharedOwner:
-				return MakeSharedOwnerRuntimeHeader();
+				return MakeSharedOwnerRuntimeHeader(fallback_policy);
 		}
 
-		return MakeThreadLocalRuntimeHeader();
+		return MakeThreadLocalRuntimeHeader(fallback_policy);
 	}
 } // namespace mockfakegen

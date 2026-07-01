@@ -577,22 +577,39 @@ namespace
 		Expect(result.config->interface_mock, "interface-mock should parse true");
 	}
 
-	void ReportsDeferredOptions()
+	void ParsesFallbackPolicies()
+	{
+		auto default_return_args = ValidArgs();
+		default_return_args.push_back("--fallback-policy=default-return");
+		const auto default_return_result = mockfakegen::ParseConfig(default_return_args);
+		Expect(default_return_result.ok(), "default-return fallback policy should parse");
+		Expect(default_return_result.config->fallback_policy ==
+				   mockfakegen::FallbackPolicy::DefaultReturn,
+			   "default-return fallback policy should be selected");
+
+		auto throw_args = ValidArgs();
+		throw_args.push_back("--fallback-policy=throw");
+		const auto throw_result = mockfakegen::ParseConfig(throw_args);
+		Expect(throw_result.ok(), "throw fallback policy should parse");
+		Expect(throw_result.config->fallback_policy == mockfakegen::FallbackPolicy::Throw,
+			   "throw fallback policy should be selected");
+	}
+
+	void ReportsRemovedCompileErrorFallbackPolicy()
 	{
 		auto args = ValidArgs();
-		args.push_back("--fallback-policy=throw");
+		args.push_back("--fallback-policy=compile-error");
 
 		const auto result = mockfakegen::ParseConfig(args);
-
-		Expect(!result.ok(), "deferred fallback policy should fail");
-		Expect(result.errors.size() == 1U, "deferred option should produce one error");
-		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::DeferredOption,
-			   "deferred option should use deferred option code");
+		Expect(!result.ok(), "removed compile-error fallback policy should fail");
+		Expect(result.errors.size() == 1U, "removed fallback policy should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "removed fallback policy should use invalid value code");
 		Expect(result.errors[0].option == "--fallback-policy",
-			   "deferred option should identify option");
+			   "removed fallback policy should identify option");
 		Expect(result.errors[0].message ==
-				   "--fallback-policy is deferred: fallback policy 'throw' is deferred.",
-			   "deferred option diagnostic should be deterministic");
+				   "--fallback-policy must be abort, default-return, or throw.",
+			   "removed fallback policy diagnostic should be deterministic");
 	}
 
 	void ReportsDeferredDesignOptions()
@@ -609,7 +626,6 @@ namespace
 			{"--extra-arg", "-Wno-error"},
 			{"--include-struct", "true"},
 			{"--access", "private"},
-			{"--fallback-policy", "default-return"},
 		};
 
 		for (const auto& item : cases)
@@ -804,7 +820,8 @@ int main()
 	ParsesFakeSpecialMembersTrue();
 	ParsesFakeStaticDataTrue();
 	ParsesInterfaceMockTrue();
-	ReportsDeferredOptions();
+	ParsesFallbackPolicies();
+	ReportsRemovedCompileErrorFallbackPolicy();
 	ReportsDeferredDesignOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();

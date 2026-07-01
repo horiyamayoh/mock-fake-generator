@@ -52,7 +52,6 @@ namespace mockfakegen
 			switch (config.fallback_policy)
 			{
 				case FallbackPolicy::Abort:
-				case FallbackPolicy::CompileError:
 					break;
 				case FallbackPolicy::DefaultReturn:
 					if (method.return_type_is_reference)
