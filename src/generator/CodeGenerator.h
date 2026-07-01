@@ -93,6 +93,8 @@ namespace mockfakegen
 	[[nodiscard]] GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models);
 	[[nodiscard]] GeneratedFile GenerateGenerationReport(std::span<const ClassModel> class_models,
 														 const GenerationReportMetadata& metadata);
+	[[nodiscard]] std::vector<ClassModel>
+	ResolveGeneratedClassFilenames(std::span<const ClassModel> class_models);
 	[[nodiscard]] std::vector<GeneratedFile>
 	GenerateMockFakeProject(std::span<const ClassModel> class_models,
 							ProjectGenerationOptions options = {});

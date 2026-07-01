@@ -1825,10 +1825,15 @@ namespace mockfakegen
 			"generation_report.md", out.str(), GeneratedFileKind::Report, std::nullopt);
 	}
 
+	std::vector<ClassModel> ResolveGeneratedClassFilenames(std::span<const ClassModel> class_models)
+	{
+		return ResolveQualifiedFilenameCollisions(class_models);
+	}
+
 	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
 													   ProjectGenerationOptions options)
 	{
-		const auto resolved_class_models = ResolveQualifiedFilenameCollisions(class_models);
+		const auto resolved_class_models = ResolveGeneratedClassFilenames(class_models);
 		std::vector<GeneratedFile> files;
 		files.reserve((resolved_class_models.size() * 2U) + 4U);
 		bool has_fake_source = false;

@@ -577,6 +577,90 @@ namespace
 			   "manifest should include generated output skip diagnostic");
 	}
 
+	void QualifiedFilenameCollisionsAppearInCliArtifacts(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "qualified-collision-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "qualified-collision-build";
+		const auto output_dir = temp_root / "qualified-collision-generated";
+		WriteText(include_dir / "a/Hoge.h",
+				  "#pragma once\n"
+				  "namespace a {\n"
+				  "class Hoge { public: bool RunA(); };\n"
+				  "} // namespace a\n");
+		WriteText(include_dir / "b/Hoge.h",
+				  "#pragma once\n"
+				  "namespace b {\n"
+				  "class Hoge { public: bool RunB(); };\n"
+				  "} // namespace b\n");
+		const auto source = source_dir / "Hoge.cpp";
+		WriteText(source,
+				  "#include \"a/Hoge.h\"\n"
+				  "#include \"b/Hoge.h\"\n"
+				  "bool a::Hoge::RunA() { return true; }\n"
+				  "bool b::Hoge::RunB() { return true; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) + " -o hoge.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "qualified_collision_cli");
+
+		Expect(result.exit_code == 0, "qualified filename collision run should succeed");
+		Expect(std::filesystem::exists(output_dir / "Mock_a_Hoge.h"),
+			   "resolved a::Hoge mock should be written");
+		Expect(std::filesystem::exists(output_dir / "Mock_b_Hoge.h"),
+			   "resolved b::Hoge mock should be written");
+		Expect(std::filesystem::exists(output_dir / "Fake_a_Hoge.cpp"),
+			   "resolved a::Hoge fake should be written");
+		Expect(std::filesystem::exists(output_dir / "Fake_b_Hoge.cpp"),
+			   "resolved b::Hoge fake should be written");
+		Expect(!std::filesystem::exists(output_dir / "MockHoge.h"),
+			   "pre-collision mock filename should not be written");
+		Expect(!std::filesystem::exists(output_dir / "FakeHoge.cpp"),
+			   "pre-collision fake filename should not be written");
+
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"mock_header\": \"Mock_a_Hoge.h\""),
+			   "manifest should use resolved a::Hoge mock filename");
+		Expect(Contains(manifest, "\"mock_header\": \"Mock_b_Hoge.h\""),
+			   "manifest should use resolved b::Hoge mock filename");
+		Expect(Contains(manifest, "\"fake_source\": \"Fake_a_Hoge.cpp\""),
+			   "manifest should use resolved a::Hoge fake filename");
+		Expect(Contains(manifest, "\"fake_source\": \"Fake_b_Hoge.cpp\""),
+			   "manifest should use resolved b::Hoge fake filename");
+		Expect(Contains(manifest, "\"filename_collision\""),
+			   "manifest should include filename collision metadata");
+		Expect(Contains(manifest, "\"resolved_mock_header\": \"Mock_a_Hoge.h\""),
+			   "manifest should record resolved mock filename");
+		Expect(Contains(report, "| a::Hoge |"), "report should include a::Hoge class row");
+		Expect(Contains(report, "Mock_a_Hoge.h"),
+			   "report should use resolved a::Hoge mock filename");
+		Expect(Contains(report, "Fake_b_Hoge.cpp"),
+			   "report should use resolved b::Hoge fake filename");
+		Expect(!Contains(report, "| MockHoge.h | FakeHoge.cpp |"),
+			   "report should not use pre-collision filenames in class rows");
+	}
+
 	void DryRunDoesNotPublishFiles(const std::filesystem::path& temp_root,
 								   const std::filesystem::path& product_dir,
 								   const std::filesystem::path& build_dir)
@@ -1243,6 +1327,7 @@ int main()
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	NestedGeneratedOutputIsNotReingested(temp_root);
+	QualifiedFilenameCollisionsAppearInCliArtifacts(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);

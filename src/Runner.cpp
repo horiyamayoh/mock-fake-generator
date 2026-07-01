@@ -685,8 +685,9 @@ namespace mockfakegen
 		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);
 		PrintRunDiagnostics(err, run_diagnostics);
 
+		const auto report_classes = ResolveGeneratedClassFilenames(resolve_result.project.classes);
 		auto generated_files =
-			GenerateMockFakeProject(resolve_result.project.classes,
+			GenerateMockFakeProject(report_classes,
 									ProjectGenerationOptions{
 										.registry_mode = config.registry_mode,
 										.fallback_policy = config.fallback_policy,
@@ -709,7 +710,7 @@ namespace mockfakegen
 		{
 			const auto diagnostic_files = AppendDiagnosticArtifacts(
 				{},
-				resolve_result.project.classes,
+				report_classes,
 				GenerationReportMetadata{
 					.diagnostics = run_diagnostics,
 					.validation_commands = {},
@@ -753,14 +754,13 @@ namespace mockfakegen
 		const auto policy_decision = EvaluateGenerationPolicy(
 			config,
 			GenerationPolicyInput{
-				.classes = resolve_result.project.classes,
+				.classes = report_classes,
 				.unsupported_items = resolve_result.project.unsupported_items,
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_result.diagnostics,
 				.generated_output_token_diagnostics = generated_output_check_result.diagnostics,
 			});
-		const auto unsupported_diagnostics =
-			BuildUnsupportedItemDiagnostics(resolve_result.project.classes);
+		const auto unsupported_diagnostics = BuildUnsupportedItemDiagnostics(report_classes);
 		const auto top_level_unsupported_diagnostics =
 			BuildUnsupportedItemDiagnostics(resolve_result.project.unsupported_items);
 		AppendRunDiagnostics(run_diagnostics, unsupported_diagnostics);
@@ -770,7 +770,7 @@ namespace mockfakegen
 
 		const auto final_files = AppendDiagnosticArtifacts(
 			format_result.files,
-			resolve_result.project.classes,
+			report_classes,
 			GenerationReportMetadata{
 				.diagnostics = run_diagnostics,
 				.validation_commands = ToRunCommands(validation_result.commands),
@@ -796,7 +796,7 @@ namespace mockfakegen
 		if (!write_result.ok() && !config.dry_run)
 		{
 			const auto diagnostic_report = GenerateGenerationReport(
-				resolve_result.project.classes,
+				report_classes,
 				GenerationReportMetadata{
 					.diagnostics = run_diagnostics,
 					.validation_commands = ToRunCommands(validation_result.commands),
