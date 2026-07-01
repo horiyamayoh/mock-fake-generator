@@ -346,6 +346,7 @@ namespace
 				   "public:\n"
 				   "  consteval int Immediate() const { return 1; }\n"
 				   "  [[nodiscard]] int Marked();\n"
+				   "  [[clang::annotate(\"mockfakegen\")]] int Annotated();\n"
 				   "  ModernUnsupported& operator=(const ModernUnsupported&) = default;\n"
 				   "  bool Supported();\n"
 				   "};\n");
@@ -354,14 +355,16 @@ namespace
 
 		Expect(result.classes.size() == 1U, "modern unsupported fixture should be extracted");
 		const auto& class_model = result.classes[0];
-		Expect(class_model.mock_methods.size() == 1U,
-			   "unsupported modern methods should not be generated");
-		Expect(class_model.mock_methods[0].name == "Supported",
+		Expect(class_model.mock_methods.size() == 2U,
+			   "benign attributed method and supported method should be generated");
+		Expect(class_model.mock_methods[0].name == "Marked",
+			   "nodiscard method should still be generated");
+		Expect(class_model.mock_methods[1].name == "Supported",
 			   "supported method should still be generated");
 		Expect(HasUnsupportedKind(class_model, "consteval_method"),
 			   "consteval method should have stable unsupported kind");
 		Expect(HasUnsupportedKind(class_model, "unsupported_attribute"),
-			   "unsupported attribute should have stable unsupported kind");
+			   "unknown explicit attribute should remain unsupported");
 		Expect(HasUnsupportedKind(class_model, "assignment_operator"),
 			   "defaulted assignment operator should have stable unsupported kind");
 	}

@@ -262,7 +262,7 @@ namespace
 
 		Expect(extraction.classes.size() == 3U,
 			   "link replacement negative fixture should extract three concrete classes");
-		Expect(UnsupportedItemCount(extraction) == 36U,
+		Expect(UnsupportedItemCount(extraction) == 34U,
 			   "link replacement negative fixture should lock unsupported item count");
 		for (const auto kind : {
 				 "class_template",
@@ -276,7 +276,6 @@ namespace
 				 "decltype_auto_return",
 				 "constexpr_method",
 				 "consteval_method",
-				 "unsupported_attribute",
 				 "attributed_type",
 				 "conversion_operator",
 				 "defaulted_method",
@@ -304,10 +303,6 @@ namespace
 			   "plain auto return should be recorded");
 		Expect(HasUnsupportedMember(extraction, "decltype_auto_return", "Deduced"),
 			   "decltype(auto) return should be recorded");
-		Expect(HasUnsupportedMember(extraction, "unsupported_attribute", "Marked"),
-			   "standard method attribute should be recorded");
-		Expect(HasUnsupportedMember(extraction, "unsupported_attribute", "GnuMarked"),
-			   "platform method attribute should be recorded");
 		Expect(HasUnsupportedMember(extraction, "attributed_type", "NonNull"),
 			   "platform attributed type should be recorded");
 		Expect(HasUnsupportedMember(extraction, "defaulted_method", "operator<=>"),

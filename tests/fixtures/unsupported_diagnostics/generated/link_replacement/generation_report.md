@@ -4,7 +4,7 @@
 
 | Classes | Link-ready classes | Not link-ready classes | Generated methods | Unsupported items | Diagnostics | Info | Warnings | Errors | Validation commands |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 3 | 0 | 3 | 3 | 31 | 36 | 0 | 36 | 0 | 0 |
+| 3 | 0 | 3 | 5 | 29 | 34 | 0 | 34 | 0 | 0 |
 
 Registry mode: `thread-local` - per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock.
 
@@ -26,14 +26,12 @@ Usable fake sources for build-system integration:
 |---|---|---|---|---|---|---|---|---:|---:|
 | negative::UnsafeSpecial | Unsupported.h | synthetic-tu | link-replacement | MockUnsafeSpecial.h | FakeUnsafeSpecial.cpp | no | unsupported items remain: constructor, destructor | 1 | 2 |
 | negative::UnsafeStaticData | Unsupported.h | synthetic-tu | link-replacement | MockUnsafeStaticData.h | FakeUnsafeStaticData.cpp | no | unsupported items remain: static_data_member | 1 | 6 |
-| negative::UnsupportedSurface | Unsupported.h | synthetic-tu | link-replacement | MockUnsupportedSurface.h | FakeUnsupportedSurface.cpp | no | unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, unsupported_attribute, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method | 1 | 23 |
+| negative::UnsupportedSurface | Unsupported.h | synthetic-tu | link-replacement | MockUnsupportedSurface.h | FakeUnsupportedSurface.cpp | no | unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method | 3 | 21 |
 
 ## Diagnostics
 
 | Severity | Component | Code | Kind | Path | Class | Member | Message | Suggested action | Command | Stderr summary | Validation artifact |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| warning | clang | unsupported_attribute | unsupported_attribute | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::GnuMarked | method has attributes that are not supported | exclude this member or provide a hand-authored mock |  |  |  |
-| warning | clang | unsupported_attribute | unsupported_attribute | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Marked | method has attributes that are not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_class_template | class_template | Unsupported.h | negative::Box | negative::Box | class template is not supported by link replacement fake generation | exclude it or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_class_template | class_template | Unsupported.h | negative::PartialBox | negative::PartialBox | class template is not supported by link replacement fake generation | exclude it or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_class_template_specialization | class_template_partial_specialization | Unsupported.h | negative::PartialBox | negative::PartialBox | partial class template specialization is not supported | exclude it or provide a hand-authored mock |  |  |  |
@@ -94,11 +92,9 @@ No validation commands recorded.
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Convert | function template member is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Deduced | decltype(auto) return type is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::FromMacro | macro-origin method declaration is not supported because source spelling may be unstable | exclude this member or provide a hand-authored mock |
-| Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::GnuMarked | method has attributes that are not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::HiddenParam | private nested type 'negative::UnsupportedSurface::PrivateToken' is not accessible from generated code | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::HiddenReturn | private nested type 'negative::UnsupportedSurface::PrivateToken' is not accessible from generated code | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::InlineBody | inline method body is not supported | exclude this member or provide a hand-authored mock |
-| Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Marked | method has attributes that are not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::NonNull | attributed type in method signature is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::OutOfClassInline | inline method body is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::PrivateMethod | only public methods are generated | exclude this member or provide a hand-authored mock |

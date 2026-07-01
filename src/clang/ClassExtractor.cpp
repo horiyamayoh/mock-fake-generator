@@ -598,7 +598,8 @@ namespace mockfakegen
 						continue;
 					}
 					if (llvm::isa<clang::OverrideAttr>(attribute) ||
-						llvm::isa<clang::FinalAttr>(attribute))
+						llvm::isa<clang::FinalAttr>(attribute) ||
+						llvm::isa<clang::WarnUnusedResultAttr>(attribute))
 					{
 						continue;
 					}
