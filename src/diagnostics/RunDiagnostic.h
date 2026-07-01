@@ -56,6 +56,7 @@ namespace mockfakegen
 	{
 		std::vector<RunDiagnostic> diagnostics;
 		std::vector<RunCommand> validation_commands;
+		std::vector<UnsupportedItem> unsupported_items = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		FallbackPolicy fallback_policy = FallbackPolicy::Abort;
 	};

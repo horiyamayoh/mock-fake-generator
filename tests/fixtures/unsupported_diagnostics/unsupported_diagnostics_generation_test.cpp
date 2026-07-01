@@ -113,6 +113,7 @@ namespace
 	{
 		mockfakegen::GenerationReportMetadata metadata;
 		metadata.diagnostics = UnsupportedDiagnostics(extraction);
+		metadata.unsupported_items = extraction.unsupported_items;
 		return mockfakegen::GenerateManifestJson(extraction.classes, metadata);
 	}
 
@@ -121,6 +122,7 @@ namespace
 	{
 		mockfakegen::GenerationReportMetadata metadata;
 		metadata.diagnostics = UnsupportedDiagnostics(extraction);
+		metadata.unsupported_items = extraction.unsupported_items;
 		return mockfakegen::GenerateGenerationReport(extraction.classes, metadata);
 	}
 

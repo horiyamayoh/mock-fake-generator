@@ -4,7 +4,7 @@
 
 | Classes | Link-ready classes | Not link-ready classes | Generated methods | Unsupported items | Diagnostics | Info | Warnings | Errors | Validation commands |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 3 | 0 | 3 | 6 | 28 | 33 | 0 | 33 | 0 | 0 |
+| 3 | 0 | 3 | 6 | 33 | 33 | 0 | 33 | 0 | 0 |
 
 Registry mode: `thread-local` - per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock.
 
@@ -74,6 +74,10 @@ No validation commands recorded.
 
 | Header | Class | Member | Reason | Suggested action |
 |---|---|---|---|---|
+| Unsupported.h | negative::Box | negative::Box | class template is not supported by link replacement fake generation | exclude it or provide a hand-authored mock |
+| Unsupported.h | negative::Box | negative::Box | explicit class template specialization is not supported | exclude it or provide a hand-authored mock |
+| Unsupported.h | negative::PartialBox | negative::PartialBox | class template is not supported by link replacement fake generation | exclude it or provide a hand-authored mock |
+| Unsupported.h | negative::PartialBox | negative::PartialBox | partial class template specialization is not supported | exclude it or provide a hand-authored mock |
 | Unsupported.h | negative::UnsafeSpecial | negative::UnsafeSpecial::UnsafeSpecial | reference member 'ref_' cannot be safely default-initialized | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsafeSpecial | negative::UnsafeSpecial::~UnsafeSpecial | destructor exception specification is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsafeStaticData | negative::UnsafeStaticData::boot | constinit static data member requires an explicit initializer policy | exclude this member or provide a hand-authored mock |
@@ -102,3 +106,4 @@ No validation commands recorded.
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::operator bool | conversion operator is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::operator+= | overloaded operator is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::operator<=> | defaulted method is not supported | exclude this member or provide a hand-authored mock |
+| Unsupported.h | negative::UnsupportedSurface::PublicNested | negative::UnsupportedSurface::PublicNested | nested class definitions are not generated as independent targets | generate the enclosing class or provide a hand-authored mock |

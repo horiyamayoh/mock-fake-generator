@@ -781,6 +781,8 @@ namespace
 			   "top-level unsupported run should emit report");
 		const auto manifest = ReadText(output_dir / "manifest.json");
 		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"unsupported_items\": 6"),
+			   "manifest summary should count top-level unsupported items");
 		Expect(Contains(manifest, "\"code\": \"unsupported_class_template\""),
 			   "manifest should include top-level unsupported diagnostic code");
 		Expect(Contains(manifest, "class template is not supported"),
@@ -789,6 +791,8 @@ namespace
 			   "report diagnostics should include top-level unsupported diagnostic code");
 		Expect(Contains(report, "class template is not supported"),
 			   "report should include top-level unsupported reason");
+		Expect(Contains(report, "| Box | Box | class template is not supported"),
+			   "report unsupported table should include top-level unsupported item");
 		Expect(Contains(manifest, "\"code\": \"unsupported_pure_virtual_method\""),
 			   "manifest should include pure virtual unsupported diagnostic code");
 		Expect(Contains(manifest, "\"code\": \"unsupported_inline_body\""),

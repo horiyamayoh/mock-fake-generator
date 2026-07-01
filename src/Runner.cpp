@@ -707,16 +707,17 @@ namespace mockfakegen
 		PrintRunDiagnostics(err, run_diagnostics);
 		if (!format_result.ok())
 		{
-			const auto diagnostic_files =
-				AppendDiagnosticArtifacts({},
-										  resolve_result.project.classes,
-										  GenerationReportMetadata{
-											  .diagnostics = run_diagnostics,
-											  .validation_commands = {},
-											  .registry_mode = config.registry_mode,
-											  .fallback_policy = config.fallback_policy,
-										  },
-										  config.emit_manifest);
+			const auto diagnostic_files = AppendDiagnosticArtifacts(
+				{},
+				resolve_result.project.classes,
+				GenerationReportMetadata{
+					.diagnostics = run_diagnostics,
+					.validation_commands = {},
+					.unsupported_items = resolve_result.project.unsupported_items,
+					.registry_mode = config.registry_mode,
+					.fallback_policy = config.fallback_policy,
+				},
+				config.emit_manifest);
 			const auto write_result = WriteGeneratedFiles(
 				OutputWriterOptions{
 					.output_dir = config.output_dir,
@@ -773,6 +774,7 @@ namespace mockfakegen
 			GenerationReportMetadata{
 				.diagnostics = run_diagnostics,
 				.validation_commands = ToRunCommands(validation_result.commands),
+				.unsupported_items = resolve_result.project.unsupported_items,
 				.registry_mode = config.registry_mode,
 				.fallback_policy = config.fallback_policy,
 			},
@@ -798,6 +800,7 @@ namespace mockfakegen
 				GenerationReportMetadata{
 					.diagnostics = run_diagnostics,
 					.validation_commands = ToRunCommands(validation_result.commands),
+					.unsupported_items = resolve_result.project.unsupported_items,
 					.registry_mode = config.registry_mode,
 					.fallback_policy = config.fallback_policy,
 				});

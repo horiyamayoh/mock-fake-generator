@@ -534,6 +534,19 @@ namespace mockfakegen
 			std::string suggested_action;
 		};
 
+		[[nodiscard]] UnsupportedReportEntry MakeUnsupportedReportEntry(
+			std::string header, std::string class_name, const UnsupportedItem& unsupported)
+		{
+			return UnsupportedReportEntry{
+				.header = std::move(header),
+				.class_name = std::move(class_name),
+				.member = unsupported.member_signature.empty() ? unsupported.name
+															   : unsupported.member_signature,
+				.reason = unsupported.reason,
+				.suggested_action = unsupported.suggested_action,
+			};
+		}
+
 		[[nodiscard]] std::string ParseModeName(const HeaderModel& header)
 		{
 			if (header.parsed_by_real_tu && header.parsed_by_synthetic_tu)
@@ -604,7 +617,8 @@ namespace mockfakegen
 		}
 
 		[[nodiscard]] std::vector<UnsupportedReportEntry>
-		SortedUnsupportedReportEntries(std::span<const ClassModel> class_models)
+		SortedUnsupportedReportEntries(std::span<const ClassModel> class_models,
+									   std::span<const UnsupportedItem> unsupported_items)
 		{
 			std::vector<UnsupportedReportEntry> entries;
 			for (const auto& class_model : class_models)
@@ -613,16 +627,15 @@ namespace mockfakegen
 				const auto class_name = QualifiedClassName(class_model);
 				for (const auto& unsupported : class_model.unsupported_items)
 				{
-					entries.push_back(UnsupportedReportEntry{
-						.header = header,
-						.class_name = class_name,
-						.member = unsupported.member_signature.empty()
-							? unsupported.name
-							: unsupported.member_signature,
-						.reason = unsupported.reason,
-						.suggested_action = unsupported.suggested_action,
-					});
+					entries.push_back(MakeUnsupportedReportEntry(header, class_name, unsupported));
 				}
+			}
+			for (const auto& unsupported : unsupported_items)
+			{
+				entries.push_back(
+					MakeUnsupportedReportEntry(unsupported.source_range.begin.file.generic_string(),
+											   unsupported.class_name,
+											   unsupported));
 			}
 
 			std::sort(entries.begin(),
@@ -658,9 +671,10 @@ namespace mockfakegen
 		}
 
 		[[nodiscard]] std::size_t
-		TotalUnsupportedItems(const std::vector<ClassReportEntry>& entries)
+		TotalUnsupportedItems(const std::vector<ClassReportEntry>& entries,
+							  std::span<const UnsupportedItem> unsupported_items)
 		{
-			std::size_t count = 0U;
+			std::size_t count = unsupported_items.size();
 			for (const auto& entry : entries)
 			{
 				count += entry.unsupported_items;
@@ -1548,7 +1562,7 @@ namespace mockfakegen
 		const auto diagnostic_summary = SummarizeDiagnostics(diagnostics);
 		const auto component_summaries = SummarizeDiagnosticsByComponent(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(entries);
-		const auto unsupported_items = TotalUnsupportedItems(entries);
+		const auto unsupported_items = TotalUnsupportedItems(entries, metadata.unsupported_items);
 		const auto usable_fake_sources = UsableFakeSources(entries);
 
 		std::ostringstream out;
@@ -1663,11 +1677,13 @@ namespace mockfakegen
 										   const GenerationReportMetadata& metadata)
 	{
 		const auto class_entries = SortedClassReportEntries(class_models);
-		const auto unsupported_entries = SortedUnsupportedReportEntries(class_models);
+		const auto unsupported_entries =
+			SortedUnsupportedReportEntries(class_models, metadata.unsupported_items);
 		const auto diagnostics = SortedRunDiagnostics(metadata.diagnostics);
 		const auto diagnostic_summary = SummarizeDiagnostics(diagnostics);
 		const auto generated_methods = TotalGeneratedMethods(class_entries);
-		const auto unsupported_items = TotalUnsupportedItems(class_entries);
+		const auto unsupported_items =
+			TotalUnsupportedItems(class_entries, metadata.unsupported_items);
 		const auto usable_fake_sources = UsableFakeSources(class_entries);
 
 		std::ostringstream out;
