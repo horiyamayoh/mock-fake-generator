@@ -15,10 +15,12 @@ namespace
 		app::v1::Supported supported;
 
 		EXPECT_CALL(mock, CountItems(app::v1::Mode::Fast)).WillOnce(Return(7));
+		EXPECT_CALL(mock, Size()).WillOnce(Return(9));
 		EXPECT_CALL(mock, Scale(1.5)).WillOnce(Return(3.0));
 		EXPECT_CALL(mock, DefaultMode()).WillOnce(Return(app::v1::Mode::Slow));
 
 		EXPECT_EQ(supported.CountItems(app::v1::Mode::Fast), 7);
+		EXPECT_EQ(supported.Size(), 9);
 		EXPECT_DOUBLE_EQ(supported.Scale(1.5), 3.0);
 		EXPECT_EQ(app::v1::Supported::DefaultMode(), app::v1::Mode::Slow);
 	}

@@ -15,6 +15,7 @@ namespace app::v1
 		~MockSupported() = default;
 
 		MOCK_METHOD(Count, CountItems, (Mode), (const, noexcept));
+		MOCK_METHOD(Count, Size, (), (const));
 		MOCK_METHOD(Ratio, Scale, (Ratio), ());
 		MOCK_METHOD(Mode, DefaultMode, (), ());
 	};

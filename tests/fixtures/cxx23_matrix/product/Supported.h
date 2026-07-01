@@ -17,6 +17,7 @@ namespace app::v1
 		friend bool FriendProbe(const Supported&);
 
 		Count CountItems(Mode mode) const noexcept;
+		auto Size() const -> Count;
 		Ratio Scale(Ratio value);
 		static Mode DefaultMode();
 	};

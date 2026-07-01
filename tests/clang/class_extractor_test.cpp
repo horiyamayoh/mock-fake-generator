@@ -411,16 +411,18 @@ namespace
 
 		Expect(result.classes.size() == 1U, "unsupported type fixture should be extracted");
 		const auto& class_model = result.classes[0];
-		Expect(class_model.mock_methods.size() == 2U,
-			   "only supported and canonical macro-spelled type methods should be generated");
-		Expect(class_model.mock_methods[0].name == "MacroType",
-			   "macro-spelled canonical type method should be generated");
+		Expect(class_model.mock_methods.size() == 3U,
+			   "supported trailing, canonical macro-spelled, and normal methods should generate");
+		Expect(class_model.mock_methods[0].name == "Trailing",
+			   "concrete trailing return type method should be generated");
 		Expect(class_model.mock_methods[0].return_type_spelling == "int",
+			   "concrete trailing return type should use AST return spelling");
+		Expect(class_model.mock_methods[1].name == "MacroType",
+			   "macro-spelled canonical type method should be generated");
+		Expect(class_model.mock_methods[1].return_type_spelling == "int",
 			   "macro-spelled type should be generated with canonical spelling");
-		Expect(class_model.mock_methods[1].name == "Supported",
+		Expect(class_model.mock_methods[2].name == "Supported",
 			   "supported method should still be generated");
-		Expect(HasUnsupportedKind(class_model, "trailing_return_type"),
-			   "trailing return type should have stable unsupported kind");
 		Expect(HasUnsupportedKind(class_model, "decltype_auto_return"),
 			   "decltype(auto) return should have stable unsupported kind");
 		Expect(HasUnsupportedKind(class_model, "function_pointer_return"),

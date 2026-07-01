@@ -763,12 +763,6 @@ namespace mockfakegen
 				return auto_type != nullptr && !auto_type->isDecltypeAuto();
 			}
 
-			[[nodiscard]] bool HasTrailingReturnType(const clang::FunctionDecl& function) const
-			{
-				const auto* function_type = function.getType()->getAs<clang::FunctionProtoType>();
-				return function_type != nullptr && function_type->hasTrailingReturn();
-			}
-
 			[[nodiscard]] std::optional<std::string>
 			PrivateNestedDeclarationName(const clang::NamedDecl* declaration) const
 			{
@@ -978,14 +972,6 @@ namespace mockfakegen
 			[[nodiscard]] std::optional<UnsupportedTypeIssue>
 			UnsupportedTypeIssueForMethod(const clang::CXXMethodDecl& method) const
 			{
-				if (HasTrailingReturnType(method))
-				{
-					return UnsupportedTypeIssue{
-						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
-						.kind = "trailing_return_type",
-						.reason = "trailing return type spelling is not supported",
-					};
-				}
 				if (HasPlainAutoReturn(method))
 				{
 					return UnsupportedTypeIssue{

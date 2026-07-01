@@ -4,7 +4,7 @@
 
 | Classes | Link-ready classes | Not link-ready classes | Generated methods | Unsupported items | Diagnostics | Info | Warnings | Errors | Validation commands |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 3 | 0 | 3 | 6 | 33 | 33 | 0 | 33 | 0 | 0 |
+| 3 | 0 | 3 | 7 | 32 | 32 | 0 | 32 | 0 | 0 |
 
 Registry mode: `thread-local` - per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock.
 
@@ -26,7 +26,7 @@ Usable fake sources for build-system integration:
 |---|---|---|---|---|---|---|---|---:|---:|
 | negative::UnsafeSpecial | Unsupported.h | synthetic-tu | link-replacement | MockUnsafeSpecial.h | FakeUnsafeSpecial.cpp | no | unsupported items remain: constructor, destructor | 1 | 2 |
 | negative::UnsafeStaticData | Unsupported.h | synthetic-tu | link-replacement | MockUnsafeStaticData.h | FakeUnsafeStaticData.cpp | no | unsupported items remain: static_data_member | 1 | 6 |
-| negative::UnsupportedSurface | Unsupported.h | synthetic-tu | link-replacement | MockUnsupportedSurface.h | FakeUnsupportedSurface.cpp | no | unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, volatile_method, macro_origin, private_nested_type, non_public_method | 4 | 20 |
+| negative::UnsupportedSurface | Unsupported.h | synthetic-tu | link-replacement | MockUnsupportedSurface.h | FakeUnsupportedSurface.cpp | no | unsupported items remain: function_template, inline_body, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, volatile_method, macro_origin, private_nested_type, non_public_method | 5 | 19 |
 
 ## Diagnostics
 
@@ -63,7 +63,6 @@ Usable fake sources for build-system integration:
 | warning | clang | unsupported_type_spelling | attributed_type | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::NonNull | attributed type in method signature is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_type_spelling | auto_return | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::AutoValue | deduced auto return type is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_type_spelling | decltype_auto_return | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Deduced | decltype(auto) return type is not supported | exclude this member or provide a hand-authored mock |  |  |  |
-| warning | clang | unsupported_type_spelling | trailing_return_type | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Trailing | trailing return type spelling is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_volatile_method | volatile_method | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Volatile | volatile method is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 
 ## Validation Commands
@@ -101,7 +100,6 @@ No validation commands recorded.
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::OutOfClassInline | inline method body is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::PrivateMethod | only public methods are generated | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::ProtectedMethod | only public methods are generated | exclude this member or provide a hand-authored mock |
-| Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Trailing | trailing return type spelling is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Volatile | volatile method is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::operator bool | conversion operator is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::operator+= | overloaded operator is not supported | exclude this member or provide a hand-authored mock |

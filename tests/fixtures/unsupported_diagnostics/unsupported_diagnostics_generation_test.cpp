@@ -264,7 +264,7 @@ namespace
 
 		Expect(extraction.classes.size() == 3U,
 			   "link replacement negative fixture should extract three concrete classes");
-		Expect(UnsupportedItemCount(extraction) == 33U,
+		Expect(UnsupportedItemCount(extraction) == 32U,
 			   "link replacement negative fixture should lock unsupported item count");
 		for (const auto kind : {
 				 "class_template",
@@ -273,7 +273,6 @@ namespace
 				 "nested_class",
 				 "function_template",
 				 "inline_body",
-				 "trailing_return_type",
 				 "auto_return",
 				 "decltype_auto_return",
 				 "constexpr_method",
@@ -298,8 +297,6 @@ namespace
 			   "inline body should be recorded");
 		Expect(HasUnsupportedMember(extraction, "inline_body", "OutOfClassInline"),
 			   "out-of-class inline definition should be recorded");
-		Expect(HasUnsupportedMember(extraction, "trailing_return_type", "Trailing"),
-			   "trailing return type should be recorded");
 		Expect(HasUnsupportedMember(extraction, "auto_return", "AutoValue"),
 			   "plain auto return should be recorded");
 		Expect(HasUnsupportedMember(extraction, "decltype_auto_return", "Deduced"),

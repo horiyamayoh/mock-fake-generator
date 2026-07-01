@@ -18,6 +18,16 @@ namespace app::v1
 			"app::v1::Supported::CountItems(Mode) const noexcept");
 	}
 
+	Count Supported::Size() const
+	{
+		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockSupported>())
+		{
+			return static_cast<const MockSupported&>(*mockfake_current_mock).Size();
+		}
+
+		return ::mockfake::MissingMockReturn<Count>("app::v1::Supported::Size() const");
+	}
+
 	Ratio Supported::Scale(Ratio value)
 	{
 		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockSupported>())

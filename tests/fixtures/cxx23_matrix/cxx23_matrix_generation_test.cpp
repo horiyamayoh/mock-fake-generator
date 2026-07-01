@@ -169,8 +169,9 @@ namespace
 		Expect(class_model.namespaces.size() == 2U && class_model.namespaces[0] == "app" &&
 				   class_model.namespaces[1] == "v1",
 			   "nested namespace parts should be preserved");
-		Expect(class_model.mock_methods.size() == 3U,
-			   "using alias, typedef, enum class, and static method should generate");
+		Expect(
+			class_model.mock_methods.size() == 4U,
+			"using alias, trailing return, typedef, enum class, and static method should generate");
 		Expect(class_model.unsupported_items.empty(),
 			   "friend declarations should be ignored without unsupported diagnostics");
 		Expect(class_model.mock_methods[0].return_type_spelling == "Count",
@@ -179,9 +180,13 @@ namespace
 			   "enum class parameter spelling should be preserved");
 		Expect(class_model.mock_methods[0].is_const && class_model.mock_methods[0].is_noexcept,
 			   "const noexcept qualifiers should be preserved");
-		Expect(class_model.mock_methods[1].return_type_spelling == "Ratio",
+		Expect(class_model.mock_methods[1].return_type_spelling == "Count",
+			   "trailing return type should use resolved AST spelling");
+		Expect(class_model.mock_methods[1].is_const,
+			   "trailing return method const qualifier should be preserved");
+		Expect(class_model.mock_methods[2].return_type_spelling == "Ratio",
 			   "typedef return spelling should be preserved");
-		Expect(class_model.mock_methods[2].is_static, "static method should be preserved");
+		Expect(class_model.mock_methods[3].is_static, "static method should be preserved");
 
 		const auto generated = mockfakegen::GenerateMinimalMockFake(class_model);
 		const auto format_result = mockfakegen::FormatGeneratedFiles(

@@ -284,8 +284,8 @@ Common unsupported categories include:
 - `constexpr`, `consteval`, volatile methods, conditional `noexcept`, explicit object
   parameters, and unsupported attributes.
 - Inline method bodies when link replacement would duplicate behavior.
-- Deduced `auto`, `decltype(auto)`, trailing return types, function pointer/reference
-  returns, private nested types, and attributed types in method signatures.
+- Deduced `auto`, `decltype(auto)`, function pointer/reference returns, private
+  nested types, and attributed types in method signatures.
 - `const` by-value parameters whose type is not copy constructible, because the fake
   cannot safely forward them to gMock.
 - Special members and static data definitions unless enabled and considered safe.
