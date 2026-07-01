@@ -1185,6 +1185,69 @@ namespace
 			   "report should include clang diagnostic summary");
 	}
 
+	void IsolatedHeaderParseFailureKeepsSuccessfulOutput(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "isolated-parse-failure-product";
+		const auto include_dir = product_root / "include";
+		const auto build_dir = temp_root / "isolated-parse-failure-build";
+		const auto output_dir = temp_root / "isolated-parse-failure-generated";
+		std::filesystem::create_directories(build_dir);
+		WriteText(include_dir / "Good.h",
+				  "#pragma once\n"
+				  "class Good {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		WriteText(include_dir / "Bad.h",
+				  "#pragma once\n"
+				  "class Bad {\n"
+				  "public:\n"
+				  "  bool Broken(\n"
+				  "};\n");
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "isolated_parse_failure");
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0,
+			   "best-effort isolated header parse failure should keep successful output");
+		Expect(std::filesystem::exists(output_dir / "MockGood.h"),
+			   "successful header mock should be published");
+		Expect(std::filesystem::exists(output_dir / "FakeGood.cpp"),
+			   "successful header fake should be published");
+		Expect(!std::filesystem::exists(output_dir / "MockBad.h"),
+			   "failed header should not publish a mock");
+		Expect(Contains(stderr_text, "synthetic TU parse failed"),
+			   "isolated parse failure should be printed");
+		Expect(Contains(stderr_text, "Bad.h"), "isolated parse failure should name the bad header");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"mock_header\": \"MockGood.h\""),
+			   "manifest should include successful generated class");
+		Expect(Contains(manifest, "\"code\": \"synthetic_tu_parse_failure\""),
+			   "manifest should retain isolated parse failure diagnostic");
+		Expect(Contains(manifest, "Bad.h"), "manifest should name failed header");
+		Expect(Contains(report, "| Good |"), "report should include successful class row");
+		Expect(Contains(report, "synthetic_tu_parse_failure"),
+			   "report should retain isolated parse failure diagnostic");
+	}
+
 	void MissingCompileDatabaseDiagnosticIsPrintedOnce(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "missing-compile-db-product";
@@ -1733,6 +1796,7 @@ int main()
 	TopLevelUnsupportedAppearsInManifest(temp_root);
 	PrivateTypeUsesAppearUnsupportedInManifest(temp_root);
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
+	IsolatedHeaderParseFailureKeepsSuccessfulOutput(temp_root);
 	MissingCompileDatabaseDiagnosticIsPrintedOnce(temp_root);
 	CliCompilerArgsRescueMissingCompileDatabase(temp_root);
 	PathMapRescuesContainerCompileDatabase(temp_root);

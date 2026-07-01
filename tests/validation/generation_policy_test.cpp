@@ -445,6 +445,68 @@ namespace
 			"parse diagnostic should be distinct");
 	}
 
+	void IsolatedParseFailurePublishesSuccessfulClasses()
+	{
+		const std::vector classes = {ServiceClass(false)};
+		mockfakegen::Diagnostic parse_error;
+		parse_error.severity = mockfakegen::DiagnosticSeverity::Error;
+		parse_error.code = mockfakegen::DiagnosticCode::ParseError;
+		parse_error.source_range.begin.file = "Bad.h";
+		parse_error.message = "synthetic TU parse failed: Bad.h";
+		const std::vector parse_diagnostics = {parse_error};
+		const std::vector<mockfakegen::GeneratedCompileDiagnostic> validation_diagnostics;
+
+		const auto decision = mockfakegen::EvaluateGenerationPolicy(
+			BestEffortConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.unsupported_items = {},
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(decision.exit_code == 0,
+			   "best-effort isolated parse failure should keep successful output zero-exit");
+		Expect(decision.write_outputs,
+			   "isolated parse failure should not suppress successful generated output");
+		Expect(decision.publish_generated_files,
+			   "isolated parse failure should publish successful generated files");
+		Expect(decision.emit_manifest, "isolated parse failure should emit manifest");
+		Expect(decision.emit_report, "isolated parse failure should emit report");
+		Expect(decision.has_parse_failure, "isolated parse failure should be recorded");
+		Expect(
+			HasDiagnosticKind(decision, mockfakegen::GenerationPolicyDiagnosticKind::ParseFailure),
+			"isolated parse diagnostic should be preserved");
+	}
+
+	void StrictIsolatedParseFailurePublishesButReturnsNonZero()
+	{
+		const std::vector classes = {ServiceClass(false)};
+		mockfakegen::Diagnostic parse_error;
+		parse_error.severity = mockfakegen::DiagnosticSeverity::Error;
+		parse_error.code = mockfakegen::DiagnosticCode::ParseError;
+		parse_error.source_range.begin.file = "Bad.h";
+		parse_error.message = "synthetic TU parse failed: Bad.h";
+		const std::vector parse_diagnostics = {parse_error};
+		const std::vector<mockfakegen::GeneratedCompileDiagnostic> validation_diagnostics;
+
+		const auto decision = mockfakegen::EvaluateGenerationPolicy(
+			StrictConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.unsupported_items = {},
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(decision.exit_code != 0, "strict isolated parse failure should be non-zero");
+		Expect(decision.write_outputs,
+			   "strict isolated parse failure should keep successful generated output writable");
+		Expect(decision.publish_generated_files,
+			   "strict isolated parse failure should publish successful generated files");
+		Expect(decision.has_parse_failure, "strict isolated parse failure should be recorded");
+	}
+
 	void ValidationFailureIsNonZeroAndSuppressesPublish()
 	{
 		const std::vector classes = {ServiceClass(false)};
@@ -730,6 +792,8 @@ int main()
 	TopLevelUnsupportedInfluencesPolicy();
 	LinkReadinessInfluencesPolicyDecision();
 	ParseFailureSuppressesOutput();
+	IsolatedParseFailurePublishesSuccessfulClasses();
+	StrictIsolatedParseFailurePublishesButReturnsNonZero();
 	ValidationFailureIsNonZeroAndSuppressesPublish();
 	FailurePolicyMatrixCoversPublicationAndReports();
 	KetContaminationInputSuppressesPublish();
