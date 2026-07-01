@@ -138,14 +138,16 @@ silently ignored.
 
 The generated output directory can contain:
 
-- `MockFakeRuntime.h`: shared runtime used by generated mocks/fakes.
-- `MockXXX.h`: gMock mock class and `ScopedMockXXX` alias.
-- `FakeXXX.cpp`: link-replacement implementation for the product class.
+- `MockFakeRuntime.h`: shared runtime used by link-replacement generated mocks/fakes.
+- `MockXXX.h`: gMock mock class. Link-replacement mocks also include a
+  `ScopedMockXXX` alias; interface-mock output does not.
+- `FakeXXX.cpp`: link-replacement implementation for the product class. Interface-mock
+  output omits fake sources.
 - `AllMocks.h`: optional aggregate include.
 - `CMakeLists.fragment.cmake`: optional build-system fragment for link-ready fake sources.
 - `manifest.json`: machine-readable generation summary and diagnostics.
 - `generation_report.md`: human-readable summary, link-readiness table, diagnostics,
-  validation commands, and unsupported item table.
+  validation commands, and class-scoped unsupported item table.
 
 Generated C++ includes product headers, `<gmock/gmock.h>`, standard headers, and
 `MockFakeRuntime.h`. It must compile without ket include directories.
@@ -246,10 +248,13 @@ The following failures return nonzero regardless of strictness:
 - Header scan errors.
 - Clang parse errors.
 - Format failures.
-- Generated-output ket contamination.
 - Compile or link validation failures.
 - Write failures.
 - Fallback policy incompatibilities.
+
+The repository quality gate `cmake --build --preset dev --target check-generated-output`
+separately scans generated fixtures for forbidden ket tokens. The CLI's validation modes
+compile and optionally link generated output, but do not run that token scanner.
 
 ## Unsupported Construct Policy
 
@@ -273,8 +278,10 @@ Common unsupported categories include:
   returns, private nested types, and attributed types in method signatures.
 - Special members and static data definitions unless enabled and considered safe.
 
-Use the report's `Unsupported Items` table and the manifest's `diagnostics` array as the
-source of truth for a specific run.
+Use the report's `Diagnostics` table and the manifest's `diagnostics` array as the
+complete source of truth for a specific run. The report's `Unsupported Items` table is a
+readable summary for class-scoped unsupported members; top-level unsupported declarations
+can appear only in diagnostics.
 
 ## Report And Manifest Schema
 
@@ -287,7 +294,7 @@ source of truth for a specific run.
 - Generated class table.
 - Diagnostics table.
 - Validation commands.
-- Unsupported items table.
+- Unsupported items table for class-scoped unsupported members.
 
 `manifest.json` has `schema_version: 1` and contains:
 
