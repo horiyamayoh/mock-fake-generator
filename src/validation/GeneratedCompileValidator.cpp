@@ -96,6 +96,22 @@ namespace mockfakegen
 			return false;
 		}
 
+		[[nodiscard]] GeneratedCompileValidationStage StageForMode(ValidationMode mode) noexcept
+		{
+			switch (mode)
+			{
+				case ValidationMode::Syntax:
+					return GeneratedCompileValidationStage::Syntax;
+				case ValidationMode::None:
+				case ValidationMode::Compile:
+					return GeneratedCompileValidationStage::Compile;
+				case ValidationMode::Link:
+					return GeneratedCompileValidationStage::Link;
+			}
+
+			return GeneratedCompileValidationStage::Compile;
+		}
+
 		[[nodiscard]] std::string ShellQuote(std::string_view value)
 		{
 			std::string quoted;
@@ -307,6 +323,7 @@ namespace mockfakegen
 		}
 
 		void AddDiagnostic(GeneratedCompileValidationResult& result,
+						   GeneratedCompileValidationStage stage,
 						   std::filesystem::path source_path,
 						   std::filesystem::path validation_artifact_path,
 						   std::string message,
@@ -319,6 +336,7 @@ namespace mockfakegen
 				.message = std::move(message),
 				.command = std::move(command),
 				.stderr_summary = std::move(stderr_summary),
+				.stage = stage,
 			});
 		}
 
@@ -459,19 +477,24 @@ namespace mockfakegen
 				std::string_view::npos;
 		}
 
-		[[nodiscard]] std::string FailureMessage(const ProcessResult& process,
+		[[nodiscard]] std::string FailureMessage(GeneratedCompileValidationStage stage,
+												 const ProcessResult& process,
 												 std::string_view stderr_summary)
 		{
 			if (process.timed_out)
 			{
-				return "generated output compile validation timed out.";
+				return stage == GeneratedCompileValidationStage::Syntax
+					? "generated output syntax validation timed out."
+					: "generated output compile validation timed out.";
 			}
 			if (LooksLikeMissingGMockInclude(stderr_summary))
 			{
 				return "gMock include path is missing or invalid; compiler could not include "
 					   "<gmock/gmock.h>.";
 			}
-			return "generated output compile validation failed.";
+			return stage == GeneratedCompileValidationStage::Syntax
+				? "generated output syntax validation failed."
+				: "generated output compile validation failed.";
 		}
 
 		[[nodiscard]] bool LooksLikeDuplicateSymbol(std::string_view stderr_summary)
@@ -515,10 +538,14 @@ namespace mockfakegen
 			if (process.exit_code != 0)
 			{
 				const auto summary = StderrSummary(process.output);
+				const auto stage = options.mode == ValidationMode::Syntax
+					? GeneratedCompileValidationStage::Syntax
+					: GeneratedCompileValidationStage::Compile;
 				AddDiagnostic(result,
+							  stage,
 							  source_path,
 							  artifact_path,
-							  FailureMessage(process, summary),
+							  FailureMessage(stage, process, summary),
 							  command,
 							  summary);
 			}
@@ -580,6 +607,7 @@ namespace mockfakegen
 			{
 				const auto summary = StderrSummary(process.output);
 				AddDiagnostic(result,
+							  GeneratedCompileValidationStage::Link,
 							  executable_path,
 							  artifact_path,
 							  LinkFailureMessage(process, summary),
@@ -601,6 +629,21 @@ namespace mockfakegen
 		}
 	} // namespace
 
+	std::string_view ToString(GeneratedCompileValidationStage stage) noexcept
+	{
+		switch (stage)
+		{
+			case GeneratedCompileValidationStage::Syntax:
+				return "syntax";
+			case GeneratedCompileValidationStage::Compile:
+				return "compile";
+			case GeneratedCompileValidationStage::Link:
+				return "link";
+		}
+
+		return "compile";
+	}
+
 	GeneratedCompileValidationResult
 	ValidateGeneratedOutputCompile(const GeneratedCompileValidationOptions& options,
 								   std::span<const GeneratedFile> files)
@@ -615,7 +658,8 @@ namespace mockfakegen
 		TempTree tree(ValidationRoot(options));
 		if (!tree.ok())
 		{
-			AddDiagnostic(result, tree.root, {}, tree.initialization_error);
+			AddDiagnostic(
+				result, StageForMode(options.mode), tree.root, {}, tree.initialization_error);
 			return result;
 		}
 
@@ -628,6 +672,7 @@ namespace mockfakegen
 			if (!WriteText(output_path, file.content))
 			{
 				AddDiagnostic(result,
+							  StageForMode(options.mode),
 							  output_path,
 							  artifact_path,
 							  "failed to write generated file for validation.");
@@ -639,8 +684,11 @@ namespace mockfakegen
 		const auto smoke_source = tree.root / "mock_headers_smoke.cpp";
 		if (!WriteText(smoke_source, BuildMockHeadersSmokeSource(files)))
 		{
-			AddDiagnostic(
-				result, smoke_source, artifact_path, "failed to write mock header smoke source.");
+			AddDiagnostic(result,
+						  StageForMode(options.mode),
+						  smoke_source,
+						  artifact_path,
+						  "failed to write mock header smoke source.");
 			tree.keep = options.keep_failed_artifacts;
 			return result;
 		}

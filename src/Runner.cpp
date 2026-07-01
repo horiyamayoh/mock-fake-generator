@@ -334,14 +334,16 @@ namespace mockfakegen
 		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const GeneratedCompileDiagnostic& diagnostic)
 		{
 			RunDiagnostic result;
+			const auto stage = std::string(ToString(diagnostic.stage));
 			result.severity = DiagnosticSeverity::Error;
 			result.component = "validation";
-			result.code = "compile_validation_failure";
-			result.kind = "compile";
+			result.code = stage + "_validation_failure";
+			result.kind = stage;
 			result.path = diagnostic.source_path;
 			result.message = diagnostic.message;
-			result.suggested_action =
-				"rerun the recorded compiler command and fix the generated input";
+			result.suggested_action = diagnostic.stage == GeneratedCompileValidationStage::Link
+				? "rerun the recorded linker command and fix the generated link inputs"
+				: "rerun the recorded compiler command and fix the generated input";
 			result.command = diagnostic.command;
 			result.stderr_summary = diagnostic.stderr_summary;
 			result.validation_artifact_path = diagnostic.validation_artifact_path;

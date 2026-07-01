@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ValidationMode.h"
@@ -11,6 +12,13 @@
 
 namespace mockfakegen
 {
+	enum class GeneratedCompileValidationStage
+	{
+		Syntax,
+		Compile,
+		Link,
+	};
+
 	struct GeneratedCompileValidationOptions
 	{
 		ValidationMode mode = ValidationMode::Compile;
@@ -37,6 +45,7 @@ namespace mockfakegen
 		std::string message;
 		std::string command;
 		std::string stderr_summary;
+		GeneratedCompileValidationStage stage = GeneratedCompileValidationStage::Compile;
 	};
 
 	struct GeneratedCompileValidationResult
@@ -54,4 +63,6 @@ namespace mockfakegen
 	[[nodiscard]] GeneratedCompileValidationResult
 	ValidateGeneratedOutputCompile(const GeneratedCompileValidationOptions& options,
 								   std::span<const GeneratedFile> files);
+
+	[[nodiscard]] std::string_view ToString(GeneratedCompileValidationStage stage) noexcept;
 } // namespace mockfakegen

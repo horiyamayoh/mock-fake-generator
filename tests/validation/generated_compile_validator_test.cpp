@@ -270,6 +270,8 @@ namespace
 		Expect(!result.ok(), "linking product implementation with generated fake should fail");
 		Expect(result.commands.size() == 3U, "duplicate-symbol case should reach the link command");
 		Expect(!result.diagnostics.empty(), "duplicate-symbol link failure should diagnose");
+		Expect(result.diagnostics[0].stage == mockfakegen::GeneratedCompileValidationStage::Link,
+			   "duplicate-symbol diagnostic should record link stage");
 		Expect(Contains(result.diagnostics[0].message, "do not link product .cpp files"),
 			   "duplicate-symbol diagnostic should explain link substitution boundary");
 		Expect(Contains(result.diagnostics[0].command, HogeProductSource().string()),
@@ -292,6 +294,30 @@ namespace
 			Expect(Contains(command.command, "-fsyntax-only"),
 				   "syntax validation command should use -fsyntax-only");
 		}
+	}
+
+	void SyntaxValidationReportsSyntaxStage()
+	{
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile("MockBroken.h",
+										   "#pragma once\n"
+										   "struct MockBroken\n"
+										   "{\n"
+										   "\tvoid Broken(;\n"
+										   "};\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+		};
+		auto options = CompileOptions();
+		options.mode = mockfakegen::ValidationMode::Syntax;
+
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(options, files);
+
+		Expect(!result.ok(), "invalid generated C++ should fail syntax validation");
+		Expect(result.diagnostics.size() == 1U, "syntax failure should produce one diagnostic");
+		Expect(result.diagnostics[0].stage == mockfakegen::GeneratedCompileValidationStage::Syntax,
+			   "syntax validation failure should record syntax stage");
+		Expect(result.diagnostics[0].message == "generated output syntax validation failed.",
+			   "syntax validation failure should use syntax message");
 	}
 
 	void NoneValidationSkipsCompiler()
@@ -325,6 +351,8 @@ namespace
 		Expect(!result.ok(), "invalid generated C++ should fail validation");
 		Expect(result.commands.size() == 1U, "invalid mock header should run smoke command");
 		Expect(result.diagnostics.size() == 1U, "invalid C++ should produce one diagnostic");
+		Expect(result.diagnostics[0].stage == mockfakegen::GeneratedCompileValidationStage::Compile,
+			   "compile validation failure should record compile stage");
 		Expect(!result.diagnostics[0].command.empty(), "failure diagnostic should keep command");
 		Expect(!result.diagnostics[0].stderr_summary.empty(),
 			   "failure diagnostic should keep stderr summary");
@@ -456,6 +484,7 @@ int main()
 	LinkValidationBuildsSmokeExecutable();
 	LinkValidationReportsDuplicateProductImplementation();
 	SyntaxValidationUsesSyntaxOnly();
+	SyntaxValidationReportsSyntaxStage();
 	NoneValidationSkipsCompiler();
 	CompileValidationReportsCxxFailure();
 	CompileValidationTimesOut();

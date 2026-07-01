@@ -969,6 +969,62 @@ namespace
 			   "validation artifact directory should be retained");
 	}
 
+	void LinkValidationFailureAppearsAsLinkDiagnostic(const std::filesystem::path& temp_root,
+													  const std::filesystem::path& product_dir,
+													  const std::filesystem::path& build_dir)
+	{
+#if defined(__unix__)
+		auto link_files = std::string(MOCKFAKEGEN_GMOCK_LINK_FILES);
+		if (!link_files.empty())
+		{
+			link_files += '|';
+		}
+		link_files += (product_dir / "Hoge.cpp").string();
+		setenv("MOCKFAKEGEN_GMOCK_LINK_FILES", link_files.c_str(), 1);
+#endif
+		const auto output_dir = temp_root / "link-validation-failure";
+		auto args = BaseArgs(product_dir, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "link",
+				   "--format-style",
+				   "none",
+				   "--fake-special-members",
+				   "true",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "link_validation_failure");
+#if defined(__unix__)
+		setenv("MOCKFAKEGEN_GMOCK_LINK_FILES", MOCKFAKEGEN_GMOCK_LINK_FILES, 1);
+#endif
+
+		Expect(result.exit_code == 1, "link validation failure should return non-zero");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "link validation failure should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "link validation failure should emit report");
+		Expect(!std::filesystem::exists(output_dir / "MockHoge.h"),
+			   "link validation failure should not publish generated mock header");
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(Contains(stderr_text, "generated output link validation failed"),
+			   "stderr should identify link validation failure");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"code\": \"link_validation_failure\""),
+			   "manifest should use link validation code");
+		Expect(Contains(manifest, "\"kind\": \"link\""),
+			   "manifest should use link validation kind");
+		Expect(!Contains(manifest, "\"code\": \"compile_validation_failure\""),
+			   "manifest should not label link failure as compile validation");
+		Expect(Contains(manifest, "do not link product .cpp files"),
+			   "manifest should include link-substitution guidance");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(report, "link_validation_failure"),
+			   "report should use link validation code");
+		Expect(Contains(report, "do not link product .cpp files"),
+			   "report should include link-substitution guidance");
+	}
+
 	void InvalidValidationArtifactDirAppearsInManifest(const std::filesystem::path& temp_root,
 													   const std::filesystem::path& product_dir,
 													   const std::filesystem::path& build_dir)
@@ -1042,6 +1098,7 @@ int main()
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);
+	LinkValidationFailureAppearsAsLinkDiagnostic(temp_root, product_dir, build_dir);
 	InvalidValidationArtifactDirAppearsInManifest(temp_root, product_dir, build_dir);
 
 	std::error_code remove_error;
