@@ -71,6 +71,8 @@ namespace mockfakegen
 		std::filesystem::path project_root;
 		std::string standard = "c++23";
 		std::string header_extension = ".h";
+		std::optional<std::string> header_filter;
+		std::vector<std::string> exclude_globs;
 		AccessPolicy access = AccessPolicy::Public;
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		FallbackPolicy fallback_policy = FallbackPolicy::Abort;

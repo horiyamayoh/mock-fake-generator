@@ -199,10 +199,50 @@ namespace mockfakegen
 		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const HeaderScanDiagnostic& diagnostic)
 		{
 			RunDiagnostic result;
-			result.severity = DiagnosticSeverity::Error;
+			switch (diagnostic.severity)
+			{
+				case HeaderScanDiagnosticSeverity::Info:
+					result.severity = DiagnosticSeverity::Info;
+					break;
+				case HeaderScanDiagnosticSeverity::Warning:
+					result.severity = DiagnosticSeverity::Warning;
+					break;
+				case HeaderScanDiagnosticSeverity::Error:
+					result.severity = DiagnosticSeverity::Error;
+					break;
+			}
 			result.component = "scanner";
-			result.code = "scanner_error";
-			result.kind = std::to_string(static_cast<int>(diagnostic.code));
+			switch (diagnostic.code)
+			{
+				case HeaderScanDiagnosticCode::InputRootDoesNotExist:
+					result.code = "scanner_input_root_missing";
+					result.kind = "input_root_missing";
+					break;
+				case HeaderScanDiagnosticCode::InputRootIsNotDirectory:
+					result.code = "scanner_input_root_not_directory";
+					result.kind = "input_root_not_directory";
+					break;
+				case HeaderScanDiagnosticCode::FilesystemError:
+					result.code = "scanner_filesystem_error";
+					result.kind = "filesystem_error";
+					break;
+				case HeaderScanDiagnosticCode::InvalidHeaderFilter:
+					result.code = "scanner_invalid_header_filter";
+					result.kind = "invalid_header_filter";
+					break;
+				case HeaderScanDiagnosticCode::SkippedGeneratedOutput:
+					result.code = "scanner_skipped_generated_output";
+					result.kind = "skipped_generated_output";
+					break;
+				case HeaderScanDiagnosticCode::SkippedExcludedPath:
+					result.code = "scanner_skipped_excluded_path";
+					result.kind = "skipped_excluded_path";
+					break;
+				case HeaderScanDiagnosticCode::SkippedSymlinkPath:
+					result.code = "scanner_skipped_symlink_path";
+					result.kind = "skipped_symlink_path";
+					break;
+			}
 			result.path = diagnostic.path;
 			result.message = diagnostic.message;
 			result.suggested_action = "check --input-root, --project-root, and filesystem access";
@@ -582,6 +622,8 @@ namespace mockfakegen
 			.input_root = config.input_root,
 			.project_root = config.project_root,
 			.output_dir = config.output_dir,
+			.header_filter = config.header_filter,
+			.exclude_globs = config.exclude_globs,
 		});
 		std::vector<RunDiagnostic> run_diagnostics;
 		AppendRunDiagnostics(run_diagnostics, scan_result.diagnostics);

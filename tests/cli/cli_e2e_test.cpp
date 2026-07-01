@@ -388,6 +388,59 @@ namespace
 			   "fake source should qualify public nested type");
 	}
 
+	void NestedGeneratedOutputIsNotReingested(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "scanner-generated-product";
+		const auto build_dir = temp_root / "scanner-generated-build";
+		const auto output_dir = product_root / "generated";
+		WriteText(product_root / "Product.h",
+				  "#pragma once\n"
+				  "class Product {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n");
+		WriteText(product_root / "Product.cpp", "#include \"Product.h\"\n");
+		WriteText(output_dir / "MockFakeRuntime.h", "#pragma once\n");
+		WriteText(output_dir / "AllMocks.h", "#pragma once\n");
+		WriteText(output_dir / "MockProduct.h",
+				  "#pragma once\n"
+				  "#include <gmock/gmock.h>\n"
+				  "#include \"MockFakeRuntime.h\"\n"
+				  "class MockProduct {};\n");
+		const auto source = product_root / "Product.cpp";
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(product_root.string()) + " -c " + ShellQuote(source.string()) +
+			" -o product.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		auto args = BaseArgs(product_root, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--overwrite",
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "scanner_generated_output");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "nested generated output run should succeed");
+		Expect(Contains(stdout_text, "mockfakegen: scanned 1 header(s)"),
+			   "nested generated output should not be scanned as product input");
+		Expect(Contains(stderr_text, "scanner_skipped_generated_output") ||
+				   Contains(stderr_text, "skipped configured output directory"),
+			   "nested generated output skip should be diagnosed");
+		Expect(std::filesystem::exists(output_dir / "MockProduct.h"),
+			   "product mock should be generated");
+		Expect(!std::filesystem::exists(output_dir / "MockMockProduct.h"),
+			   "generated MockProduct.h should not be reingested");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"code\": \"scanner_skipped_generated_output\""),
+			   "manifest should include generated output skip diagnostic");
+	}
+
 	void DryRunDoesNotPublishFiles(const std::filesystem::path& temp_root,
 								   const std::filesystem::path& product_dir,
 								   const std::filesystem::path& build_dir)
@@ -784,6 +837,7 @@ int main()
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
+	NestedGeneratedOutputIsNotReingested(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);

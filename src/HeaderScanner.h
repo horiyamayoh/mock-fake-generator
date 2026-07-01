@@ -1,20 +1,33 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace mockfakegen
 {
+	enum class HeaderScanDiagnosticSeverity
+	{
+		Info,
+		Warning,
+		Error,
+	};
+
 	enum class HeaderScanDiagnosticCode
 	{
 		InputRootDoesNotExist,
 		InputRootIsNotDirectory,
 		FilesystemError,
+		InvalidHeaderFilter,
+		SkippedGeneratedOutput,
+		SkippedExcludedPath,
+		SkippedSymlinkPath,
 	};
 
 	struct HeaderScanDiagnostic
 	{
+		HeaderScanDiagnosticSeverity severity = HeaderScanDiagnosticSeverity::Error;
 		HeaderScanDiagnosticCode code;
 		std::filesystem::path path;
 		std::string message;
@@ -32,6 +45,8 @@ namespace mockfakegen
 		std::filesystem::path input_root;
 		std::filesystem::path project_root;
 		std::filesystem::path output_dir;
+		std::optional<std::string> header_filter = std::nullopt;
+		std::vector<std::string> exclude_globs = {};
 	};
 
 	struct HeaderScanResult
@@ -41,7 +56,14 @@ namespace mockfakegen
 
 		[[nodiscard]] bool ok() const noexcept
 		{
-			return diagnostics.empty();
+			for (const auto& diagnostic : diagnostics)
+			{
+				if (diagnostic.severity == HeaderScanDiagnosticSeverity::Error)
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 	};
 

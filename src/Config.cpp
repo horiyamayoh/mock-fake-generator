@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <regex>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -95,8 +96,7 @@ namespace mockfakegen
 
 		[[nodiscard]] bool IsDeferredValueOption(std::string_view option) noexcept
 		{
-			return option == kConfigOption || option == kHeaderFilterOption ||
-				option == kExcludeOption || option == kClassFilterOption ||
+			return option == kConfigOption || option == kClassFilterOption ||
 				option == kIncludeDirOption || option == kDefineOption || option == kExtraArgOption;
 		}
 
@@ -447,6 +447,33 @@ namespace mockfakegen
 				}
 
 				config.header_extension = *value;
+			}
+			else if (option == kHeaderFilterOption)
+			{
+				try
+				{
+					(void)std::regex(*value);
+					config.header_filter = *value;
+				}
+				catch (const std::regex_error& error)
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kHeaderFilterOption,
+							 "invalid --header-filter regex: " + std::string(error.what()));
+				}
+			}
+			else if (option == kExcludeOption)
+			{
+				if (value->empty())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kExcludeOption,
+							 "--exclude must not be empty.");
+					continue;
+				}
+				config.exclude_globs.push_back(*value);
 			}
 			else if (option == kAccessOption)
 			{
@@ -817,8 +844,8 @@ namespace mockfakegen
 			"  --std <value>           c++23 only.\n"
 			"  --config <path>         Deferred: external config file support.\n"
 			"  --header-extension <ext> .h only.\n"
-			"  --header-filter <regex> Deferred: header include filter.\n"
-			"  --exclude <glob>        Deferred: repeatable header exclusion.\n"
+			"  --header-filter <regex> Filter project-relative header paths.\n"
+			"  --exclude <glob>        Repeatable project-relative header exclusion.\n"
 			"  --class-filter <regex>  Deferred: class name filter.\n"
 			"  --access <policy>       public only; protected/private are deferred.\n"
 			"  --include-struct <bool> false only; true is deferred.\n"
