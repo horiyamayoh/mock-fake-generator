@@ -189,7 +189,7 @@ namespace mockfakegen
 			RunDiagnostic result;
 			result.severity = DiagnosticSeverity::Error;
 			result.component = "config";
-			result.code = "config_error";
+			result.code = std::string(ConfigErrorCodeName(diagnostic.code));
 			result.kind = diagnostic.option;
 			result.message = diagnostic.message;
 			result.suggested_action = "fix the command line option and rerun mockfakegen";
@@ -373,6 +373,18 @@ namespace mockfakegen
 			out.insert(out.end(), diagnostics.begin(), diagnostics.end());
 		}
 
+		[[nodiscard]] std::vector<RunDiagnostic>
+		ToRunDiagnostics(std::span<const ConfigError> diagnostics)
+		{
+			std::vector<RunDiagnostic> result;
+			result.reserve(diagnostics.size());
+			for (const auto& diagnostic : diagnostics)
+			{
+				result.push_back(ToRunDiagnostic(diagnostic));
+			}
+			return result;
+		}
+
 		[[nodiscard]] std::vector<RunCommand>
 		ToRunCommands(std::span<const GeneratedCompileCommandResult> commands)
 		{
@@ -505,22 +517,38 @@ namespace mockfakegen
 	int RunCli(int argc, const char* const* argv, std::ostream& out, std::ostream& err)
 	{
 		const auto result = ParseConfigFromArgv(argc, argv);
-		if (result.help_requested)
+		if (result.help_requested && result.errors.empty())
 		{
 			out << BuildUsage(result.program_name);
-			return result.errors.empty() ? 0 : 2;
+			return 0;
 		}
 
 		if (!result.errors.empty())
 		{
-			std::vector<RunDiagnostic> diagnostics;
-			diagnostics.reserve(result.errors.size());
-			for (const auto& diagnostic : result.errors)
-			{
-				diagnostics.push_back(ToRunDiagnostic(diagnostic));
-			}
+			const auto diagnostics = ToRunDiagnostics(result.errors);
 			PrintRunDiagnostics(err, diagnostics);
 			err << '\n' << BuildUsage(result.program_name);
+
+			if (result.config.has_value())
+			{
+				const std::vector<ClassModel> no_classes;
+				const auto diagnostic_files =
+					AppendDiagnosticArtifacts({},
+											  no_classes,
+											  GenerationReportMetadata{
+												  .diagnostics = diagnostics,
+												  .validation_commands = {},
+											  },
+											  result.config->emit_manifest);
+				const auto write_result = WriteGeneratedFiles(
+					OutputWriterOptions{
+						.output_dir = result.config->output_dir,
+						.dry_run = result.config->dry_run,
+						.overwrite = result.config->overwrite,
+					},
+					diagnostic_files);
+				PrintOutputSummary(out, write_result);
+			}
 			return 2;
 		}
 

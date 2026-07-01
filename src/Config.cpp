@@ -1,7 +1,6 @@
 #include "Config.h"
 
 #include <algorithm>
-#include <charconv>
 #include <iostream>
 #include <string>
 #include <system_error>
@@ -205,33 +204,6 @@ namespace mockfakegen
 			return arguments[value_index];
 		}
 
-		[[nodiscard]] std::optional<int> ParseJobsValue(std::string_view text)
-		{
-			int value = 0;
-			const auto* const begin = text.data();
-			const auto* const end = begin + text.size();
-			const auto [ptr, error] = std::from_chars(begin, end, value);
-			if (error != std::errc{} || ptr != end || value <= 0)
-			{
-				return std::nullopt;
-			}
-
-			return value;
-		}
-
-		[[nodiscard]] std::optional<bool> ParseBoolValue(std::string_view text)
-		{
-			if (text == "true")
-			{
-				return true;
-			}
-			if (text == "false")
-			{
-				return false;
-			}
-			return std::nullopt;
-		}
-
 		[[nodiscard]] std::optional<std::filesystem::path> NormalizePathValue(
 			std::vector<ConfigError>& errors, std::string_view option, std::string_view value)
 		{
@@ -299,6 +271,31 @@ namespace mockfakegen
 			return std::string(program_name);
 		}
 	} // namespace
+
+	std::string_view ConfigErrorCodeName(ConfigErrorCode code) noexcept
+	{
+		switch (code)
+		{
+			case ConfigErrorCode::MissingRequiredOption:
+				return "missing_required_option";
+			case ConfigErrorCode::MissingOptionValue:
+				return "missing_option_value";
+			case ConfigErrorCode::InvalidOptionValue:
+				return "invalid_option_value";
+			case ConfigErrorCode::UnknownOption:
+				return "unknown_option";
+			case ConfigErrorCode::UnexpectedArgument:
+				return "unexpected_argument";
+			case ConfigErrorCode::ConflictingOption:
+				return "conflicting_option";
+			case ConfigErrorCode::DuplicateOption:
+				return "duplicate_option";
+			case ConfigErrorCode::DeferredOption:
+				return "deferred_option";
+		}
+
+		return "unknown_config_error";
+	}
 
 	ConfigParseResult ParseConfig(std::span<const std::string> arguments)
 	{
@@ -473,7 +470,7 @@ namespace mockfakegen
 			}
 			else if (option == kIncludeStructOption)
 			{
-				const auto parsed_include_struct = ParseBoolValue(*value);
+				const auto parsed_include_struct = support::ParseStrictBool(*value);
 				if (!parsed_include_struct.has_value())
 				{
 					AddError(result.errors,
@@ -565,7 +562,7 @@ namespace mockfakegen
 			}
 			else if (option == kFakeSpecialMembersOption)
 			{
-				const auto parsed = ParseBoolValue(*value);
+				const auto parsed = support::ParseStrictBool(*value);
 				if (!parsed.has_value())
 				{
 					AddError(result.errors,
@@ -581,7 +578,7 @@ namespace mockfakegen
 			}
 			else if (option == kFakeStaticDataOption)
 			{
-				const auto parsed = ParseBoolValue(*value);
+				const auto parsed = support::ParseStrictBool(*value);
 				if (!parsed.has_value())
 				{
 					AddError(result.errors,
@@ -597,7 +594,7 @@ namespace mockfakegen
 			}
 			else if (option == kInterfaceMockOption)
 			{
-				const auto parsed = ParseBoolValue(*value);
+				const auto parsed = support::ParseStrictBool(*value);
 				if (!parsed.has_value())
 				{
 					AddError(result.errors,
@@ -613,7 +610,7 @@ namespace mockfakegen
 			}
 			else if (option == kJobsOption)
 			{
-				const auto parsed_jobs = ParseJobsValue(*value);
+				const auto parsed_jobs = support::ParsePositiveInt(*value);
 				if (!parsed_jobs.has_value())
 				{
 					AddError(result.errors,
@@ -627,7 +624,7 @@ namespace mockfakegen
 			}
 			else if (option == kEmitAllMocksOption)
 			{
-				const auto parsed_emit_all_mocks = ParseBoolValue(*value);
+				const auto parsed_emit_all_mocks = support::ParseStrictBool(*value);
 				if (!parsed_emit_all_mocks.has_value())
 				{
 					AddError(result.errors,
@@ -641,7 +638,7 @@ namespace mockfakegen
 			}
 			else if (option == kEmitManifestOption)
 			{
-				const auto parsed_emit_manifest = ParseBoolValue(*value);
+				const auto parsed_emit_manifest = support::ParseStrictBool(*value);
 				if (!parsed_emit_manifest.has_value())
 				{
 					AddError(result.errors,
@@ -655,7 +652,7 @@ namespace mockfakegen
 			}
 			else if (option == kEmitCMakeFragmentOption)
 			{
-				const auto parsed_emit_cmake_fragment = ParseBoolValue(*value);
+				const auto parsed_emit_cmake_fragment = support::ParseStrictBool(*value);
 				if (!parsed_emit_cmake_fragment.has_value())
 				{
 					AddError(result.errors,
@@ -697,7 +694,7 @@ namespace mockfakegen
 			}
 			else if (option == kValidationTimeoutMsOption)
 			{
-				const auto parsed_timeout = ParseJobsValue(*value);
+				const auto parsed_timeout = support::ParsePositiveInt(*value);
 				if (!parsed_timeout.has_value())
 				{
 					AddError(result.errors,
@@ -785,7 +782,8 @@ namespace mockfakegen
 			config.project_root = *project_root;
 		}
 
-		if (result.errors.empty() && !result.help_requested)
+		if (input_root.has_value() && output_dir.has_value() && build_path.has_value() &&
+			project_root.has_value() && !result.help_requested)
 		{
 			result.config = std::move(config);
 		}
@@ -817,8 +815,13 @@ namespace mockfakegen
 			"Options:\n"
 			"  --help                  Show this help and exit.\n"
 			"  --std <value>           c++23 only.\n"
+			"  --config <path>         Deferred: external config file support.\n"
 			"  --header-extension <ext> .h only.\n"
+			"  --header-filter <regex> Deferred: header include filter.\n"
+			"  --exclude <glob>        Deferred: repeatable header exclusion.\n"
+			"  --class-filter <regex>  Deferred: class name filter.\n"
 			"  --access <policy>       public only; protected/private are deferred.\n"
+			"  --include-struct <bool> false only; true is deferred.\n"
 			"  --registry-mode <mode>  thread-local, global-mutex, or shared-owner.\n"
 			"  --fallback-policy <p>   abort; other policies are deferred.\n"
 			"  --mock-namespace-mode <mode> same-as-product.\n"
@@ -826,6 +829,9 @@ namespace mockfakegen
 			"  --fake-special-members <bool> Generate safe constructor/destructor fakes.\n"
 			"  --fake-static-data <bool> Generate safe static data member definitions.\n"
 			"  --interface-mock <bool> Generate inheritance-based interface mocks.\n"
+			"  --include-dir <path>    Deferred: repeatable extra include directory.\n"
+			"  --define <macro>        Deferred: repeatable preprocessor definition.\n"
+			"  --extra-arg <arg>       Deferred: repeatable extra compiler argument.\n"
 			"  --dry-run               Resolve config without writing generated files.\n"
 			"  --overwrite             Allow replacing existing generated files.\n"
 			"  --strict                Fail when unsupported input is encountered.\n"
@@ -849,6 +855,7 @@ namespace mockfakegen
 		for (const auto& error : errors)
 		{
 			out << "error";
+			out << " [" << ConfigErrorCodeName(error.code) << ']';
 			if (!error.option.empty())
 			{
 				out << " [" << error.option << ']';

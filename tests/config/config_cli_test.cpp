@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -18,6 +19,54 @@ namespace
 			std::cerr << "EXPECTATION FAILED: " << message << '\n';
 			std::exit(1);
 		}
+	}
+
+	[[nodiscard]] bool Contains(std::string_view text, std::string_view token)
+	{
+		return text.find(token) != std::string_view::npos;
+	}
+
+	class TempTree
+	{
+	  public:
+		TempTree()
+			: root_(std::filesystem::temp_directory_path() /
+					("mockfakegen_config_cli_test_" + std::to_string(UniqueSuffix())))
+		{
+			std::filesystem::remove_all(root_);
+			std::filesystem::create_directories(root_);
+		}
+
+		TempTree(const TempTree&) = delete;
+		TempTree& operator=(const TempTree&) = delete;
+
+		~TempTree()
+		{
+			std::error_code error;
+			std::filesystem::remove_all(root_, error);
+		}
+
+		[[nodiscard]] const std::filesystem::path& root() const noexcept
+		{
+			return root_;
+		}
+
+	  private:
+		[[nodiscard]] static long long UniqueSuffix()
+		{
+			return std::chrono::steady_clock::now().time_since_epoch().count();
+		}
+
+		std::filesystem::path root_;
+	};
+
+	[[nodiscard]] std::string ReadText(const std::filesystem::path& path)
+	{
+		std::ifstream stream(path, std::ios::binary);
+		Expect(stream.good(), "file should be readable");
+		std::ostringstream buffer;
+		buffer << stream.rdbuf();
+		return buffer.str();
 	}
 
 	[[nodiscard]] std::filesystem::path ExpectedPath(const char* value)
@@ -178,6 +227,54 @@ namespace
 			   "validation artifact dir should normalize");
 	}
 
+	void UsageMentionsEveryPublicOption()
+	{
+		const auto usage = mockfakegen::BuildUsage("mockfakegen");
+		const std::vector<std::string_view> options = {
+			"--help",
+			"--input-root",
+			"--output-dir",
+			"--build-path",
+			"--project-root",
+			"--std",
+			"--config",
+			"--header-extension",
+			"--header-filter",
+			"--exclude",
+			"--class-filter",
+			"--access",
+			"--include-struct",
+			"--registry-mode",
+			"--fallback-policy",
+			"--mock-namespace-mode",
+			"--collision-policy",
+			"--fake-special-members",
+			"--fake-static-data",
+			"--interface-mock",
+			"--include-dir",
+			"--define",
+			"--extra-arg",
+			"--dry-run",
+			"--overwrite",
+			"--strict",
+			"--best-effort",
+			"--emit-all-mocks",
+			"--emit-manifest",
+			"--emit-cmake-fragment",
+			"--format-style",
+			"--validate",
+			"--validation-timeout-ms",
+			"--validation-keep-artifacts",
+			"--validation-artifact-dir",
+			"--jobs",
+		};
+
+		for (const auto option : options)
+		{
+			Expect(Contains(usage, option), "usage should mention every public option");
+		}
+	}
+
 	void ReportsMissingRequiredOptions()
 	{
 		const std::vector<std::string> args{"mockfakegen", "--dry-run"};
@@ -283,6 +380,23 @@ namespace
 			   "invalid validation timeout diagnostic should be deterministic");
 	}
 
+	void ReportsInvalidBoolSpelling()
+	{
+		auto args = ValidArgs();
+		args.push_back("--emit-all-mocks=1");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "numeric bool spelling should fail");
+		Expect(result.errors.size() == 1U, "invalid bool should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "invalid bool should use invalid option value code");
+		Expect(result.errors[0].option == "--emit-all-mocks",
+			   "invalid bool should identify option");
+		Expect(result.errors[0].message == "--emit-all-mocks must be true or false.",
+			   "invalid bool diagnostic should be deterministic");
+	}
+
 	void ReportsStrictBestEffortConflict()
 	{
 		auto args = ValidArgs();
@@ -312,6 +426,59 @@ namespace
 		Expect(result.errors[0].option == "--jobs", "duplicate option should identify option");
 		Expect(result.errors[0].message == "--jobs was provided more than once.",
 			   "duplicate option diagnostic should be deterministic");
+	}
+
+	void ReportsPresenceFlagValue()
+	{
+		auto args = ValidArgs();
+		args.push_back("--dry-run=true");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "presence flag with value should fail");
+		Expect(result.errors.size() == 1U, "presence flag value should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "presence flag value should use invalid option value code");
+		Expect(result.errors[0].option == "--dry-run",
+			   "presence flag value should identify option");
+		Expect(result.errors[0].message == "--dry-run does not accept a value.",
+			   "presence flag value diagnostic should be deterministic");
+	}
+
+	void ReportsUnknownOption()
+	{
+		auto args = ValidArgs();
+		args.push_back("--unknown-option");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "unknown option should fail");
+		Expect(result.errors.size() == 1U, "unknown option should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::UnknownOption,
+			   "unknown option should use unknown option code");
+		Expect(result.errors[0].option == "--unknown-option",
+			   "unknown option should identify option");
+		Expect(result.errors[0].message == "unknown option: --unknown-option",
+			   "unknown option diagnostic should be deterministic");
+	}
+
+	void ReportsBareDoubleDashPositionals()
+	{
+		auto args = ValidArgs();
+		args.push_back("--");
+		args.push_back("--jobs");
+		args.push_back("5");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "arguments after bare double dash should be positional errors");
+		Expect(result.errors.size() == 2U, "bare double dash should expose both positionals");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::UnexpectedArgument,
+			   "post-terminator option-looking token should be positional");
+		Expect(result.errors[0].message == "unexpected positional argument: --jobs",
+			   "post-terminator option diagnostic should be deterministic");
+		Expect(result.errors[1].message == "unexpected positional argument: 5",
+			   "post-terminator value diagnostic should be deterministic");
 	}
 
 	void ParsesGlobalMutexRegistryMode()
@@ -389,6 +556,44 @@ namespace
 			   "deferred option diagnostic should be deterministic");
 	}
 
+	void ReportsDeferredDesignOptions()
+	{
+		struct Case
+		{
+			const char* option;
+			const char* value;
+		};
+		const std::vector<Case> cases = {
+			{"--header-filter", ".*"},
+			{"--exclude", "third_party/**"},
+			{"--class-filter", "Hoge"},
+			{"--include-dir", "include/generated"},
+			{"--define", "FEATURE=1"},
+			{"--extra-arg", "-Wno-error"},
+			{"--include-struct", "true"},
+			{"--access", "private"},
+			{"--fallback-policy", "default-return"},
+		};
+
+		for (const auto& item : cases)
+		{
+			auto args = ValidArgs();
+			args.push_back(item.option);
+			args.push_back(item.value);
+
+			const auto result = mockfakegen::ParseConfig(args);
+
+			Expect(!result.ok(), "deferred design option should fail");
+			Expect(result.errors.size() == 1U, "deferred design option should produce one error");
+			Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::DeferredOption,
+				   "deferred design option should use deferred code");
+			Expect(result.errors[0].option == item.option,
+				   "deferred design option should identify option");
+			Expect(Contains(result.errors[0].message, "is deferred"),
+				   "deferred design option should say deferred");
+		}
+	}
+
 	void ReportsDeferredWholeOption()
 	{
 		auto args = ValidArgs();
@@ -446,6 +651,72 @@ namespace
 			   "usage should include build path option");
 	}
 
+	void RunCliHelpWithErrorsPrintsErrorsAndUsage()
+	{
+		const char* const args[] = {"mockfakegen", "--help", "--jobs", "0"};
+		std::ostringstream out;
+		std::ostringstream err;
+
+		const auto exit_code = mockfakegen::RunCli(4, args, out, err);
+
+		Expect(exit_code == 2, "help with invalid option should return config failure");
+		Expect(out.str().empty(), "help with errors should not write usage to stdout");
+		Expect(Contains(err.str(), "--jobs must be a positive integer."),
+			   "help with errors should print diagnostic");
+		Expect(Contains(err.str(), "Usage:"), "help with errors should print usage to stderr");
+	}
+
+	void RunCliConfigErrorsEmitDiagnosticArtifacts()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "product";
+		const auto input_root = project_root / "include";
+		const auto output_dir = tree.root() / "generated";
+		const auto build_path = tree.root() / "build";
+		std::filesystem::create_directories(input_root);
+		std::filesystem::create_directories(build_path);
+		const std::vector<std::string> args = {
+			"mockfakegen",
+			"--input-root",
+			input_root.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_path.string(),
+			"--project-root",
+			project_root.string(),
+			"--config",
+			"mockfakegen.yml",
+		};
+		std::vector<const char*> argv;
+		argv.reserve(args.size());
+		for (const auto& arg : args)
+		{
+			argv.push_back(arg.c_str());
+		}
+		std::ostringstream out;
+		std::ostringstream err;
+
+		const auto exit_code =
+			mockfakegen::RunCli(static_cast<int>(argv.size()), argv.data(), out, err);
+
+		Expect(exit_code == 2, "deferred config option should fail at config phase");
+		Expect(Contains(err.str(), "--config is deferred"),
+			   "deferred config option should be printed");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "config error manifest should be written");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "config error report should be written");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"component\": \"config\""),
+			   "manifest should include config diagnostic component");
+		Expect(Contains(manifest, "\"code\": \"deferred_option\""),
+			   "manifest should include stable deferred option code");
+		Expect(Contains(report, "deferred_option"),
+			   "report should include stable deferred option code");
+	}
+
 	void RunCliReturnsDeterministicExitCodes()
 	{
 		const char* const help_args[] = {"mockfakegen", "--help"};
@@ -475,6 +746,7 @@ int main()
 	ParsesFormatStyleGoogle();
 	ParsesValidateNone();
 	ParsesValidationControls();
+	UsageMentionsEveryPublicOption();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();
 	ReportsInvalidEmitAllMocks();
@@ -482,17 +754,24 @@ int main()
 	ReportsInvalidFormatStyle();
 	ReportsInvalidValidate();
 	ReportsInvalidValidationTimeout();
+	ReportsInvalidBoolSpelling();
 	ReportsStrictBestEffortConflict();
 	ReportsDuplicateOptions();
+	ReportsPresenceFlagValue();
+	ReportsUnknownOption();
+	ReportsBareDoubleDashPositionals();
 	ParsesGlobalMutexRegistryMode();
 	ParsesSharedOwnerRegistryMode();
 	ParsesFakeSpecialMembersTrue();
 	ParsesFakeStaticDataTrue();
 	ParsesInterfaceMockTrue();
 	ReportsDeferredOptions();
+	ReportsDeferredDesignOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();
 	HelpDoesNotRequirePaths();
+	RunCliHelpWithErrorsPrintsErrorsAndUsage();
+	RunCliConfigErrorsEmitDiagnosticArtifacts();
 	RunCliReturnsDeterministicExitCodes();
 	return 0;
 }

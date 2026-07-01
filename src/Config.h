@@ -111,6 +111,7 @@ namespace mockfakegen
 	[[nodiscard]] ConfigParseResult ParseConfig(std::span<const std::string> arguments);
 	[[nodiscard]] ConfigParseResult ParseConfigFromArgv(int argc, const char* const* argv);
 
+	[[nodiscard]] std::string_view ConfigErrorCodeName(ConfigErrorCode code) noexcept;
 	[[nodiscard]] std::string BuildUsage(std::string_view program_name);
 	void PrintConfigErrors(std::ostream& out, std::span<const ConfigError> errors);
 

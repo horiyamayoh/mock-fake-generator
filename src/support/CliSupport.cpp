@@ -1,6 +1,9 @@
 #include "support/CliSupport.h"
 
+#include <limits>
+
 #include "ket_cli.h"
+#include "ket_parse.h"
 
 namespace mockfakegen::support
 {
@@ -21,5 +24,27 @@ namespace mockfakegen::support
 		}
 
 		return arguments;
+	}
+
+	std::optional<int> ParsePositiveInt(std::string_view text) noexcept
+	{
+		const auto value = ket::parse::UInt<unsigned>(text);
+		if (!value.has_value() || *value == 0U ||
+			*value > static_cast<unsigned>(std::numeric_limits<int>::max()))
+		{
+			return std::nullopt;
+		}
+
+		return static_cast<int>(*value);
+	}
+
+	std::optional<bool> ParseStrictBool(std::string_view text) noexcept
+	{
+		if (text != "true" && text != "false")
+		{
+			return std::nullopt;
+		}
+
+		return ket::parse::Bool(text);
 	}
 } // namespace mockfakegen::support
