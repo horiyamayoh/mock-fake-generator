@@ -382,6 +382,27 @@ namespace
 			   "generated failing file should be retained");
 	}
 
+	void InvalidArtifactDirectoryReportsDiagnostic()
+	{
+		TempTree tree;
+		tree.Write("artifact-file", "x");
+		auto options = CompileOptions();
+		options.keep_failed_artifacts = true;
+		options.artifact_dir = tree.root() / "artifact-file";
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(!result.ok(), "invalid artifact directory should fail validation");
+		Expect(result.commands.empty(), "invalid artifact directory should not run compiler");
+		Expect(result.diagnostics.size() == 1U,
+			   "invalid artifact directory should produce one diagnostic");
+		Expect(Contains(result.diagnostics[0].message, "invalid validation artifact directory"),
+			   "invalid artifact directory diagnostic should be explicit");
+		Expect(Contains(result.diagnostics[0].message, "artifact-file"),
+			   "invalid artifact directory diagnostic should name the bad path");
+	}
+
 	void MissingGMockIncludePathIsClear()
 	{
 		auto options = CompileOptions();
@@ -439,6 +460,7 @@ int main()
 	CompileValidationReportsCxxFailure();
 	CompileValidationTimesOut();
 	KeepsFailedArtifactsWhenRequested();
+	InvalidArtifactDirectoryReportsDiagnostic();
 	MissingGMockIncludePathIsClear();
 	MentioningGMockHeaderDoesNotImplyMissingIncludePath();
 	return 0;

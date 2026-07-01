@@ -27,13 +27,28 @@ namespace mockfakegen
 		struct TempTree
 		{
 			std::filesystem::path root;
+			std::string initialization_error;
 			bool keep = false;
 
 			explicit TempTree(std::filesystem::path requested_root)
 				: root(std::move(requested_root))
 			{
-				std::filesystem::remove_all(root);
-				std::filesystem::create_directories(root);
+				std::error_code error;
+				std::filesystem::remove_all(root, error);
+				if (error)
+				{
+					initialization_error = "invalid validation artifact directory '" +
+						root.generic_string() +
+						"': failed to clear existing path: " + error.message();
+					return;
+				}
+
+				std::filesystem::create_directories(root, error);
+				if (error)
+				{
+					initialization_error = "invalid validation artifact directory '" +
+						root.generic_string() + "': failed to create directory: " + error.message();
+				}
 			}
 
 			TempTree(const TempTree&) = delete;
@@ -48,6 +63,11 @@ namespace mockfakegen
 
 				std::error_code error;
 				std::filesystem::remove_all(root, error);
+			}
+
+			[[nodiscard]] bool ok() const noexcept
+			{
+				return initialization_error.empty();
 			}
 		};
 
@@ -593,6 +613,12 @@ namespace mockfakegen
 		}
 
 		TempTree tree(ValidationRoot(options));
+		if (!tree.ok())
+		{
+			AddDiagnostic(result, tree.root, {}, tree.initialization_error);
+			return result;
+		}
+
 		const auto generated_root = tree.root / "generated";
 		const auto artifact_path =
 			options.keep_failed_artifacts ? tree.root : std::filesystem::path{};

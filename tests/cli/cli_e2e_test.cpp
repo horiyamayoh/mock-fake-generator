@@ -739,7 +739,7 @@ namespace
 				  "  virtual int Abstract() = 0;\n"
 				  "  void HeaderBody();\n"
 				  "  MOCKFAKEGEN_DECLARE_METHOD(FromMacro)\n"
-				  "  [[nodiscard]] int Marked();\n"
+				  "  [[clang::annotate(\"mockfakegen\")]] int Marked();\n"
 				  "  consteval int Immediate() const { return 1; }\n"
 				  "  bool Supported();\n"
 				  "};\n"
@@ -968,6 +968,47 @@ namespace
 		Expect(std::filesystem::exists(artifact_dir),
 			   "validation artifact directory should be retained");
 	}
+
+	void InvalidValidationArtifactDirAppearsInManifest(const std::filesystem::path& temp_root,
+													   const std::filesystem::path& product_dir,
+													   const std::filesystem::path& build_dir)
+	{
+		const auto output_dir = temp_root / "invalid-validation-artifact-dir";
+		const auto artifact_file = temp_root / "validation-artifact-file";
+		WriteText(artifact_file, "x");
+		auto args = BaseArgs(product_dir, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+				   "--fake-special-members",
+				   "true",
+				   "--validation-keep-artifacts",
+				   "--validation-artifact-dir",
+				   artifact_file.string(),
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "invalid_validation_artifact_dir");
+
+		Expect(result.exit_code == 1, "invalid validation artifact dir should return non-zero");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "invalid validation artifact dir should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "invalid validation artifact dir should emit report");
+		Expect(!std::filesystem::exists(output_dir / "MockHoge.h"),
+			   "invalid validation artifact dir should not publish generated mock header");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"component\": \"validation\""),
+			   "invalid artifact diagnostic should appear in manifest");
+		Expect(Contains(manifest, "\"validation_commands\": 0"),
+			   "invalid artifact diagnostic should not run compiler commands");
+		Expect(Contains(manifest, "invalid validation artifact directory"),
+			   "invalid artifact diagnostic message should appear in manifest");
+		Expect(Contains(manifest, "validation-artifact-file"),
+			   "invalid artifact diagnostic should name the bad path");
+	}
 } // namespace
 
 int main()
@@ -1001,6 +1042,7 @@ int main()
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);
+	InvalidValidationArtifactDirAppearsInManifest(temp_root, product_dir, build_dir);
 
 	std::error_code remove_error;
 	std::filesystem::remove_all(temp_root, remove_error);
