@@ -774,8 +774,28 @@ namespace mockfakegen
 		void AppendUniqueValidationArgs(std::vector<std::string>& validation_args,
 										const std::vector<std::string>& compile_args)
 		{
-			for (const auto& arg : compile_args)
+			for (std::size_t index = 0U; index < compile_args.size(); ++index)
 			{
+				const auto& arg = compile_args[index];
+				if (IsSeparatePathOption(arg) && index + 1U < compile_args.size())
+				{
+					const auto& value = compile_args[index + 1U];
+					const auto exists =
+						std::adjacent_find(validation_args.begin(),
+										   validation_args.end(),
+										   [&arg, &value](const auto& lhs, const auto& rhs)
+										   {
+											   return lhs == arg && rhs == value;
+										   }) != validation_args.end();
+					if (!exists)
+					{
+						validation_args.push_back(arg);
+						validation_args.push_back(value);
+					}
+					++index;
+					continue;
+				}
+
 				const auto exists =
 					std::find(validation_args.begin(), validation_args.end(), arg) !=
 					validation_args.end();

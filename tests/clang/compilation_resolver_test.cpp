@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -198,6 +199,13 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] std::size_t CountCompileArg(const std::vector<std::string>& args,
+											  std::string_view expected)
+	{
+		return static_cast<std::size_t>(
+			std::count(args.begin(), args.end(), std::string(expected)));
+	}
+
 	[[nodiscard]] bool
 	HasDiagnostic(const std::vector<mockfakegen::CompilationResolverDiagnostic>& diagnostics,
 				  mockfakegen::CompilationResolverDiagnosticCode code)
@@ -282,6 +290,53 @@ namespace
 			   "validation args should omit clang driver mode");
 		Expect(!result.parse_attempts[0].parse_command.empty(),
 			   "parse attempt should expose parse command");
+	}
+
+	void PreservesSeparatePairedValidationArgs()
+	{
+		TempTree tree;
+		tree.Write("include/Feature.h",
+				   "#pragma once\n"
+				   "#include \"Dependency.h\"\n"
+				   "class Feature { public: int Value(Dependency dependency); };\n");
+		tree.Write("config/Dependency.h", "#pragma once\nstruct Dependency { int value; };\n");
+		tree.Write("src/Feature.cpp",
+				   "#include \"Feature.h\"\n"
+				   "int Feature::Value(Dependency dependency) { return dependency.value; }\n");
+
+		const auto include_dir = tree.root() / "include";
+		const auto config_dir = tree.root() / "config";
+		const auto source = tree.root() / "src/Feature.cpp";
+		WriteCompileCommands(tree,
+							 {{
+								 .source = source,
+								 .args =
+									 {
+										 "c++",
+										 "-std=c++23",
+										 "-I",
+										 include_dir.generic_string(),
+										 "-I",
+										 config_dir.generic_string(),
+										 "-c",
+										 source.generic_string(),
+									 },
+							 }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/Feature.h")},
+		});
+
+		Expect(result.ok(), "paired option compile database should parse successfully");
+		Expect(result.project.classes.size() == 1U, "paired option fixture should extract class");
+		Expect(HasAdjacentCompileArg(result.validation_args, "-I", include_dir.generic_string()),
+			   "validation args should preserve first separate -I pair");
+		Expect(HasAdjacentCompileArg(result.validation_args, "-I", config_dir.generic_string()),
+			   "validation args should preserve second separate -I pair");
+		Expect(CountCompileArg(result.validation_args, "-I") == 2U,
+			   "validation args should keep both separate -I option tokens");
 	}
 
 	void FallsBackToSyntheticTuWithoutCompileDatabase()
@@ -630,6 +685,7 @@ namespace
 int main()
 {
 	ParsesHeaderThroughRealTu();
+	PreservesSeparatePairedValidationArgs();
 	FallsBackToSyntheticTuWithoutCompileDatabase();
 	FallsBackToSyntheticTuWhenRealTuDoesNotIncludeHeader();
 	ParsesOutOfTreeCompileDatabaseWithCommandDirectoryRelativePaths();

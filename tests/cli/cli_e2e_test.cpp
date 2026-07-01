@@ -433,8 +433,8 @@ namespace
 		WriteText(source,
 				  "#include \"Feature.h\"\n"
 				  "bool Feature::Run(Dependency dependency) { return dependency.value != 0; }\n");
-		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 " +
-			ShellQuote("-I" + include_dir.string()) + " " + ShellQuote("-I" + config_dir.string()) +
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -I " + ShellQuote(config_dir.string()) +
 			" -DMOCKFAKEGEN_FROM_COMPILE_DB -c " + ShellQuote(source.string()) + " -o feature.o";
 		WriteSingleCompileCommand(build_dir, product_root, source, command);
 
