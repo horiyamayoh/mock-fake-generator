@@ -32,6 +32,7 @@ namespace mockfakegen
 		CompileValidationFailure,
 		LinkValidationFailure,
 		FallbackIncompatibility,
+		LinkReadinessFailure,
 	};
 
 	struct GenerationPolicyDiagnostic
@@ -45,6 +46,7 @@ namespace mockfakegen
 	struct GenerationFailurePolicy
 	{
 		int exit_code = 0;
+		bool write_outputs = true;
 		bool publish_generated_files = true;
 		bool emit_manifest = true;
 		bool emit_report = true;
@@ -74,6 +76,7 @@ namespace mockfakegen
 		bool has_parse_failure = false;
 		bool has_unsupported_items = false;
 		bool has_validation_failure = false;
+		bool has_link_readiness_failure = false;
 		bool has_policy_failure = false;
 		std::vector<ClassLinkReadiness> class_link_readiness;
 		std::vector<GenerationPolicyDiagnostic> diagnostics;

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -191,6 +192,14 @@ namespace
 		return class_model;
 	}
 
+	[[nodiscard]] mockfakegen::ClassModel NotLinkReadyServiceClass()
+	{
+		auto class_model = ServiceClass(false);
+		class_model.link_ready = false;
+		class_model.link_readiness_reasons = {"requires hand-authored adapter"};
+		return class_model;
+	}
+
 	[[nodiscard]] bool HasDiagnosticKind(const mockfakegen::GenerationPolicyDecision& decision,
 										 mockfakegen::GenerationPolicyDiagnosticKind kind)
 	{
@@ -202,6 +211,35 @@ namespace
 			}
 		}
 		return false;
+	}
+
+	struct ExpectedPolicy
+	{
+		mockfakegen::GenerationFailureKind kind;
+		int best_effort_exit = 1;
+		int strict_exit = 1;
+		bool write_outputs = false;
+		bool publish_generated_files = false;
+		bool emit_manifest = true;
+		bool emit_report = true;
+	};
+
+	[[nodiscard]] ExpectedPolicy Policy(mockfakegen::GenerationFailureKind kind,
+										int best_effort_exit = 1,
+										int strict_exit = 1,
+										bool publish_generated_files = false,
+										bool emit_manifest = true,
+										bool emit_report = true)
+	{
+		return ExpectedPolicy{
+			.kind = kind,
+			.best_effort_exit = best_effort_exit,
+			.strict_exit = strict_exit,
+			.write_outputs = publish_generated_files,
+			.publish_generated_files = publish_generated_files,
+			.emit_manifest = emit_manifest,
+			.emit_report = emit_report,
+		};
 	}
 
 	void BestEffortWritesGeneratedOutputAndReport()
@@ -223,9 +261,15 @@ namespace
 		Expect(decision.write_outputs, "best-effort unsupported output should be written");
 		Expect(decision.publish_generated_files,
 			   "best-effort unsupported output may publish generated files");
+		Expect(decision.emit_manifest, "best-effort unsupported output should emit manifest");
+		Expect(decision.emit_report, "best-effort unsupported output should emit report");
 		Expect(decision.has_unsupported_items, "unsupported item should be recorded");
+		Expect(decision.has_link_readiness_failure,
+			   "unsupported item should make the class not link-ready");
 		Expect(!decision.class_link_readiness[0].link_ready,
 			   "unsupported class should not be link-ready");
+		Expect(Contains(decision.class_link_readiness[0].reasons[0], "unsupported items remain"),
+			   "unsupported item should be preserved as a link-readiness reason");
 		Expect(HasDiagnosticKind(decision,
 								 mockfakegen::GenerationPolicyDiagnosticKind::UnsupportedItem),
 			   "unsupported diagnostic should be distinct");
@@ -267,6 +311,54 @@ namespace
 			   "strict unsupported diagnostic should be distinct");
 	}
 
+	void LinkReadinessInfluencesPolicyDecision()
+	{
+		const std::vector classes = {NotLinkReadyServiceClass()};
+		const std::vector<mockfakegen::Diagnostic> parse_diagnostics;
+		const std::vector<mockfakegen::GeneratedCompileDiagnostic> validation_diagnostics;
+
+		const auto best_effort_decision = mockfakegen::EvaluateGenerationPolicy(
+			BestEffortConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(best_effort_decision.exit_code == 0,
+			   "best-effort link-readiness failure should remain diagnosable");
+		Expect(best_effort_decision.write_outputs,
+			   "best-effort link-readiness failure should keep writing diagnostic output");
+		Expect(best_effort_decision.publish_generated_files,
+			   "best-effort link-readiness failure may publish diagnostic fake output");
+		Expect(best_effort_decision.emit_manifest,
+			   "best-effort link-readiness failure should emit manifest");
+		Expect(best_effort_decision.emit_report,
+			   "best-effort link-readiness failure should emit report");
+		Expect(best_effort_decision.has_link_readiness_failure,
+			   "link-readiness failure should be recorded");
+		Expect(best_effort_decision.has_policy_failure,
+			   "link-readiness failure should count as policy failure");
+		Expect(!best_effort_decision.class_link_readiness[0].link_ready,
+			   "class should be marked not link-ready");
+		Expect(Contains(best_effort_decision.class_link_readiness[0].reasons[0],
+						"requires hand-authored adapter"),
+			   "link-readiness reason should be preserved");
+
+		const auto strict_decision = mockfakegen::EvaluateGenerationPolicy(
+			StrictConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(strict_decision.exit_code != 0, "strict link-readiness failure should be non-zero");
+		Expect(HasDiagnosticKind(strict_decision,
+								 mockfakegen::GenerationPolicyDiagnosticKind::LinkReadinessFailure),
+			   "link-readiness diagnostic should be distinct");
+	}
+
 	void ParseFailureSuppressesOutput()
 	{
 		const std::vector<mockfakegen::ClassModel> classes;
@@ -287,6 +379,10 @@ namespace
 
 		Expect(decision.exit_code != 0, "parse failure should be non-zero");
 		Expect(!decision.write_outputs, "parse failure should suppress generated output");
+		Expect(!decision.publish_generated_files,
+			   "parse failure should suppress publishable generated files");
+		Expect(decision.emit_manifest, "parse failure should still allow manifest emission");
+		Expect(decision.emit_report, "parse failure should still allow report emission");
 		Expect(decision.has_parse_failure, "parse failure should be recorded");
 		Expect(
 			HasDiagnosticKind(decision, mockfakegen::GenerationPolicyDiagnosticKind::ParseFailure),
@@ -332,6 +428,46 @@ namespace
 		const auto best_effort = BestEffortConfig();
 		const auto strict = StrictConfig();
 
+		const std::vector expected_policies = {
+			Policy(mockfakegen::GenerationFailureKind::ParseFailure),
+			Policy(mockfakegen::GenerationFailureKind::UnsupportedItem, 0, 1, true),
+			Policy(mockfakegen::GenerationFailureKind::WriteFailure, 1, 1, false, false),
+			Policy(mockfakegen::GenerationFailureKind::FormatFailure),
+			Policy(mockfakegen::GenerationFailureKind::KetContamination),
+			Policy(mockfakegen::GenerationFailureKind::CompileValidationFailure),
+			Policy(mockfakegen::GenerationFailureKind::LinkValidationFailure),
+			Policy(mockfakegen::GenerationFailureKind::FallbackIncompatibility),
+			Policy(mockfakegen::GenerationFailureKind::LinkReadinessFailure, 0, 1, true),
+		};
+
+		for (const auto& expected : expected_policies)
+		{
+			const auto best_effort_policy =
+				mockfakegen::EvaluateFailurePolicy(best_effort, expected.kind);
+			const auto strict_policy = mockfakegen::EvaluateFailurePolicy(strict, expected.kind);
+
+			Expect(best_effort_policy.exit_code == expected.best_effort_exit,
+				   "best-effort failure policy exit should match matrix");
+			Expect(strict_policy.exit_code == expected.strict_exit,
+				   "strict failure policy exit should match matrix");
+			Expect(best_effort_policy.write_outputs == expected.write_outputs,
+				   "best-effort write policy should match matrix");
+			Expect(strict_policy.write_outputs == expected.write_outputs,
+				   "strict write policy should match matrix");
+			Expect(best_effort_policy.publish_generated_files == expected.publish_generated_files,
+				   "best-effort publish policy should match matrix");
+			Expect(strict_policy.publish_generated_files == expected.publish_generated_files,
+				   "strict publish policy should match matrix");
+			Expect(best_effort_policy.emit_manifest == expected.emit_manifest,
+				   "best-effort manifest policy should match matrix");
+			Expect(strict_policy.emit_manifest == expected.emit_manifest,
+				   "strict manifest policy should match matrix");
+			Expect(best_effort_policy.emit_report == expected.emit_report,
+				   "best-effort report policy should match matrix");
+			Expect(strict_policy.emit_report == expected.emit_report,
+				   "strict report policy should match matrix");
+		}
+
 		const auto best_effort_unsupported = mockfakegen::EvaluateFailurePolicy(
 			best_effort, mockfakegen::GenerationFailureKind::UnsupportedItem);
 		Expect(best_effort_unsupported.exit_code == 0,
@@ -366,6 +502,70 @@ namespace
 		Expect(ket_contamination.exit_code != 0, "ket contamination should fail");
 		Expect(!ket_contamination.publish_generated_files,
 			   "ket-contaminated output should not be published");
+	}
+
+	void MixedFailuresUseMostRestrictivePublication()
+	{
+		const std::vector classes = {ServiceClass(true)};
+		mockfakegen::Diagnostic parse_error;
+		parse_error.severity = mockfakegen::DiagnosticSeverity::Error;
+		parse_error.code = mockfakegen::DiagnosticCode::ParseError;
+		parse_error.message = "failed to parse header";
+		const std::vector parse_diagnostics = {parse_error};
+		mockfakegen::GeneratedCompileDiagnostic validation_error;
+		validation_error.message = "generated output compile validation failed.";
+		const std::vector validation_diagnostics = {validation_error};
+
+		const auto decision = mockfakegen::EvaluateGenerationPolicy(
+			BestEffortConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(decision.exit_code != 0, "mixed hard failures should be non-zero");
+		Expect(!decision.publish_generated_files,
+			   "mixed hard failures should suppress generated files");
+		Expect(!decision.write_outputs, "mixed hard failures should suppress publishable outputs");
+		Expect(decision.emit_manifest, "mixed hard failures should still emit manifest");
+		Expect(decision.emit_report, "mixed hard failures should still emit report");
+		Expect(decision.has_parse_failure, "mixed failure should record parse failure");
+		Expect(decision.has_unsupported_items, "mixed failure should record unsupported items");
+		Expect(decision.has_validation_failure, "mixed failure should record validation failure");
+		Expect(decision.has_link_readiness_failure,
+			   "mixed failure should record link-readiness failure");
+	}
+
+	void CMakeFragmentOmitsNotLinkReadyFakeSources()
+	{
+		auto ready = ServiceClass(false);
+		ready.name = "ReadyService";
+		ready.qualified_name = "sample::ReadyService";
+		ready.mock_name = "MockReadyService";
+		ready.mock_header_name = "MockReadyService.h";
+		ready.fake_source_name = "FakeReadyService.cpp";
+		auto not_ready = NotLinkReadyServiceClass();
+		not_ready.name = "BlockedService";
+		not_ready.qualified_name = "sample::BlockedService";
+		not_ready.mock_name = "MockBlockedService";
+		not_ready.mock_header_name = "MockBlockedService.h";
+		not_ready.fake_source_name = "FakeBlockedService.cpp";
+		const std::vector classes = {ready, not_ready};
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
+		const auto fragment =
+			std::find_if(files.begin(),
+						 files.end(),
+						 [](const auto& file)
+						 {
+							 return file.relative_path == "CMakeLists.fragment.cmake";
+						 });
+
+		Expect(fragment != files.end(), "project should generate CMake fragment");
+		Expect(Contains(fragment->content, "FakeReadyService.cpp"),
+			   "link-ready service source should be listed");
+		Expect(!Contains(fragment->content, "FakeBlockedService.cpp"),
+			   "not-link-ready service source should not be listed");
 	}
 
 	void DefaultReturnRejectsReferenceAndNonDefaultConstructibleReturns()
@@ -432,9 +632,12 @@ int main()
 {
 	BestEffortWritesGeneratedOutputAndReport();
 	StrictUnsupportedReturnsNonZero();
+	LinkReadinessInfluencesPolicyDecision();
 	ParseFailureSuppressesOutput();
 	ValidationFailureIsNonZeroAndSuppressesPublish();
 	FailurePolicyMatrixCoversPublicationAndReports();
+	MixedFailuresUseMostRestrictivePublication();
+	CMakeFragmentOmitsNotLinkReadyFakeSources();
 	DefaultReturnRejectsReferenceAndNonDefaultConstructibleReturns();
 	ThrowFallbackRejectsNoexceptMethods();
 	return 0;

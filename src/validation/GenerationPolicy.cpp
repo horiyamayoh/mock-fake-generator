@@ -161,9 +161,9 @@ namespace mockfakegen
 								const GenerationFailurePolicy& policy)
 		{
 			decision.exit_code = std::max(decision.exit_code, policy.exit_code);
+			decision.write_outputs = decision.write_outputs && policy.write_outputs;
 			decision.publish_generated_files =
 				decision.publish_generated_files && policy.publish_generated_files;
-			decision.write_outputs = decision.write_outputs && policy.publish_generated_files;
 			decision.emit_manifest = decision.emit_manifest && policy.emit_manifest;
 			decision.emit_report = decision.emit_report && policy.emit_report;
 		}
@@ -177,6 +177,7 @@ namespace mockfakegen
 			case GenerationFailureKind::ParseFailure:
 				return {
 					.exit_code = 1,
+					.write_outputs = false,
 					.publish_generated_files = false,
 					.emit_manifest = true,
 					.emit_report = true,
@@ -184,6 +185,7 @@ namespace mockfakegen
 			case GenerationFailureKind::UnsupportedItem:
 				return {
 					.exit_code = config.strict ? 1 : 0,
+					.write_outputs = true,
 					.publish_generated_files = true,
 					.emit_manifest = true,
 					.emit_report = true,
@@ -191,6 +193,7 @@ namespace mockfakegen
 			case GenerationFailureKind::WriteFailure:
 				return {
 					.exit_code = 1,
+					.write_outputs = false,
 					.publish_generated_files = false,
 					.emit_manifest = false,
 					.emit_report = true,
@@ -202,7 +205,16 @@ namespace mockfakegen
 			case GenerationFailureKind::FallbackIncompatibility:
 				return {
 					.exit_code = 1,
+					.write_outputs = false,
 					.publish_generated_files = false,
+					.emit_manifest = true,
+					.emit_report = true,
+				};
+			case GenerationFailureKind::LinkReadinessFailure:
+				return {
+					.exit_code = config.strict ? 1 : 0,
+					.write_outputs = true,
+					.publish_generated_files = true,
 					.emit_manifest = true,
 					.emit_report = true,
 				};
@@ -241,6 +253,7 @@ namespace mockfakegen
 			auto readiness = EvaluateClassLinkReadiness(config, class_model);
 			if (!readiness.link_ready)
 			{
+				decision.has_link_readiness_failure = true;
 				decision.diagnostics.push_back(GenerationPolicyDiagnostic{
 					.kind = GenerationPolicyDiagnosticKind::LinkReadinessFailure,
 					.message = readiness.qualified_name + " is not link-ready",
@@ -248,13 +261,15 @@ namespace mockfakegen
 			}
 			decision.class_link_readiness.push_back(std::move(readiness));
 		}
-		decision.has_policy_failure = std::any_of(
+		const auto has_fallback_incompatibility = std::any_of(
 			decision.diagnostics.begin(),
 			decision.diagnostics.end(),
 			[](const auto& diagnostic)
 			{
 				return diagnostic.kind == GenerationPolicyDiagnosticKind::FallbackIncompatibility;
 			});
+		decision.has_policy_failure =
+			has_fallback_incompatibility || decision.has_link_readiness_failure;
 
 		if (decision.has_parse_failure)
 		{
@@ -272,11 +287,17 @@ namespace mockfakegen
 				decision,
 				EvaluateFailurePolicy(config, GenerationFailureKind::CompileValidationFailure));
 		}
-		if (decision.has_policy_failure)
+		if (has_fallback_incompatibility)
 		{
 			ApplyFailurePolicy(
 				decision,
 				EvaluateFailurePolicy(config, GenerationFailureKind::FallbackIncompatibility));
+		}
+		if (decision.has_link_readiness_failure)
+		{
+			ApplyFailurePolicy(
+				decision,
+				EvaluateFailurePolicy(config, GenerationFailureKind::LinkReadinessFailure));
 		}
 
 		return decision;
