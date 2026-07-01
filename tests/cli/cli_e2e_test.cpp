@@ -805,6 +805,87 @@ namespace
 			   "manifest should include consteval unsupported diagnostic code");
 	}
 
+	void PrivateTypeUsesAppearUnsupportedInManifest(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "private-type-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "private-type-build";
+		const auto output_dir = temp_root / "private-type-generated";
+		WriteText(include_dir / "PrivateTypeUses.h",
+				  "#pragma once\n"
+				  "#include <vector>\n"
+				  "class AliasPrivate {\n"
+				  "private:\n"
+				  "  using Hidden = int;\n"
+				  "public:\n"
+				  "  Hidden Get();\n"
+				  "  void Put(Hidden value);\n"
+				  "  bool Supported();\n"
+				  "};\n"
+				  "class UsesPrivateTemplateArg {\n"
+				  "private:\n"
+				  "  enum class Hidden {};\n"
+				  "public:\n"
+				  "  std::vector<Hidden> Items();\n"
+				  "  void Put(std::vector<Hidden> values);\n"
+				  "  int Supported();\n"
+				  "};\n");
+		const auto source = source_dir / "PrivateTypeUses.cpp";
+		WriteText(source,
+				  "#include \"PrivateTypeUses.h\"\n"
+				  "bool AliasPrivate::Supported() { return true; }\n"
+				  "int UsesPrivateTemplateArg::Supported() { return 0; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o private_types.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "private_type_unsupported");
+
+		Expect(result.exit_code == 0, "best-effort private type unsupported should succeed");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "private type unsupported run should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "private type unsupported run should emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"unsupported_items\": 4"),
+			   "manifest summary should count private type unsupported items");
+		Expect(Contains(manifest, "\"not_link_ready_classes\": 2"),
+			   "manifest summary should mark both classes not link-ready");
+		Expect(Contains(manifest, "\"link_ready\": false"),
+			   "manifest class entries should not be link-ready");
+		Expect(Contains(manifest, "\"code\": \"unsupported_private_nested_type\""),
+			   "manifest should include private nested type diagnostic code");
+		Expect(Contains(manifest, "AliasPrivate::Hidden"), "manifest should name private alias");
+		Expect(Contains(manifest, "UsesPrivateTemplateArg::Hidden"),
+			   "manifest should name private template argument");
+		Expect(Contains(report, "| AliasPrivate |"),
+			   "report should include alias private class entry");
+		Expect(Contains(report, "| UsesPrivateTemplateArg |"),
+			   "report should include template argument class entry");
+		Expect(Contains(report, "| no |"), "report should mark affected classes not link-ready");
+	}
+
 	void RealTuFailureSurvivesSyntheticFallbackInManifest(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "real-tu-failure-product";
@@ -1167,6 +1248,7 @@ int main()
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
 	StrictModeFailsUnsupportedInput(temp_root);
 	TopLevelUnsupportedAppearsInManifest(temp_root);
+	PrivateTypeUsesAppearUnsupportedInManifest(temp_root);
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);

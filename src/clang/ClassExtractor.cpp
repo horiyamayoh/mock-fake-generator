@@ -13,7 +13,9 @@
 #include <clang/AST/Attr.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclTemplate.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/TemplateBase.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/ASTUnit.h>
@@ -650,12 +652,66 @@ namespace mockfakegen
 			}
 
 			[[nodiscard]] std::optional<std::string>
-			PrivateNestedTypeName(clang::QualType type) const
+			PrivateNestedDeclarationName(const clang::NamedDecl* declaration) const
+			{
+				if (declaration == nullptr)
+				{
+					return std::nullopt;
+				}
+				const auto* context = declaration->getDeclContext();
+				if (context != nullptr && context->isRecord() &&
+					declaration->getAccess() != clang::AS_public)
+				{
+					return declaration->getQualifiedNameAsString();
+				}
+				return std::nullopt;
+			}
+
+			[[nodiscard]] std::optional<std::string>
+			PrivateNestedTemplateArgumentName(const clang::TemplateArgument& argument,
+											  unsigned depth) const
+			{
+				switch (argument.getKind())
+				{
+					case clang::TemplateArgument::Type:
+						return PrivateNestedTypeName(argument.getAsType(), depth + 1U);
+					case clang::TemplateArgument::Declaration:
+						return PrivateNestedDeclarationName(argument.getAsDecl());
+					case clang::TemplateArgument::Pack:
+						for (const auto& element : argument.pack_elements())
+						{
+							if (const auto private_type =
+									PrivateNestedTemplateArgumentName(element, depth + 1U);
+								private_type.has_value())
+							{
+								return private_type;
+							}
+						}
+						return std::nullopt;
+					case clang::TemplateArgument::Null:
+					case clang::TemplateArgument::NullPtr:
+					case clang::TemplateArgument::Integral:
+					case clang::TemplateArgument::StructuralValue:
+					case clang::TemplateArgument::Template:
+					case clang::TemplateArgument::TemplateExpansion:
+					case clang::TemplateArgument::Expression:
+						return std::nullopt;
+				}
+				return std::nullopt;
+			}
+
+			[[nodiscard]] std::optional<std::string>
+			PrivateNestedTypeName(clang::QualType type, unsigned depth = 0U) const
 			{
 				if (type.isNull())
 				{
 					return std::nullopt;
 				}
+				if (depth > 64U)
+				{
+					return std::nullopt;
+				}
+
 				type = type.getNonReferenceType();
 				while (type->isPointerType() || type->isArrayType() || type->isMemberPointerType())
 				{
@@ -676,25 +732,86 @@ namespace mockfakegen
 					type = type.getNonReferenceType();
 				}
 
+				const auto* type_ptr = type.getTypePtrOrNull();
+				if (type_ptr == nullptr)
+				{
+					return std::nullopt;
+				}
+				if (const auto* typedef_type = llvm::dyn_cast<clang::TypedefType>(type_ptr);
+					typedef_type != nullptr)
+				{
+					if (const auto private_type =
+							PrivateNestedDeclarationName(typedef_type->getDecl());
+						private_type.has_value())
+					{
+						return private_type;
+					}
+					return PrivateNestedTypeName(typedef_type->desugar(), depth + 1U);
+				}
+				if (const auto* elaborated_type = llvm::dyn_cast<clang::ElaboratedType>(type_ptr);
+					elaborated_type != nullptr)
+				{
+					return PrivateNestedTypeName(elaborated_type->getNamedType(), depth + 1U);
+				}
+				if (const auto* attributed_type = llvm::dyn_cast<clang::AttributedType>(type_ptr);
+					attributed_type != nullptr)
+				{
+					return PrivateNestedTypeName(attributed_type->getModifiedType(), depth + 1U);
+				}
+				if (const auto* adjusted_type = llvm::dyn_cast<clang::AdjustedType>(type_ptr);
+					adjusted_type != nullptr)
+				{
+					return PrivateNestedTypeName(adjusted_type->getAdjustedType(), depth + 1U);
+				}
+				if (const auto* template_specialization =
+						llvm::dyn_cast<clang::TemplateSpecializationType>(type_ptr);
+					template_specialization != nullptr)
+				{
+					for (const auto& argument : template_specialization->template_arguments())
+					{
+						if (const auto private_type =
+								PrivateNestedTemplateArgumentName(argument, depth + 1U);
+							private_type.has_value())
+						{
+							return private_type;
+						}
+					}
+				}
 				if (const auto* record = type->getAsCXXRecordDecl(); record != nullptr)
 				{
-					const auto* context = record->getDeclContext();
-					if (context != nullptr && context->isRecord() &&
-						record->getAccess() != clang::AS_public)
+					if (const auto* specialization =
+							llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(record);
+						specialization != nullptr)
 					{
-						return record->getQualifiedNameAsString();
+						for (const auto& argument : specialization->getTemplateArgs().asArray())
+						{
+							if (const auto private_type =
+									PrivateNestedTemplateArgumentName(argument, depth + 1U);
+								private_type.has_value())
+							{
+								return private_type;
+							}
+						}
+					}
+					if (const auto private_type = PrivateNestedDeclarationName(record);
+						private_type.has_value())
+					{
+						return private_type;
 					}
 				}
 				if (const auto* enum_type = type->getAs<clang::EnumType>(); enum_type != nullptr)
 				{
-					const auto* enum_decl = enum_type->getDecl();
-					const auto* context =
-						enum_decl == nullptr ? nullptr : enum_decl->getDeclContext();
-					if (context != nullptr && context->isRecord() &&
-						enum_decl->getAccess() != clang::AS_public)
+					if (const auto private_type =
+							PrivateNestedDeclarationName(enum_type->getDecl());
+						private_type.has_value())
 					{
-						return enum_decl->getQualifiedNameAsString();
+						return private_type;
 					}
+				}
+				const auto desugared = type.getSingleStepDesugaredType(ast_context_);
+				if (desugared != type)
+				{
+					return PrivateNestedTypeName(desugared, depth + 1U);
 				}
 				return std::nullopt;
 			}

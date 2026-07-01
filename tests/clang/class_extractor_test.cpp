@@ -407,6 +407,55 @@ namespace
 			   "attributed type should have stable unsupported kind");
 	}
 
+	void ReportsPrivateAliasesAndTemplateArguments()
+	{
+		TempTree tree;
+		tree.Write("include/PrivateTypeUses.h",
+				   "#pragma once\n"
+				   "#include <vector>\n"
+				   "class AliasPrivate {\n"
+				   "private:\n"
+				   "  using Hidden = int;\n"
+				   "public:\n"
+				   "  Hidden Get();\n"
+				   "  void Put(Hidden value);\n"
+				   "  bool Supported();\n"
+				   "};\n"
+				   "class UsesPrivateTemplateArg {\n"
+				   "private:\n"
+				   "  class Hidden {};\n"
+				   "public:\n"
+				   "  std::vector<Hidden> Items();\n"
+				   "  void Put(std::vector<Hidden> values);\n"
+				   "  int Supported();\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/PrivateTypeUses.h");
+
+		Expect(result.classes.size() == 2U, "private type fixtures should be extracted");
+		const auto& alias_private = FindClass(result, "AliasPrivate");
+		Expect(alias_private.mock_methods.size() == 1U,
+			   "only alias-free method should be generated");
+		Expect(alias_private.mock_methods[0].name == "Supported",
+			   "alias-free method should remain generated");
+		Expect(UnsupportedKindCount(alias_private, "private_nested_type") == 2U,
+			   "private alias return and parameter should be unsupported");
+		Expect(alias_private.unsupported_items[0].reason.find("AliasPrivate::Hidden") !=
+				   std::string::npos,
+			   "private alias diagnostic should name inaccessible alias");
+
+		const auto& template_arg = FindClass(result, "UsesPrivateTemplateArg");
+		Expect(template_arg.mock_methods.size() == 1U,
+			   "only template-argument-free method should be generated");
+		Expect(template_arg.mock_methods[0].name == "Supported",
+			   "template-argument-free method should remain generated");
+		Expect(UnsupportedKindCount(template_arg, "private_nested_type") == 2U,
+			   "private nested type in template arguments should be unsupported");
+		Expect(template_arg.unsupported_items[0].reason.find("UsesPrivateTemplateArg::Hidden") !=
+				   std::string::npos,
+			   "template argument diagnostic should name inaccessible nested type");
+	}
+
 	void ExtractsPublicMethodsAndQualifiersInDeclarationOrder()
 	{
 		TempTree tree;
@@ -936,6 +985,7 @@ int main()
 	ReportsMacroOriginMethod();
 	ReportsConstevalAttributesAndAssignmentOperators();
 	ReportsUnsupportedTypeSpellingCases();
+	ReportsPrivateAliasesAndTemplateArguments();
 	ExtractsPublicMethodsAndQualifiersInDeclarationOrder();
 	RecordsUnsupportedMethodConstructs();
 	ExtractsSpecialMembersWhenEnabled();
