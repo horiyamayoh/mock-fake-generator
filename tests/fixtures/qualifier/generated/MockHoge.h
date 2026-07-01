@@ -15,6 +15,7 @@ class MockHoge
 	MOCK_METHOD(bool, Save, (), (noexcept));
 	MOCK_METHOD(std::string, Take, (), (ref(&&)));
 	MOCK_METHOD(int, Peek, (), (const, ref(&)));
+	MOCK_METHOD(bool, Conditional, (), (noexcept));
 };
 
 using ScopedMockHoge = ::mockfake::ScopedMock<MockHoge>;

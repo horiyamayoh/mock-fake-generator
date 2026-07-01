@@ -4,7 +4,7 @@
 
 | Classes | Link-ready classes | Not link-ready classes | Generated methods | Unsupported items | Diagnostics | Info | Warnings | Errors | Validation commands |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 3 | 0 | 3 | 5 | 29 | 34 | 0 | 34 | 0 | 0 |
+| 3 | 0 | 3 | 6 | 28 | 33 | 0 | 33 | 0 | 0 |
 
 Registry mode: `thread-local` - per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock.
 
@@ -26,7 +26,7 @@ Usable fake sources for build-system integration:
 |---|---|---|---|---|---|---|---|---:|---:|
 | negative::UnsafeSpecial | Unsupported.h | synthetic-tu | link-replacement | MockUnsafeSpecial.h | FakeUnsafeSpecial.cpp | no | unsupported items remain: constructor, destructor | 1 | 2 |
 | negative::UnsafeStaticData | Unsupported.h | synthetic-tu | link-replacement | MockUnsafeStaticData.h | FakeUnsafeStaticData.cpp | no | unsupported items remain: static_data_member | 1 | 6 |
-| negative::UnsupportedSurface | Unsupported.h | synthetic-tu | link-replacement | MockUnsupportedSurface.h | FakeUnsupportedSurface.cpp | no | unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method | 3 | 21 |
+| negative::UnsupportedSurface | Unsupported.h | synthetic-tu | link-replacement | MockUnsupportedSurface.h | FakeUnsupportedSurface.cpp | no | unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, volatile_method, macro_origin, private_nested_type, non_public_method | 4 | 20 |
 
 ## Diagnostics
 
@@ -36,7 +36,6 @@ Usable fake sources for build-system integration:
 | warning | clang | unsupported_class_template | class_template | Unsupported.h | negative::PartialBox | negative::PartialBox | class template is not supported by link replacement fake generation | exclude it or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_class_template_specialization | class_template_partial_specialization | Unsupported.h | negative::PartialBox | negative::PartialBox | partial class template specialization is not supported | exclude it or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_class_template_specialization | class_template_specialization | Unsupported.h | negative::Box | negative::Box | explicit class template specialization is not supported | exclude it or provide a hand-authored mock |  |  |  |
-| warning | clang | unsupported_conditional_noexcept | conditional_noexcept | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Conditional | conditional noexcept is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_consteval_method | consteval_method | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::ConstevalValue | consteval method is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_constexpr_method | constexpr_method | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::ConstexprValue | constexpr method is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 | warning | clang | unsupported_constructor | constructor | Unsupported.h | negative::UnsafeSpecial | negative::UnsafeSpecial::UnsafeSpecial | reference member 'ref_' cannot be safely default-initialized | exclude this member or provide a hand-authored mock |  |  |  |
@@ -85,7 +84,6 @@ No validation commands recorded.
 | Unsupported.h | negative::UnsafeStaticData | negative::UnsafeStaticData::values | array static data member 'values' requires array declarator synthesis | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Abstract | pure virtual method requires interface mock mode and is not faked in normal link replacement mode | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::AutoValue | deduced auto return type is not supported | exclude this member or provide a hand-authored mock |
-| Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Conditional | conditional noexcept is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::ConstevalValue | consteval method is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::ConstexprValue | constexpr method is not supported | exclude this member or provide a hand-authored mock |
 | Unsupported.h | negative::UnsupportedSurface | negative::UnsupportedSurface::Constrained | function template member is not supported | exclude this member or provide a hand-authored mock |

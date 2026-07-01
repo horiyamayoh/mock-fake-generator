@@ -4,26 +4,26 @@
     "classes": 3,
     "link_ready_classes": 0,
     "not_link_ready_classes": 3,
-    "generated_methods": 5,
-    "unsupported_items": 29,
+    "generated_methods": 6,
+    "unsupported_items": 28,
     "registry_mode": "thread-local",
     "registry_mode_usage": "per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock",
     "fallback_policy": "abort",
-    "diagnostics": 34,
+    "diagnostics": 33,
     "validation_commands": 0,
     "usable_fake_sources": [],
     "diagnostic_summary": {
-      "total": 34,
+      "total": 33,
       "info": 0,
-      "warnings": 34,
+      "warnings": 33,
       "errors": 0,
       "by_component": [
         {
           "component": "clang",
           "summary": {
-            "total": 34,
+            "total": 33,
             "info": 0,
-            "warnings": 34,
+            "warnings": 33,
             "errors": 0
           }
         }
@@ -131,32 +131,6 @@
       "member": "negative::Box",
       "message": "explicit class template specialization is not supported",
       "suggested_action": "exclude it or provide a hand-authored mock",
-      "command": "",
-      "stderr_summary": "",
-      "validation_artifact_path": ""
-    },
-    {
-      "severity": "warning",
-      "component": "clang",
-      "code": "unsupported_conditional_noexcept",
-      "kind": "conditional_noexcept",
-      "path": "Unsupported.h",
-      "source_range": {
-        "begin": {
-          "file": "Unsupported.h",
-          "line": 63,
-          "column": 3
-        },
-        "end": {
-          "file": "Unsupported.h",
-          "line": 63,
-          "column": 47
-        }
-      },
-      "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::Conditional",
-      "message": "conditional noexcept is not supported",
-      "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
       "stderr_summary": "",
       "validation_artifact_path": ""
@@ -967,17 +941,17 @@
       "source_header": "Unsupported.h",
       "parse_mode": "synthetic-tu",
       "generation_mode": "link-replacement",
-      "generated_methods": 3,
-      "unsupported_methods": 21,
-      "unsupported_items": 21,
+      "generated_methods": 4,
+      "unsupported_methods": 20,
+      "unsupported_items": 20,
       "link_ready": false,
       "link_readiness_reasons": [
-        "unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method"
+        "unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, volatile_method, macro_origin, private_nested_type, non_public_method"
       ],
       "diagnostic_summary": {
-        "total": 21,
+        "total": 20,
         "info": 0,
-        "warnings": 21,
+        "warnings": 20,
         "errors": 0
       }
     }

@@ -262,7 +262,7 @@ namespace
 
 		Expect(extraction.classes.size() == 3U,
 			   "link replacement negative fixture should extract three concrete classes");
-		Expect(UnsupportedItemCount(extraction) == 34U,
+		Expect(UnsupportedItemCount(extraction) == 33U,
 			   "link replacement negative fixture should lock unsupported item count");
 		for (const auto kind : {
 				 "class_template",
@@ -281,7 +281,6 @@ namespace
 				 "defaulted_method",
 				 "overloaded_operator",
 				 "pure_virtual_method",
-				 "conditional_noexcept",
 				 "volatile_method",
 				 "macro_origin",
 				 "non_public_method",

@@ -42,3 +42,13 @@ int Hoge::Peek() const&
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::Peek() const&");
 }
+
+bool Hoge::Conditional() noexcept
+{
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
+	{
+		return mockfake_current_mock->Conditional();
+	}
+
+	return ::mockfake::MissingMockReturn<bool>("Hoge::Conditional() noexcept");
+}

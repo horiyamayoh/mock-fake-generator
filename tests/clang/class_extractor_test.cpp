@@ -479,8 +479,13 @@ namespace
 
 		Expect(result.classes.size() == 1U, "unsupported method fixture class should be extracted");
 		const auto& class_model = result.classes[0];
-		Expect(class_model.mock_methods.size() == 1U, "only supported method should be generated");
-		Expect(class_model.mock_methods[0].name == "Supported",
+		Expect(class_model.mock_methods.size() == 2U,
+			   "resolved noexcept and supported method should be generated");
+		Expect(class_model.mock_methods[0].name == "Conditional",
+			   "resolved noexcept method should be retained");
+		Expect(class_model.mock_methods[0].is_noexcept,
+			   "resolved true noexcept should be preserved");
+		Expect(class_model.mock_methods[1].name == "Supported",
 			   "supported method should be retained");
 		Expect(HasUnsupportedKind(class_model, "constructor"), "constructor should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "destructor"), "destructor should be unsupported");
@@ -497,8 +502,8 @@ namespace
 		Expect(HasUnsupportedKind(class_model, "inline_body"), "inline body should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "constexpr_method"),
 			   "constexpr method should be unsupported");
-		Expect(HasUnsupportedKind(class_model, "conditional_noexcept"),
-			   "conditional noexcept should be unsupported");
+		Expect(!HasUnsupportedKind(class_model, "conditional_noexcept"),
+			   "resolved noexcept should not be unsupported");
 		Expect(HasUnsupportedKind(class_model, "volatile_method"),
 			   "volatile method should be unsupported");
 		Expect(!result.diagnostics.empty(), "unsupported methods should emit diagnostics");

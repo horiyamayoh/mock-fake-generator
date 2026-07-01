@@ -146,9 +146,7 @@ namespace mockfakegen
 		[[nodiscard]] bool HasConditionalNoexcept(const clang::CXXMethodDecl& method)
 		{
 			const auto exception_spec = method.getExceptionSpecType();
-			return exception_spec == clang::EST_DependentNoexcept ||
-				exception_spec == clang::EST_NoexceptFalse ||
-				exception_spec == clang::EST_NoexceptTrue;
+			return exception_spec == clang::EST_DependentNoexcept;
 		}
 
 		[[nodiscard]] bool
