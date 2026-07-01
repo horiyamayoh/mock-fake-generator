@@ -12,58 +12,44 @@ namespace mockfakegen
 			return header.project_relative_path.generic_string();
 		}
 
-		[[nodiscard]] std::string MethodSortKey(const MethodModel& method)
-		{
-			if (!method.signature_for_report.empty())
-			{
-				return method.signature_for_report;
-			}
-
-			return method.name;
-		}
-
 		[[nodiscard]] std::string UnsupportedSortKey(const UnsupportedItem& item)
 		{
 			return item.kind + '\n' + item.name + '\n' + item.reason;
 		}
 
-		void SortClassModel(ClassModel& class_model)
+		[[nodiscard]] bool SourceLocationLess(const SourceLocation& lhs, const SourceLocation& rhs)
 		{
-			std::stable_sort(class_model.mock_methods.begin(),
-							 class_model.mock_methods.end(),
-							 [](const auto& lhs, const auto& rhs)
-							 {
-								 return MethodSortKey(lhs) < MethodSortKey(rhs);
-							 });
-			std::stable_sort(class_model.fake_methods.begin(),
-							 class_model.fake_methods.end(),
-							 [](const auto& lhs, const auto& rhs)
-							 {
-								 return MethodSortKey(lhs) < MethodSortKey(rhs);
-							 });
-			std::stable_sort(class_model.fake_constructors.begin(),
-							 class_model.fake_constructors.end(),
-							 [](const auto& lhs, const auto& rhs)
-							 {
-								 return lhs.signature_for_report < rhs.signature_for_report;
-							 });
-			std::stable_sort(class_model.fake_destructors.begin(),
-							 class_model.fake_destructors.end(),
-							 [](const auto& lhs, const auto& rhs)
-							 {
-								 return lhs.signature_for_report < rhs.signature_for_report;
-							 });
-			std::stable_sort(class_model.static_data_members.begin(),
-							 class_model.static_data_members.end(),
-							 [](const auto& lhs, const auto& rhs)
-							 {
-								 return lhs.signature_for_report < rhs.signature_for_report;
-							 });
+			if (lhs.file != rhs.file)
+			{
+				return lhs.file.generic_string() < rhs.file.generic_string();
+			}
+			if (lhs.line != rhs.line)
+			{
+				return lhs.line < rhs.line;
+			}
+			return lhs.column < rhs.column;
+		}
+
+		[[nodiscard]] bool UnsupportedLess(const UnsupportedItem& lhs, const UnsupportedItem& rhs)
+		{
+			if (SourceLocationLess(lhs.source_range.begin, rhs.source_range.begin))
+			{
+				return true;
+			}
+			if (SourceLocationLess(rhs.source_range.begin, lhs.source_range.begin))
+			{
+				return false;
+			}
+			return UnsupportedSortKey(lhs) < UnsupportedSortKey(rhs);
+		}
+
+		void SortClassDiagnostics(ClassModel& class_model)
+		{
 			std::stable_sort(class_model.unsupported_items.begin(),
 							 class_model.unsupported_items.end(),
 							 [](const auto& lhs, const auto& rhs)
 							 {
-								 return UnsupportedSortKey(lhs) < UnsupportedSortKey(rhs);
+								 return UnsupportedLess(lhs, rhs);
 							 });
 		}
 	} // namespace
@@ -121,13 +107,13 @@ namespace mockfakegen
 
 		for (auto& class_model : project.classes)
 		{
-			SortClassModel(class_model);
+			SortClassDiagnostics(class_model);
 		}
 		std::stable_sort(project.unsupported_items.begin(),
 						 project.unsupported_items.end(),
 						 [](const auto& lhs, const auto& rhs)
 						 {
-							 return UnsupportedSortKey(lhs) < UnsupportedSortKey(rhs);
+							 return UnsupportedLess(lhs, rhs);
 						 });
 	}
 } // namespace mockfakegen

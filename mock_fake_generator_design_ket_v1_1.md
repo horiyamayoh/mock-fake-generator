@@ -1648,6 +1648,9 @@ public:
 CI 差分を安定させるため、以下を守る。
 
 - 生成順は header path / qualified class name で sort する。
+- class 内の `mock_methods`、`fake_methods`、constructor、destructor、static data は header の宣言順を canonical order として保持し、signature/name では sort しない。
+- 同一 class を複数 TU で観測した場合は、最初に採用した canonical declaration order と fingerprint を保持し、異なる宣言順または宣言内容は compile configuration conflict として診断する。
+- unsupported item の report/manifest 表示は source location を優先して安定化し、source location がない場合だけ kind/name/reason で tie-break する。
 - timestamp をデフォルトでは出力しない。
 - 既存ファイルと内容が同一なら rewrite しない。
 - 改行コードは LF 固定。

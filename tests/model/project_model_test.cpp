@@ -149,14 +149,65 @@ namespace
 			   "headers should sort by project-relative path");
 		Expect(project.classes[0].qualified_name == "app::Hoge",
 			   "classes should sort by qualified name");
-		Expect(project.classes[0].mock_methods[0].name == "DoSomething",
-			   "methods should sort by signature");
+		Expect(project.classes[0].mock_methods[0].name == "Finalize",
+			   "methods should preserve declaration order");
 		Expect(project.classes[0].unsupported_items[0].kind == "function_template",
 			   "unsupported items should remain available after sorting");
 		Expect(project.unsupported_items[0].kind == "class_template",
 			   "top-level unsupported items should sort deterministically");
 		Expect(project.diagnostics[0].message == "unsupported item",
 			   "diagnostics should stay attached to project");
+	}
+
+	void PreservesClassMemberDeclarationOrder()
+	{
+		mockfakegen::ClassModel ordered_class;
+		ordered_class.qualified_name = "app::Ordered";
+		ordered_class.mock_methods = {Method("Zulu"), Method("Alpha")};
+		ordered_class.fake_methods = {Method("Zulu"), Method("Alpha")};
+		ordered_class.fake_constructors = {
+			mockfakegen::ConstructorModel{
+				.signature_for_report = "app::Ordered::Ordered(int)",
+			},
+			mockfakegen::ConstructorModel{
+				.signature_for_report = "app::Ordered::Ordered()",
+			},
+		};
+		ordered_class.static_data_members = {
+			mockfakegen::StaticDataMemberModel{
+				.name = "z_count",
+				.type_spelling = "int",
+				.signature_for_report = "app::Ordered::z_count",
+			},
+			mockfakegen::StaticDataMemberModel{
+				.name = "a_count",
+				.type_spelling = "int",
+				.signature_for_report = "app::Ordered::a_count",
+			},
+		};
+
+		mockfakegen::ProjectModel project{
+			.headers = {},
+			.classes = {ordered_class},
+			.unsupported_items = {},
+			.diagnostics = {},
+		};
+
+		mockfakegen::SortProjectModel(project);
+
+		const auto& sorted = project.classes[0];
+		Expect(sorted.mock_methods[0].name == "Zulu", "mock methods should keep source order");
+		Expect(sorted.mock_methods[1].name == "Alpha", "mock methods should not sort by name");
+		Expect(sorted.fake_methods[0].name == "Zulu", "fake methods should keep source order");
+		Expect(sorted.fake_methods[1].name == "Alpha", "fake methods should not sort by name");
+		Expect(sorted.fake_constructors[0].signature_for_report == "app::Ordered::Ordered(int)",
+			   "constructors should keep declaration order");
+		Expect(sorted.fake_constructors[1].signature_for_report == "app::Ordered::Ordered()",
+			   "constructors should not sort by signature");
+		Expect(sorted.static_data_members[0].name == "z_count",
+			   "static data should keep declaration order");
+		Expect(sorted.static_data_members[1].name == "a_count",
+			   "static data should not sort by name");
 	}
 
 	void ClassModelCanFeedMinimalGenerator()
@@ -173,6 +224,7 @@ int main()
 {
 	ConstructsClassAndMethodModel();
 	SortsProjectModelDeterministically();
+	PreservesClassMemberDeclarationOrder();
 	ClassModelCanFeedMinimalGenerator();
 	return 0;
 }

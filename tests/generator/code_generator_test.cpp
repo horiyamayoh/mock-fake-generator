@@ -73,6 +73,19 @@ namespace
 		return method;
 	}
 
+	[[nodiscard]] mockfakegen::MethodModel
+	MethodWithParameter(std::string name, std::string parameter_type, std::string parameter_name)
+	{
+		auto method = MethodNamed(std::move(name));
+		mockfakegen::ParameterModel parameter;
+		parameter.type_spelling = std::move(parameter_type);
+		parameter.gmock_type_spelling = parameter.type_spelling;
+		parameter.generated_name = std::move(parameter_name);
+		method.parameters = {parameter};
+		method.signature_for_report = method.name + "(" + method.parameters[0].type_spelling + ")";
+		return method;
+	}
+
 	[[nodiscard]] mockfakegen::ClassModel NamespacedHogeModel(std::string namespace_name,
 															  std::string include_spelling)
 	{
@@ -624,6 +637,57 @@ namespace
 			   "report should record fallback policy");
 	}
 
+	void GeneratedProjectPreservesDeclarationOrderAfterProjectSort()
+	{
+		auto zulu = MethodNamed("Zulu");
+		auto alpha_int = MethodWithParameter("Alpha", "int", "value");
+		auto beta = MethodNamed("Beta");
+		auto alpha_text = MethodWithParameter("Alpha", "const char*", "text");
+		mockfakegen::ClassModel class_model{
+			.name = "Ordered",
+			.qualified_name = "Ordered",
+			.namespaces = {},
+			.mock_name = "MockOrdered",
+			.mock_header_name = "MockOrdered.h",
+			.fake_source_name = "FakeOrdered.cpp",
+			.source_header = HeaderNamed("Ordered.h"),
+			.mock_methods = {zulu, alpha_int, beta, alpha_text},
+			.fake_methods = {zulu, alpha_int, beta, alpha_text},
+			.unsupported_items = {},
+		};
+		mockfakegen::ProjectModel project{
+			.headers = {},
+			.classes = {class_model},
+			.unsupported_items = {},
+			.diagnostics = {},
+		};
+		mockfakegen::SortProjectModel(project);
+
+		const auto files =
+			mockfakegen::GenerateMockFakeProject(project.classes,
+												 mockfakegen::ProjectGenerationOptions{
+													 .emit_all_mocks = false,
+													 .emit_cmake_fragment = false,
+													 .emit_manifest = false,
+													 .emit_report = false,
+												 });
+
+		const auto& mock = FindFile(files, "MockOrdered.h");
+		const auto zulu_position = mock.content.find("MOCK_METHOD(void, Zulu, (), ());");
+		const auto alpha_int_position = mock.content.find("MOCK_METHOD(void, Alpha, (int), ());");
+		const auto beta_position = mock.content.find("MOCK_METHOD(void, Beta, (), ());");
+		const auto alpha_text_position =
+			mock.content.find("MOCK_METHOD(void, Alpha, (const char*), ());");
+		Expect(zulu_position != std::string::npos, "Zulu method should be generated");
+		Expect(alpha_int_position != std::string::npos, "Alpha(int) method should be generated");
+		Expect(beta_position != std::string::npos, "Beta method should be generated");
+		Expect(alpha_text_position != std::string::npos,
+			   "Alpha(const char*) method should be generated");
+		Expect(zulu_position < alpha_int_position && alpha_int_position < beta_position &&
+				   beta_position < alpha_text_position,
+			   "mock methods should follow source declaration order after project sorting");
+	}
+
 	void SeparatesMockAndFakeMethods()
 	{
 		const std::vector classes = {SplitMethodModel()};
@@ -885,6 +949,7 @@ int main()
 	ProjectOptionsSelectGlobalMutexRuntime();
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
 	ProjectOptionsSelectFallbackPolicyRuntimeAndArtifacts();
+	GeneratedProjectPreservesDeclarationOrderAfterProjectSort();
 	SeparatesMockAndFakeMethods();
 	GeneratesMixedInterfaceAndConcreteProject();
 	GeneratesSpecialMemberFakes();
