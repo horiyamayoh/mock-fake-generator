@@ -20,6 +20,7 @@
 #include "model/ProjectModel.h"
 #include "output/OutputWriter.h"
 #include "validation/GeneratedCompileValidator.h"
+#include "validation/GeneratedOutputCheck.h"
 #include "validation/GenerationPolicy.h"
 
 namespace mockfakegen
@@ -727,6 +728,12 @@ namespace mockfakegen
 			return 1;
 		}
 
+		const auto generated_output_check_result =
+			CheckGeneratedOutputForKetTokens(format_result.files);
+		const auto generated_output_token_diagnostics =
+			BuildGeneratedOutputTokenDiagnostics(generated_output_check_result.diagnostics);
+		AppendRunDiagnostics(run_diagnostics, generated_output_token_diagnostics);
+
 		const auto validation_result = ValidateGeneratedOutputCompile(
 			GeneratedCompileValidationOptions{
 				.mode = config.validate,
@@ -749,6 +756,7 @@ namespace mockfakegen
 				.unsupported_items = resolve_result.project.unsupported_items,
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_result.diagnostics,
+				.generated_output_token_diagnostics = generated_output_check_result.diagnostics,
 			});
 		const auto unsupported_diagnostics =
 			BuildUnsupportedItemDiagnostics(resolve_result.project.classes);

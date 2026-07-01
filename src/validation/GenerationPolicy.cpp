@@ -184,6 +184,21 @@ namespace mockfakegen
 			}
 		}
 
+		void
+		AddKetContaminationDiagnostics(GenerationPolicyDecision& decision,
+									   std::span<const GeneratedOutputTokenDiagnostic> diagnostics)
+		{
+			for (const auto& diagnostic : diagnostics)
+			{
+				decision.diagnostics.push_back(GenerationPolicyDiagnostic{
+					.kind = GenerationPolicyDiagnosticKind::KetContamination,
+					.message = diagnostic.path.empty()
+						? diagnostic.message
+						: diagnostic.path.generic_string() + ": " + diagnostic.message,
+				});
+			}
+		}
+
 		void AddFallbackDiagnostics(GenerationPolicyDecision& decision,
 									const Config& config,
 									std::span<const ClassModel> classes)
@@ -288,11 +303,13 @@ namespace mockfakegen
 			input.parse_diagnostics.begin(), input.parse_diagnostics.end(), IsParseFailure);
 		decision.has_unsupported_items =
 			UnsupportedItemCount(input.classes, input.unsupported_items) != 0U;
+		decision.has_ket_contamination = !input.generated_output_token_diagnostics.empty();
 		decision.has_validation_failure = !input.validation_diagnostics.empty();
 
 		AddParseDiagnostics(decision, input.parse_diagnostics);
 		AddUnsupportedDiagnostics(decision, input.classes);
 		AddUnsupportedDiagnostics(decision, input.unsupported_items);
+		AddKetContaminationDiagnostics(decision, input.generated_output_token_diagnostics);
 		AddValidationDiagnostics(decision, input.validation_diagnostics);
 		AddFallbackDiagnostics(decision, config, input.classes);
 
@@ -316,7 +333,7 @@ namespace mockfakegen
 			{
 				return diagnostic.kind == GenerationPolicyDiagnosticKind::FallbackIncompatibility;
 			});
-		decision.has_policy_failure =
+		decision.has_policy_failure = decision.has_ket_contamination ||
 			has_fallback_incompatibility || decision.has_link_readiness_failure;
 
 		if (decision.has_parse_failure)
@@ -328,6 +345,11 @@ namespace mockfakegen
 		{
 			ApplyFailurePolicy(
 				decision, EvaluateFailurePolicy(config, GenerationFailureKind::UnsupportedItem));
+		}
+		if (decision.has_ket_contamination)
+		{
+			ApplyFailurePolicy(
+				decision, EvaluateFailurePolicy(config, GenerationFailureKind::KetContamination));
 		}
 		if (decision.has_validation_failure)
 		{

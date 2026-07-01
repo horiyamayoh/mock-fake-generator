@@ -129,6 +129,32 @@ namespace
 		Expect(result.checked_file_count == 1U, "similar token file should be checked");
 	}
 
+	void InMemoryGeneratedFilesAreChecked()
+	{
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile("MockHoge.h",
+										   "#pragma once\n"
+										   "#include \"ket_file.h\"\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+			mockfakegen::MakeGeneratedFile("FakeHoge.cpp",
+										   "auto value = ket::string::Cat(\"x\");\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+		};
+
+		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens(files);
+
+		Expect(!result.ok(), "in-memory generated ket tokens should fail");
+		Expect(result.checked_file_count == files.size(),
+			   "in-memory generated files should be counted");
+		Expect(result.diagnostics.size() == 2U,
+			   "in-memory generated ket tokens should produce diagnostics");
+		Expect(result.diagnostics[0].path == "MockHoge.h" ||
+				   result.diagnostics[1].path == "MockHoge.h",
+			   "in-memory include diagnostic should identify generated file path");
+		Expect(result.diagnostics[0].token == "ket::" || result.diagnostics[1].token == "ket::",
+			   "in-memory namespace diagnostic should identify ket token");
+	}
+
 	void EmptyDirectoryFails()
 	{
 		TempTree tree;
@@ -224,6 +250,7 @@ int main()
 	QuotedKetIncludeFails();
 	AngleKetIncludeFails();
 	SimilarNonKetTokensPass();
+	InMemoryGeneratedFilesAreChecked();
 	EmptyDirectoryFails();
 	GeneratedFixturesPass();
 	return 0;

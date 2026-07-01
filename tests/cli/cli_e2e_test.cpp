@@ -1025,6 +1025,75 @@ namespace
 			   "report should include link-substitution guidance");
 	}
 
+	void KetContaminatedGeneratedOutputFailsPolicy(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "ket-contaminated-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "ket-contaminated-build";
+		const auto output_dir = temp_root / "ket-contaminated-generated";
+		WriteText(include_dir / "Service.h",
+				  "#pragma once\n"
+				  "namespace ket {\n"
+				  "class Service {\n"
+				  "public:\n"
+				  "  bool Run();\n"
+				  "};\n"
+				  "} // namespace ket\n");
+		const auto source = source_dir / "Service.cpp";
+		WriteText(source,
+				  "#include \"Service.h\"\n"
+				  "bool ket::Service::Run() { return true; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o service.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "ket_contaminated_output");
+
+		Expect(result.exit_code == 1, "ket-contaminated generated output should fail policy");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "ket contamination should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "ket contamination should emit report");
+		Expect(!std::filesystem::exists(output_dir / "MockService.h"),
+			   "ket-contaminated mock header should not be published");
+		Expect(!std::filesystem::exists(output_dir / "FakeService.cpp"),
+			   "ket-contaminated fake source should not be published");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"component\": \"ket-contamination\""),
+			   "manifest should include generated-output token diagnostic");
+		Expect(Contains(manifest, "\"code\": \"generated_output_forbidden_token\""),
+			   "manifest should include forbidden-token diagnostic code");
+		Expect(Contains(manifest, "\"kind\": \"ket::\""),
+			   "manifest should include forbidden ket token kind");
+		Expect(Contains(manifest, "\"kind\": \"ket_contamination\""),
+			   "manifest should include policy ket-contamination diagnostic");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(report, "ket-contamination"),
+			   "report should include generated-output token diagnostic");
+		Expect(Contains(report, "ket_contamination"),
+			   "report should include policy ket-contamination diagnostic");
+	}
+
 	void InvalidValidationArtifactDirAppearsInManifest(const std::filesystem::path& temp_root,
 													   const std::filesystem::path& product_dir,
 													   const std::filesystem::path& build_dir)
@@ -1099,6 +1168,7 @@ int main()
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);
 	LinkValidationFailureAppearsAsLinkDiagnostic(temp_root, product_dir, build_dir);
+	KetContaminatedGeneratedOutputFailsPolicy(temp_root);
 	InvalidValidationArtifactDirAppearsInManifest(temp_root, product_dir, build_dir);
 
 	std::error_code remove_error;

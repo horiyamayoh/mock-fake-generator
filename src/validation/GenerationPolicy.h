@@ -7,6 +7,7 @@
 #include "Config.h"
 #include "model/ProjectModel.h"
 #include "validation/GeneratedCompileValidator.h"
+#include "validation/GeneratedOutputCheck.h"
 
 namespace mockfakegen
 {
@@ -65,6 +66,7 @@ namespace mockfakegen
 		std::span<const UnsupportedItem> unsupported_items;
 		std::span<const Diagnostic> parse_diagnostics;
 		std::span<const GeneratedCompileDiagnostic> validation_diagnostics;
+		std::span<const GeneratedOutputTokenDiagnostic> generated_output_token_diagnostics = {};
 	};
 
 	struct GenerationPolicyDecision
@@ -76,6 +78,7 @@ namespace mockfakegen
 		bool emit_report = true;
 		bool has_parse_failure = false;
 		bool has_unsupported_items = false;
+		bool has_ket_contamination = false;
 		bool has_validation_failure = false;
 		bool has_link_readiness_failure = false;
 		bool has_policy_failure = false;

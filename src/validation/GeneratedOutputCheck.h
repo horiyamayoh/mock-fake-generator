@@ -1,8 +1,11 @@
 #pragma once
 
 #include <filesystem>
+#include <span>
 #include <string>
 #include <vector>
+
+#include "model/GeneratedFile.h"
 
 namespace mockfakegen
 {
@@ -25,6 +28,8 @@ namespace mockfakegen
 	};
 
 	[[nodiscard]] const std::vector<std::string>& ForbiddenGeneratedOutputKetTokens();
+	[[nodiscard]] GeneratedOutputCheckResult
+	CheckGeneratedOutputForKetTokens(std::span<const GeneratedFile> files);
 	[[nodiscard]] GeneratedOutputCheckResult
 	CheckGeneratedOutputForKetTokens(const std::vector<std::filesystem::path>& roots);
 } // namespace mockfakegen

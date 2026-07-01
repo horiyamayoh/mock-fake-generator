@@ -561,6 +561,41 @@ namespace
 			   "ket-contaminated output should not be published");
 	}
 
+	void KetContaminationInputSuppressesPublish()
+	{
+		const std::vector classes = {ServiceClass(false)};
+		const std::vector<mockfakegen::Diagnostic> parse_diagnostics;
+		const std::vector<mockfakegen::GeneratedCompileDiagnostic> validation_diagnostics;
+		const std::vector token_diagnostics = {
+			mockfakegen::GeneratedOutputTokenDiagnostic{
+				.path = "FakeService.cpp",
+				.token = "ket::",
+				.message = "generated output contains forbidden token: ket::",
+			},
+		};
+
+		const auto decision = mockfakegen::EvaluateGenerationPolicy(
+			BestEffortConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.unsupported_items = {},
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+				.generated_output_token_diagnostics = token_diagnostics,
+			});
+
+		Expect(decision.exit_code != 0, "ket contamination should be non-zero");
+		Expect(!decision.write_outputs, "ket contamination should suppress generated output");
+		Expect(!decision.publish_generated_files,
+			   "ket contamination should suppress publishable generated files");
+		Expect(decision.emit_manifest, "ket contamination should still allow manifest emission");
+		Expect(decision.emit_report, "ket contamination should still allow report emission");
+		Expect(decision.has_ket_contamination, "ket contamination should be recorded");
+		Expect(HasDiagnosticKind(decision,
+								 mockfakegen::GenerationPolicyDiagnosticKind::KetContamination),
+			   "ket contamination diagnostic should be distinct");
+	}
+
 	void MixedFailuresUseMostRestrictivePublication()
 	{
 		const std::vector classes = {ServiceClass(true)};
@@ -697,6 +732,7 @@ int main()
 	ParseFailureSuppressesOutput();
 	ValidationFailureIsNonZeroAndSuppressesPublish();
 	FailurePolicyMatrixCoversPublicationAndReports();
+	KetContaminationInputSuppressesPublish();
 	MixedFailuresUseMostRestrictivePublication();
 	CMakeFragmentOmitsNotLinkReadyFakeSources();
 	DefaultReturnRejectsReferenceAndNonDefaultConstructibleReturns();

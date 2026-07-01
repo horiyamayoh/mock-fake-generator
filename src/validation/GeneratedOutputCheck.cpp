@@ -171,6 +171,24 @@ namespace mockfakegen
 			}
 			return tokens;
 		}
+
+		void CheckContentForKetTokens(GeneratedOutputCheckResult& result,
+									  const std::filesystem::path& path,
+									  std::string_view content)
+		{
+			if (HasKetNamespaceUsage(content))
+			{
+				AddDiagnostic(
+					result, path, "ket::", "generated output contains forbidden token: ket::");
+			}
+			for (auto token : KetIncludeTokens(content))
+			{
+				AddDiagnostic(result,
+							  path,
+							  std::move(token),
+							  "generated output includes a ket module header.");
+			}
+		}
 	} // namespace
 
 	const std::vector<std::string>& ForbiddenGeneratedOutputKetTokens()
@@ -181,6 +199,18 @@ namespace mockfakegen
 			"#include <ket_",
 		};
 		return tokens;
+	}
+
+	GeneratedOutputCheckResult
+	CheckGeneratedOutputForKetTokens(std::span<const GeneratedFile> files)
+	{
+		GeneratedOutputCheckResult result;
+		for (const auto& file : files)
+		{
+			++result.checked_file_count;
+			CheckContentForKetTokens(result, file.relative_path, file.content);
+		}
+		return result;
 	}
 
 	GeneratedOutputCheckResult
@@ -254,20 +284,7 @@ namespace mockfakegen
 					}
 					else
 					{
-						if (HasKetNamespaceUsage(content))
-						{
-							AddDiagnostic(result,
-										  path,
-										  "ket::",
-										  "generated output contains forbidden token: ket::");
-						}
-						for (auto token : KetIncludeTokens(content))
-						{
-							AddDiagnostic(result,
-										  path,
-										  std::move(token),
-										  "generated output includes a ket module header.");
-						}
+						CheckContentForKetTokens(result, path, content);
 					}
 				}
 
