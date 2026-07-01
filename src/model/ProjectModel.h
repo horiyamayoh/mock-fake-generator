@@ -54,6 +54,7 @@ namespace mockfakegen
 		UnsupportedTypeSpelling,
 		PrivateNestedType,
 		NestedClass,
+		AnonymousNamespace,
 		StaticDataMember,
 		InterfaceConstruct,
 	};

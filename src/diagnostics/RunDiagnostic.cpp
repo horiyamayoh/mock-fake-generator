@@ -150,6 +150,8 @@ namespace mockfakegen
 				return "private_nested_type";
 			case UnsupportedReasonCode::NestedClass:
 				return "nested_class";
+			case UnsupportedReasonCode::AnonymousNamespace:
+				return "anonymous_namespace";
 			case UnsupportedReasonCode::StaticDataMember:
 				return "static_data_member";
 			case UnsupportedReasonCode::InterfaceConstruct:

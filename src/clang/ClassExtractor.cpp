@@ -91,6 +91,19 @@ namespace mockfakegen
 			return std::vector<std::string>(reversed.rbegin(), reversed.rend());
 		}
 
+		[[nodiscard]] bool HasAnonymousNamespaceContext(const clang::DeclContext* context)
+		{
+			for (const auto* current = context; current != nullptr; current = current->getParent())
+			{
+				const auto* namespace_decl = llvm::dyn_cast<clang::NamespaceDecl>(current);
+				if (namespace_decl != nullptr && namespace_decl->isAnonymousNamespace())
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
 		[[nodiscard]] AccessKind ToAccessKind(clang::AccessSpecifier access)
 		{
 			switch (access)
@@ -381,6 +394,11 @@ namespace mockfakegen
 					RecordUnsupportedNestedClass(*declaration);
 					return true;
 				}
+				if (IsUnsupportedAnonymousNamespaceClass(declaration))
+				{
+					RecordUnsupportedAnonymousNamespaceClass(*declaration);
+					return true;
+				}
 				if (!ShouldExtract(declaration))
 				{
 					return true;
@@ -450,6 +468,28 @@ namespace mockfakegen
 				}
 				const auto* context = declaration->getDeclContext();
 				return context != nullptr && context->isRecord() && IsInTargetHeader(declaration);
+			}
+
+			[[nodiscard]] bool
+			IsUnsupportedAnonymousNamespaceClass(const clang::CXXRecordDecl* declaration) const
+			{
+				if (declaration->isImplicit() || !declaration->isThisDeclarationADefinition() ||
+					!declaration->isClass())
+				{
+					return false;
+				}
+				if (declaration->getDescribedClassTemplate() != nullptr ||
+					llvm::isa<clang::ClassTemplateSpecializationDecl>(declaration))
+				{
+					return false;
+				}
+				if (declaration->getIdentifier() == nullptr ||
+					declaration->getNameAsString().empty())
+				{
+					return false;
+				}
+				return HasAnonymousNamespaceContext(declaration->getDeclContext()) &&
+					IsInTargetHeader(declaration);
 			}
 
 			[[nodiscard]] bool ShouldExtract(const clang::CXXRecordDecl* declaration) const
@@ -597,6 +637,13 @@ namespace mockfakegen
 				return auto_type != nullptr && auto_type->isDecltypeAuto();
 			}
 
+			[[nodiscard]] bool HasPlainAutoReturn(const clang::FunctionDecl& function) const
+			{
+				const auto return_type = function.getDeclaredReturnType();
+				const auto* auto_type = return_type->getContainedAutoType();
+				return auto_type != nullptr && !auto_type->isDecltypeAuto();
+			}
+
 			[[nodiscard]] bool HasTrailingReturnType(const clang::FunctionDecl& function) const
 			{
 				const auto* function_type = function.getType()->getAs<clang::FunctionProtoType>();
@@ -693,6 +740,14 @@ namespace mockfakegen
 						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
 						.kind = "trailing_return_type",
 						.reason = "trailing return type spelling is not supported",
+					};
+				}
+				if (HasPlainAutoReturn(method))
+				{
+					return UnsupportedTypeIssue{
+						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+						.kind = "auto_return",
+						.reason = "deduced auto return type is not supported",
 					};
 				}
 				if (HasDecltypeAutoReturn(method))
@@ -905,6 +960,15 @@ namespace mockfakegen
 												"volatile method is not supported");
 						continue;
 					}
+					if (method->isExplicitObjectMemberFunction())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::UnsupportedTypeSpelling,
+												"explicit_object_parameter",
+												"explicit object parameter is not supported");
+						continue;
+					}
 					if (const auto type_issue = UnsupportedTypeIssueForMethod(*method);
 						type_issue.has_value())
 					{
@@ -1107,6 +1171,15 @@ namespace mockfakegen
 												UnsupportedReasonCode::VolatileMethod,
 												"volatile_method",
 												"volatile method is not supported");
+						continue;
+					}
+					if (method->isExplicitObjectMemberFunction())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::UnsupportedTypeSpelling,
+												"explicit_object_parameter",
+												"explicit object parameter is not supported");
 						continue;
 					}
 					if (const auto type_issue = UnsupportedTypeIssueForMethod(*method);
@@ -1555,6 +1628,25 @@ namespace mockfakegen
 					.reason = "nested class definitions are not generated as independent targets",
 					.suggested_action =
 						"generate the enclosing class or provide a hand-authored mock",
+					.source_range = ToSourceRange(source_manager_, declaration.getSourceRange()),
+				};
+				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
+				result_.unsupported_items.push_back(std::move(item));
+			}
+
+			void RecordUnsupportedAnonymousNamespaceClass(const clang::CXXRecordDecl& declaration)
+			{
+				const auto name = declaration.getQualifiedNameAsString();
+				auto item = UnsupportedItem{
+					.reason_code = UnsupportedReasonCode::AnonymousNamespace,
+					.kind = "anonymous_namespace",
+					.class_name = name,
+					.name = declaration.getNameAsString(),
+					.member_signature = name,
+					.reason = "anonymous namespace class has internal linkage and cannot be "
+							  "link-replaced",
+					.suggested_action =
+						"move it into a named namespace or provide a hand-authored fake",
 					.source_range = ToSourceRange(source_manager_, declaration.getSourceRange()),
 				};
 				result_.diagnostics.push_back(UnsupportedDiagnostic(item));

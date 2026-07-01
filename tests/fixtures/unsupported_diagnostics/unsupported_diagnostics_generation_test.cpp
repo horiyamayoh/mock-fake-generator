@@ -262,7 +262,7 @@ namespace
 
 		Expect(extraction.classes.size() == 3U,
 			   "link replacement negative fixture should extract three concrete classes");
-		Expect(UnsupportedItemCount(extraction) == 27U,
+		Expect(UnsupportedItemCount(extraction) == 36U,
 			   "link replacement negative fixture should lock unsupported item count");
 		for (const auto kind : {
 				 "class_template",
@@ -271,9 +271,15 @@ namespace
 				 "nested_class",
 				 "function_template",
 				 "inline_body",
+				 "trailing_return_type",
+				 "auto_return",
+				 "decltype_auto_return",
 				 "constexpr_method",
 				 "consteval_method",
+				 "unsupported_attribute",
+				 "attributed_type",
 				 "conversion_operator",
+				 "defaulted_method",
 				 "overloaded_operator",
 				 "pure_virtual_method",
 				 "conditional_noexcept",
@@ -292,6 +298,22 @@ namespace
 			   "inline body should be recorded");
 		Expect(HasUnsupportedMember(extraction, "inline_body", "OutOfClassInline"),
 			   "out-of-class inline definition should be recorded");
+		Expect(HasUnsupportedMember(extraction, "trailing_return_type", "Trailing"),
+			   "trailing return type should be recorded");
+		Expect(HasUnsupportedMember(extraction, "auto_return", "AutoValue"),
+			   "plain auto return should be recorded");
+		Expect(HasUnsupportedMember(extraction, "decltype_auto_return", "Deduced"),
+			   "decltype(auto) return should be recorded");
+		Expect(HasUnsupportedMember(extraction, "unsupported_attribute", "Marked"),
+			   "standard method attribute should be recorded");
+		Expect(HasUnsupportedMember(extraction, "unsupported_attribute", "GnuMarked"),
+			   "platform method attribute should be recorded");
+		Expect(HasUnsupportedMember(extraction, "attributed_type", "NonNull"),
+			   "platform attributed type should be recorded");
+		Expect(HasUnsupportedMember(extraction, "defaulted_method", "operator<=>"),
+			   "defaulted comparison should be recorded");
+		Expect(HasUnsupportedMember(extraction, "function_template", "Constrained"),
+			   "constrained member template should be recorded");
 		Expect(HasUnsupportedMember(extraction, "non_public_method", "ProtectedMethod"),
 			   "protected method should be recorded");
 		Expect(HasUnsupportedMember(extraction, "non_public_method", "PrivateMethod"),
@@ -306,6 +328,8 @@ namespace
 			   "array static data should be recorded");
 		Expect(HasUnsupportedMember(extraction, "static_data_member", "initialized"),
 			   "in-class initialized static data should be recorded");
+		Expect(HasUnsupportedMember(extraction, "static_data_member", "boot"),
+			   "constinit static data should be recorded");
 		Expect(HasUnsupportedMember(extraction, "static_data_member", "tls_value"),
 			   "thread-local static data should be recorded");
 		Expect(HasUnsupportedMember(extraction, "static_data_member", "private_token"),

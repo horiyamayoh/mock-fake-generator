@@ -5,24 +5,24 @@
     "link_ready_classes": 0,
     "not_link_ready_classes": 3,
     "generated_methods": 3,
-    "unsupported_items": 22,
+    "unsupported_items": 31,
     "registry_mode": "thread-local",
     "registry_mode_usage": "per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock",
     "fallback_policy": "abort",
-    "diagnostics": 27,
+    "diagnostics": 36,
     "validation_commands": 0,
     "diagnostic_summary": {
-      "total": 27,
+      "total": 36,
       "info": 0,
-      "warnings": 27,
+      "warnings": 36,
       "errors": 0,
       "by_component": [
         {
           "component": "clang",
           "summary": {
-            "total": 27,
+            "total": 36,
             "info": 0,
-            "warnings": 27,
+            "warnings": 36,
             "errors": 0
           }
         }
@@ -33,18 +33,70 @@
     {
       "severity": "warning",
       "component": "clang",
+      "code": "unsupported_attribute",
+      "kind": "unsupported_attribute",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 57,
+          "column": 31
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 57,
+          "column": 45
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::GnuMarked",
+      "message": "method has attributes that are not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_attribute",
+      "kind": "unsupported_attribute",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 56,
+          "column": 17
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 56,
+          "column": 28
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::Marked",
+      "message": "method has attributes that are not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
       "code": "unsupported_class_template",
       "kind": "class_template",
       "path": "Unsupported.h",
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 7,
+          "line": 12,
           "column": 2
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 12,
+          "line": 17,
           "column": 2
         }
       },
@@ -65,12 +117,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 21,
+          "line": 26,
           "column": 2
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 24,
+          "line": 29,
           "column": 2
         }
       },
@@ -91,12 +143,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 26,
+          "line": 31,
           "column": 2
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 31,
+          "line": 36,
           "column": 2
         }
       },
@@ -117,12 +169,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 14,
+          "line": 19,
           "column": 2
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 19,
+          "line": 24,
           "column": 2
         }
       },
@@ -143,12 +195,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 51,
+          "line": 63,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 51,
+          "line": 63,
           "column": 47
         }
       },
@@ -169,12 +221,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 44,
+          "line": 52,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 47,
+          "line": 55,
           "column": 3
         }
       },
@@ -195,12 +247,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 43,
+          "line": 51,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 43,
+          "line": 51,
           "column": 34
         }
       },
@@ -221,12 +273,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 80,
+          "line": 96,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 80,
+          "line": 96,
           "column": 35
         }
       },
@@ -247,12 +299,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 48,
+          "line": 59,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 48,
+          "line": 59,
           "column": 19
         }
       },
@@ -267,18 +319,44 @@
     {
       "severity": "warning",
       "component": "clang",
+      "code": "unsupported_defaulted_method",
+      "kind": "defaulted_method",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 60,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 60,
+          "column": 61
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::operator<=>",
+      "message": "defaulted method is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
       "code": "unsupported_destructor",
       "kind": "destructor",
       "path": "Unsupported.h",
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 81,
+          "line": 97,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 81,
+          "line": 97,
           "column": 34
         }
       },
@@ -299,12 +377,38 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 39,
+          "line": 68,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 39,
+          "line": 69,
+          "column": 21
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::Constrained",
+      "message": "function template member is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_function_template",
+      "kind": "function_template",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 44,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 44,
           "column": 20
         }
       },
@@ -325,12 +429,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 41,
+          "line": 46,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 41,
+          "line": 46,
           "column": 22
         }
       },
@@ -351,12 +455,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 42,
+          "line": 47,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 42,
+          "line": 47,
           "column": 25
         }
       },
@@ -377,12 +481,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 53,
+          "line": 65,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 53,
+          "line": 65,
           "column": 3
         }
       },
@@ -403,12 +507,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 55,
+          "line": 71,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 57,
+          "line": 73,
           "column": 3
         }
       },
@@ -429,12 +533,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 72,
+          "line": 88,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 72,
+          "line": 88,
           "column": 22
         }
       },
@@ -455,12 +559,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 69,
+          "line": 85,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 69,
+          "line": 85,
           "column": 24
         }
       },
@@ -481,12 +585,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 49,
+          "line": 61,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 49,
+          "line": 61,
           "column": 43
         }
       },
@@ -507,12 +611,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 66,
+          "line": 82,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 66,
+          "line": 82,
           "column": 38
         }
       },
@@ -533,12 +637,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 65,
+          "line": 81,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 65,
+          "line": 81,
           "column": 29
         }
       },
@@ -559,12 +663,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 50,
+          "line": 62,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 50,
+          "line": 62,
           "column": 28
         }
       },
@@ -585,12 +689,38 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 99,
+          "line": 116,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 99,
+          "line": 116,
+          "column": 24
+        }
+      },
+      "class": "negative::UnsafeStaticData",
+      "member": "negative::UnsafeStaticData::boot",
+      "message": "constinit static data member requires an explicit initializer policy",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_static_data_member",
+      "kind": "static_data_member",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 115,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 115,
           "column": 34
         }
       },
@@ -611,12 +741,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 101,
+          "line": 118,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 101,
+          "line": 118,
           "column": 23
         }
       },
@@ -637,12 +767,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 97,
+          "line": 113,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 97,
+          "line": 113,
           "column": 15
         }
       },
@@ -663,12 +793,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 100,
+          "line": 117,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 100,
+          "line": 117,
           "column": 27
         }
       },
@@ -689,12 +819,12 @@
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 98,
+          "line": 114,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 98,
+          "line": 114,
           "column": 22
         }
       },
@@ -709,18 +839,122 @@
     {
       "severity": "warning",
       "component": "clang",
+      "code": "unsupported_type_spelling",
+      "kind": "attributed_type",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 58,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 58,
+          "column": 25
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::NonNull",
+      "message": "attributed type in method signature is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_type_spelling",
+      "kind": "auto_return",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 49,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 49,
+          "column": 18
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::AutoValue",
+      "message": "deduced auto return type is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_type_spelling",
+      "kind": "decltype_auto_return",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 50,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 50,
+          "column": 26
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::Deduced",
+      "message": "decltype(auto) return type is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
+      "code": "unsupported_type_spelling",
+      "kind": "trailing_return_type",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 48,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 48,
+          "column": 22
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::Trailing",
+      "message": "trailing return type spelling is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
       "code": "unsupported_volatile_method",
       "kind": "volatile_method",
       "path": "Unsupported.h",
       "source_range": {
         "begin": {
           "file": "Unsupported.h",
-          "line": 52,
+          "line": 64,
           "column": 3
         },
         "end": {
           "file": "Unsupported.h",
-          "line": 52,
+          "line": 64,
           "column": 18
         }
       },
@@ -764,16 +998,16 @@
       "parse_mode": "synthetic-tu",
       "generation_mode": "link-replacement",
       "generated_methods": 1,
-      "unsupported_methods": 5,
-      "unsupported_items": 5,
+      "unsupported_methods": 6,
+      "unsupported_items": 6,
       "link_ready": false,
       "link_readiness_reasons": [
         "unsupported items remain: static_data_member"
       ],
       "diagnostic_summary": {
-        "total": 5,
+        "total": 6,
         "info": 0,
-        "warnings": 5,
+        "warnings": 6,
         "errors": 0
       }
     },
@@ -785,16 +1019,16 @@
       "parse_mode": "synthetic-tu",
       "generation_mode": "link-replacement",
       "generated_methods": 1,
-      "unsupported_methods": 15,
-      "unsupported_items": 15,
+      "unsupported_methods": 23,
+      "unsupported_items": 23,
       "link_ready": false,
       "link_readiness_reasons": [
-        "unsupported items remain: function_template, inline_body, constexpr_method, consteval_method, conversion_operator, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method"
+        "unsupported items remain: function_template, inline_body, trailing_return_type, auto_return, decltype_auto_return, constexpr_method, consteval_method, unsupported_attribute, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method"
       ],
       "diagnostic_summary": {
-        "total": 15,
+        "total": 23,
         "info": 0,
-        "warnings": 15,
+        "warnings": 23,
         "errors": 0
       }
     }
