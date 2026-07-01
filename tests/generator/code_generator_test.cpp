@@ -453,6 +453,10 @@ namespace
 			   "manifest should include non-zero diagnostic count");
 		Expect(Contains(manifest.content, "\"validation_commands\": 0"),
 			   "manifest should include validation command count");
+		Expect(Contains(manifest.content, "\"registry_mode\": \"thread-local\""),
+			   "manifest should include registry mode");
+		Expect(Contains(manifest.content, "\"registry_mode_usage\""),
+			   "manifest should include registry mode usage");
 		Expect(Contains(manifest.content, "\"fallback_policy\": \"abort\""),
 			   "manifest should include fallback policy");
 		Expect(Contains(manifest.content, "\"parse_mode\": \"unknown\""),
@@ -555,6 +559,12 @@ namespace
 			   "global-mutex project should generate mutex runtime");
 		Expect(!Contains(runtime.content, "thread_local"),
 			   "global-mutex project should not generate thread-local runtime");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"registry_mode\": \"global-mutex\""),
+			   "manifest should record global-mutex registry mode");
+		Expect(Contains(manifest.content, "tests must join workers before scope destruction"),
+			   "manifest should record global-mutex lifetime assumption");
 	}
 
 	void ProjectOptionsSelectSharedOwnerRuntimeAndApi()
@@ -583,6 +593,12 @@ namespace
 			   "shared-owner fake should retain a shared_ptr copy while forwarding");
 		Expect(!Contains(fake.content, "if (auto* mock = ::mockfake::CurrentMock<MockBeta>())"),
 			   "shared-owner fake should not expect a raw pointer registry");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"registry_mode\": \"shared-owner\""),
+			   "manifest should record shared-owner registry mode");
+		Expect(Contains(manifest.content, "keep the mock alive during fake calls"),
+			   "manifest should record shared-owner lifetime behavior");
 	}
 
 	void ProjectOptionsSelectFallbackPolicyRuntimeAndArtifacts()

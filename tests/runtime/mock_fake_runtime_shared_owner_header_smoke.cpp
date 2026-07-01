@@ -49,6 +49,29 @@ namespace
 		EXPECT_FALSE(mockfake::CurrentMock<MockThing>());
 	}
 
+	TEST(MockFakeRuntimeSharedOwnerHeaderSmoke,
+		 DestructionOrderMismatchUsesScopeIdentityNotRawPointer)
+	{
+		::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+		MockThing raw_mock{3};
+		auto noop_delete = [](MockThing*)
+		{
+		};
+		auto outer = std::shared_ptr<MockThing>(&raw_mock, noop_delete);
+		auto inner = std::shared_ptr<MockThing>(&raw_mock, noop_delete);
+		std::optional<mockfake::ScopedSharedMock<MockThing>> outer_scope;
+		std::optional<mockfake::ScopedSharedMock<MockThing>> inner_scope;
+		outer_scope.emplace(outer);
+		inner_scope.emplace(inner);
+
+		EXPECT_DEATH(outer_scope.reset(), "ScopedSharedMock destruction order mismatch");
+
+		inner_scope.reset();
+		outer_scope.reset();
+		EXPECT_FALSE(mockfake::CurrentMock<MockThing>());
+	}
+
 	TEST(MockFakeRuntimeSharedOwnerHeaderSmoke, NullSharedMockAborts)
 	{
 		::testing::FLAGS_gtest_death_test_style = "threadsafe";

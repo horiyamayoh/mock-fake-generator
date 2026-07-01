@@ -1081,6 +1081,92 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	)
 
 	add_executable(
+		mockfakegen_registry_modes_generation_test
+		tests/fixtures/registry_modes/registry_modes_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_registry_modes_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_registry_modes_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_registry_modes_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_registry_modes_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_registry_modes_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_registry_modes_generation_test)
+
+	add_test(
+		NAME mockfakegen_registry_modes_generation_test
+		COMMAND mockfakegen_registry_modes_generation_test
+	)
+
+	add_executable(
+		mockfakegen_global_mutex_generated_smoke
+		tests/fixtures/registry_modes/global_mutex/global_mutex_generated_smoke_test.cpp
+		tests/fixtures/registry_modes/global_mutex/generated/FakeGlobalWorker.cpp
+	)
+	target_include_directories(
+		mockfakegen_global_mutex_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/registry_modes/global_mutex/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/registry_modes/global_mutex/generated"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime_global_mutex"
+	)
+	target_link_libraries(
+		mockfakegen_global_mutex_generated_smoke
+		PRIVATE
+			${MOCKFAKEGEN_GMOCK_MAIN_TARGET}
+	)
+	target_compile_features(mockfakegen_global_mutex_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_global_mutex_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_global_mutex_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_global_mutex_generated_smoke)
+
+	add_test(
+		NAME mockfakegen_global_mutex_generated_smoke
+		COMMAND mockfakegen_global_mutex_generated_smoke
+	)
+
+	add_executable(
+		mockfakegen_shared_owner_generated_smoke
+		tests/fixtures/registry_modes/shared_owner/shared_owner_generated_smoke_test.cpp
+		tests/fixtures/registry_modes/shared_owner/generated/FakeSharedWorker.cpp
+	)
+	target_include_directories(
+		mockfakegen_shared_owner_generated_smoke
+		PRIVATE
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/registry_modes/shared_owner/product"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/registry_modes/shared_owner/generated"
+			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generated_runtime_shared_owner"
+	)
+	target_link_libraries(
+		mockfakegen_shared_owner_generated_smoke
+		PRIVATE
+			${MOCKFAKEGEN_GMOCK_MAIN_TARGET}
+	)
+	target_compile_features(mockfakegen_shared_owner_generated_smoke PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_shared_owner_generated_smoke
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_shared_owner_generated_smoke)
+	mockfakegen_apply_sanitizers(mockfakegen_shared_owner_generated_smoke)
+
+	add_test(
+		NAME mockfakegen_shared_owner_generated_smoke
+		COMMAND mockfakegen_shared_owner_generated_smoke
+	)
+
+	add_executable(
 		mockfakegen_generated_compile_validator_test
 		tests/validation/generated_compile_validator_test.cpp
 	)

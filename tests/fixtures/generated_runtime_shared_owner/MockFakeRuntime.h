@@ -35,22 +35,28 @@ namespace mockfake
 	template <typename Mock>
 	class MockRegistry
 	{
+		struct Entry
+		{
+			std::shared_ptr<Mock> mock;
+			std::shared_ptr<const void> scope_token;
+		};
+
 	  public:
-		static void Push(std::shared_ptr<Mock> mock)
+		static void Push(std::shared_ptr<Mock> mock, std::shared_ptr<const void> scope_token)
 		{
 			if (!mock)
 			{
 				detail::AbortWithMessage("mockfake: ScopedSharedMock received nullptr");
 			}
 			std::lock_guard<std::mutex> lock(Mutex());
-			Stack().push_back(std::move(mock));
+			Stack().push_back(Entry{std::move(mock), std::move(scope_token)});
 		}
 
-		static void Pop(const std::shared_ptr<Mock>& mock) noexcept
+		static void Pop(const std::shared_ptr<const void>& scope_token) noexcept
 		{
 			std::lock_guard<std::mutex> lock(Mutex());
 			auto& stack = Stack();
-			if (stack.empty() || stack.back().get() != mock.get())
+			if (stack.empty() || stack.back().scope_token.get() != scope_token.get())
 			{
 				detail::AbortWithMessage("mockfake: ScopedSharedMock destruction order mismatch");
 			}
@@ -65,7 +71,7 @@ namespace mockfake
 			{
 				return {};
 			}
-			return stack.back();
+			return stack.back().mock;
 		}
 
 	  private:
@@ -75,9 +81,9 @@ namespace mockfake
 			return mutex;
 		}
 
-		[[nodiscard]] static std::vector<std::shared_ptr<Mock>>& Stack()
+		[[nodiscard]] static std::vector<Entry>& Stack()
 		{
-			static std::vector<std::shared_ptr<Mock>> stack;
+			static std::vector<Entry> stack;
 			return stack;
 		}
 	};
@@ -86,13 +92,14 @@ namespace mockfake
 	class ScopedSharedMock
 	{
 	  public:
-		explicit ScopedSharedMock(std::shared_ptr<Mock> mock) : mock_(std::move(mock))
+		explicit ScopedSharedMock(std::shared_ptr<Mock> mock)
+			: mock_(std::move(mock)), scope_token_(std::make_shared<unsigned char>(0U))
 		{
 			if (!mock_)
 			{
 				detail::AbortWithMessage("mockfake: ScopedSharedMock received nullptr");
 			}
-			MockRegistry<Mock>::Push(mock_);
+			MockRegistry<Mock>::Push(mock_, scope_token_);
 		}
 
 		ScopedSharedMock(const ScopedSharedMock&) = delete;
@@ -103,11 +110,12 @@ namespace mockfake
 
 		~ScopedSharedMock() noexcept
 		{
-			MockRegistry<Mock>::Pop(mock_);
+			MockRegistry<Mock>::Pop(scope_token_);
 		}
 
 	  private:
 		std::shared_ptr<Mock> mock_;
+		std::shared_ptr<const void> scope_token_;
 	};
 
 	template <typename Mock>

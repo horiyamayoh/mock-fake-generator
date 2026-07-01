@@ -6,6 +6,8 @@
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2 | 2 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 |
 
+Registry mode: `thread-local` - per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock.
+
 Fallback policy: `abort`.
 
 ## Link Replacement Notice

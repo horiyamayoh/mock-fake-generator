@@ -197,6 +197,38 @@ namespace mockfakegen
 			return "abort";
 		}
 
+		[[nodiscard]] std::string_view RegistryModeName(RegistryMode registry_mode)
+		{
+			switch (registry_mode)
+			{
+				case RegistryMode::ThreadLocal:
+					return "thread-local";
+				case RegistryMode::GlobalMutex:
+					return "global-mutex";
+				case RegistryMode::SharedOwner:
+					return "shared-owner";
+			}
+			return "thread-local";
+		}
+
+		[[nodiscard]] std::string_view RegistryModeUsage(RegistryMode registry_mode)
+		{
+			switch (registry_mode)
+			{
+				case RegistryMode::ThreadLocal:
+					return "per-thread mock stack; use when product code calls fakes on the same "
+						   "thread as the scoped mock";
+				case RegistryMode::GlobalMutex:
+					return "process-wide mock stack protected by a mutex; worker threads can see "
+						   "the scoped mock, but tests must join workers before scope destruction "
+						   "and avoid concurrent same-type scopes";
+				case RegistryMode::SharedOwner:
+					return "process-wide shared_ptr mock stack protected by a mutex; worker "
+						   "threads keep the mock alive during fake calls";
+			}
+			return "per-thread mock stack";
+		}
+
 		[[nodiscard]] std::string
 		UnsupportedItemsLinkReadinessReason(std::span<const UnsupportedItem> unsupported_items)
 		{
@@ -642,6 +674,7 @@ namespace mockfakegen
 			return GenerationReportMetadata{
 				.diagnostics = BuildUnsupportedItemDiagnostics(class_models),
 				.validation_commands = {},
+				.registry_mode = RegistryMode::ThreadLocal,
 				.fallback_policy = FallbackPolicy::Abort,
 			};
 		}
@@ -1488,6 +1521,10 @@ namespace mockfakegen
 			<< ",\n"
 			<< "    \"generated_methods\": " << generated_methods << ",\n"
 			<< "    \"unsupported_items\": " << unsupported_items << ",\n"
+			<< "    \"registry_mode\": " << JsonString(RegistryModeName(metadata.registry_mode))
+			<< ",\n"
+			<< "    \"registry_mode_usage\": "
+			<< JsonString(RegistryModeUsage(metadata.registry_mode)) << ",\n"
 			<< "    \"fallback_policy\": "
 			<< JsonString(FallbackPolicyName(metadata.fallback_policy)) << ",\n"
 			<< "    \"diagnostics\": " << diagnostic_summary.total << ",\n"
@@ -1601,6 +1638,8 @@ namespace mockfakegen
 			<< diagnostic_summary.total << " | " << diagnostic_summary.info << " | "
 			<< diagnostic_summary.warnings << " | " << diagnostic_summary.errors << " | "
 			<< metadata.validation_commands.size() << " |\n\n"
+			<< "Registry mode: `" << RegistryModeName(metadata.registry_mode) << "` - "
+			<< RegistryModeUsage(metadata.registry_mode) << ".\n\n"
 			<< "Fallback policy: `" << FallbackPolicyName(metadata.fallback_policy) << "`.\n\n"
 			<< "## Link Replacement Notice\n\n"
 			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
@@ -1734,6 +1773,7 @@ namespace mockfakegen
 				GenerationReportMetadata{
 					.diagnostics = BuildUnsupportedItemDiagnostics(resolved_class_models),
 					.validation_commands = {},
+					.registry_mode = options.registry_mode,
 					.fallback_policy = options.fallback_policy,
 				}));
 		}
@@ -1744,6 +1784,7 @@ namespace mockfakegen
 				GenerationReportMetadata{
 					.diagnostics = BuildUnsupportedItemDiagnostics(resolved_class_models),
 					.validation_commands = {},
+					.registry_mode = options.registry_mode,
 					.fallback_policy = options.fallback_policy,
 				}));
 		}

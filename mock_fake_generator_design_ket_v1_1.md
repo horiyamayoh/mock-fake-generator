@@ -480,7 +480,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | mode | 説明 | 推奨用途 |
 |---|---|---|
 | `thread-local` | 型ごとの `thread_local` stack。テスト同士の並列実行に強い | 標準。SUT が同一スレッドで mock を呼ぶ場合 |
-| `global-mutex` | 型ごとの global stack を mutex で保護 | SUT が worker thread から同じ mock を呼ぶ場合 |
+| `global-mutex` | 型ごとの global stack を mutex で保護。ただし lookup 後の raw pointer lifetime は保護しない | SUT が worker thread から同じ mock を呼び、worker を scope 破棄前に join できる場合 |
 | `shared-owner` | `std::shared_ptr<Mock>` を登録し、fake 呼び出し中の lifetime を保証 | 非同期・worker thread が多い高安全モード |
 
 標準は `thread-local` とする。単純なグローバルポインタと違い、並列テストで別スレッドの mock が混線しない。また stack 方式により、同一テスト内で一時的に mock を差し替えるネスト利用も可能になる。
@@ -1263,8 +1263,10 @@ R MissingMockReturn(std::string_view signature)
 特徴:
 
 - 型ごとの global stack を `std::mutex` で保護する。
-- 複数テストが同一プロセス・同一型 mock を同時利用すると干渉しうるため、同一テストバイナリ内での完全並列には向かない。
+- `CurrentMock()` は lock 中に raw pointer を取得して返すだけで、lookup 後の mock lifetime は保護しない。
+- 複数テストが同一プロセス・同一型 mock を同時利用すると同じ process-wide stack を shadow しうるため、同一テストバイナリ内での完全並列には向かない。
 - mock の lifetime はテスト側が保証する。worker thread は `ScopedMock` の破棄前に join する必要がある。
+- この mode は unsafe concurrent same-type scope pattern を runtime で禁止しない。必要ならテスト runner 側で同一型・同一プロセスの並列実行を避ける。
 
 ### 15.4 shared-owner mode
 
@@ -1277,6 +1279,7 @@ R MissingMockReturn(std::string_view signature)
 - stack mock より記述は少し重いが、非同期テストで安全性が高い。
 - generated mock alias は `ScopedSharedMock<Mock>` を指し、generated fake は
   `CurrentMock<Mock>()` の `shared_ptr` copy を保持してから mock method を呼ぶ。
+- LIFO mismatch は mock raw pointer ではなく、`ScopedSharedMock` ごとの内部 token で判定する。これにより同一 raw pointer を指す別 ownership でも destruction order mismatch を検出できる。
 
 テスト例:
 
@@ -2261,6 +2264,7 @@ fixture header を入力し、生成された `MockXXX.h` / `FakeXXX.cpp` が期
 - `thread-local` で別スレッドの mock が見えない
 - `global-mutex` で別スレッドから mock が見える
 - `shared-owner` で fake 呼び出し中の lifetime が保持される
+- `global-mutex` / `shared-owner` の generated fake が worker thread から gMock expectation へ委譲する
 
 ---
 

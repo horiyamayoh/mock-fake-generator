@@ -49,6 +49,21 @@ format check:
 cmake --build --preset dev --target check-format
 ```
 
+## Runtime registry modes
+
+Generated fakes use `MockFakeRuntime.h` to find the active mock for each type.
+Choose the registry mode with `--registry-mode`:
+
+- `thread-local`: default. Each thread has its own mock stack. Use it when the product code
+  calls generated fakes on the same thread that owns the scoped mock.
+- `global-mutex`: one process-wide mock stack per mock type, protected by a mutex. Worker
+  threads can see the scoped mock, but the returned pointer is not lifetime-protected after
+  lookup; join worker threads before destroying `ScopedMock`, and avoid concurrent same-type
+  scopes in the same process.
+- `shared-owner`: one process-wide `std::shared_ptr` stack per mock type, protected by a mutex.
+  Generated fakes keep a `shared_ptr` copy while calling the mock, so this is the safer mode for
+  asynchronous or worker-thread tests.
+
 ## Repository layout
 
 ```txt

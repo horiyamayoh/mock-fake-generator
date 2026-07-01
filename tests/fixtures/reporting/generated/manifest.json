@@ -6,6 +6,8 @@
     "not_link_ready_classes": 1,
     "generated_methods": 1,
     "unsupported_items": 2,
+    "registry_mode": "thread-local",
+    "registry_mode_usage": "per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock",
     "fallback_policy": "abort",
     "diagnostics": 2,
     "validation_commands": 0,

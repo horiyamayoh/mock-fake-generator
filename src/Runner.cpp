@@ -603,6 +603,7 @@ namespace mockfakegen
 											  GenerationReportMetadata{
 												  .diagnostics = diagnostics,
 												  .validation_commands = {},
+												  .registry_mode = result.config->registry_mode,
 												  .fallback_policy = result.config->fallback_policy,
 											  },
 											  result.config->emit_manifest);
@@ -638,6 +639,7 @@ namespace mockfakegen
 										  GenerationReportMetadata{
 											  .diagnostics = run_diagnostics,
 											  .validation_commands = {},
+											  .registry_mode = config.registry_mode,
 											  .fallback_policy = config.fallback_policy,
 										  },
 										  config.emit_manifest);
@@ -695,6 +697,7 @@ namespace mockfakegen
 										  GenerationReportMetadata{
 											  .diagnostics = run_diagnostics,
 											  .validation_commands = {},
+											  .registry_mode = config.registry_mode,
 											  .fallback_policy = config.fallback_policy,
 										  },
 										  config.emit_manifest);
@@ -746,6 +749,7 @@ namespace mockfakegen
 			GenerationReportMetadata{
 				.diagnostics = run_diagnostics,
 				.validation_commands = ToRunCommands(validation_result.commands),
+				.registry_mode = config.registry_mode,
 				.fallback_policy = config.fallback_policy,
 			},
 			config.emit_manifest);
@@ -770,6 +774,7 @@ namespace mockfakegen
 				GenerationReportMetadata{
 					.diagnostics = run_diagnostics,
 					.validation_commands = ToRunCommands(validation_result.commands),
+					.registry_mode = config.registry_mode,
 					.fallback_policy = config.fallback_policy,
 				});
 			const auto report_write_result = WriteGeneratedFiles(
