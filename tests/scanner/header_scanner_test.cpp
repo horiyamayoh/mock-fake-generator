@@ -270,14 +270,73 @@ namespace
 			"configured filtered paths should be diagnosed");
 	}
 
-	void SkipsSymlinkPaths()
+	void FollowsSafeSymlinkedHeaderFiles()
 	{
 		TempTree tree;
+		tree.Write("generated-api/Public.h");
+		tree.MakeDirectory("include");
+		std::error_code symlink_error;
+		std::filesystem::create_symlink(tree.root() / "generated-api/Public.h",
+										tree.root() / "include/Public.h",
+										symlink_error);
+		if (symlink_error)
+		{
+			return;
+		}
+
+		const auto result = mockfakegen::ScanHeaders({
+			.input_root = tree.root() / "include",
+			.project_root = tree.root(),
+			.output_dir = tree.root() / "generated",
+		});
+
+		Expect(result.ok(), "safe symlinked header should not be fatal");
+		const auto includes = IncludeSpellings(result.headers);
+		const std::vector<std::string> expected{"include/Public.h"};
+		Expect(includes == expected, "safe symlinked header should keep include-tree spelling");
+		Expect(
+			!HasDiagnosticCode(result, mockfakegen::HeaderScanDiagnosticCode::SkippedSymlinkPath),
+			"safe symlinked header should not be diagnosed as skipped");
+	}
+
+	void FollowsSafeSymlinkedDirectories()
+	{
+		TempTree tree;
+		tree.Write("include/Local.h");
+		tree.Write("generated-api/Public.h");
+		std::error_code symlink_error;
+		std::filesystem::create_directory_symlink(
+			tree.root() / "generated-api", tree.root() / "include/api", symlink_error);
+		if (symlink_error)
+		{
+			return;
+		}
+
+		const auto result = mockfakegen::ScanHeaders({
+			.input_root = tree.root() / "include",
+			.project_root = tree.root(),
+			.output_dir = tree.root() / "generated",
+		});
+
+		Expect(result.ok(), "safe symlinked directory should not be fatal");
+		const auto includes = IncludeSpellings(result.headers);
+		const std::vector<std::string> expected{"include/Local.h", "include/api/Public.h"};
+		Expect(includes == expected,
+			   "safe symlinked directory should expose headers through include-tree spelling");
+		Expect(
+			!HasDiagnosticCode(result, mockfakegen::HeaderScanDiagnosticCode::SkippedSymlinkPath),
+			"safe symlinked directory should not be diagnosed as skipped");
+	}
+
+	void SkipsUnsafeSymlinkPaths()
+	{
+		TempTree tree;
+		TempTree outside;
 		tree.Write("include/Product.h");
-		tree.Write("outside/Linked.h");
+		outside.Write("Linked.h");
 		std::error_code symlink_error;
 		std::filesystem::create_symlink(
-			tree.root() / "outside/Linked.h", tree.root() / "include/Linked.h", symlink_error);
+			outside.root() / "Linked.h", tree.root() / "include/Linked.h", symlink_error);
 		if (symlink_error)
 		{
 			return;
@@ -364,7 +423,9 @@ int main()
 	ExcludesBuiltInDirectories();
 	AllowsExplicitInputRootUnderBuiltInDirectory();
 	AppliesConfiguredExcludesAndHeaderFilter();
-	SkipsSymlinkPaths();
+	FollowsSafeSymlinkedHeaderFiles();
+	FollowsSafeSymlinkedDirectories();
+	SkipsUnsafeSymlinkPaths();
 	EmptyDirectoryIsSuccessful();
 	MissingRootProducesDiagnostic();
 	FileRootProducesDiagnostic();

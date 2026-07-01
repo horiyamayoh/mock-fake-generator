@@ -5,6 +5,7 @@
 #include <iterator>
 #include <optional>
 #include <regex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -71,6 +72,30 @@ namespace mockfakegen
 			return absolute.lexically_normal();
 		}
 
+		[[nodiscard]] std::filesystem::path
+		AbsoluteLexicallyNormalized(const std::filesystem::path& path)
+		{
+			std::error_code absolute_error;
+			auto absolute = std::filesystem::absolute(path, absolute_error);
+			if (absolute_error)
+			{
+				absolute = path;
+			}
+			return absolute.lexically_normal();
+		}
+
+		[[nodiscard]] std::optional<std::filesystem::path>
+		CanonicalNormalized(const std::filesystem::path& path, std::error_code& error)
+		{
+			error.clear();
+			auto canonical = std::filesystem::canonical(path, error);
+			if (error)
+			{
+				return std::nullopt;
+			}
+			return canonical.lexically_normal();
+		}
+
 		[[nodiscard]] bool IsSameOrUnder(const std::filesystem::path& path,
 										 const std::filesystem::path& directory)
 		{
@@ -96,9 +121,9 @@ namespace mockfakegen
 		RelativeToProject(const std::filesystem::path& header,
 						  const std::filesystem::path& project_root)
 		{
-			std::error_code relative_error;
-			const auto relative = std::filesystem::relative(header, project_root, relative_error);
-			if (!relative_error)
+			const auto relative = AbsoluteLexicallyNormalized(header).lexically_relative(
+				AbsoluteLexicallyNormalized(project_root));
+			if (!relative.empty())
 			{
 				return relative.lexically_normal();
 			}
@@ -109,7 +134,7 @@ namespace mockfakegen
 		[[nodiscard]] HeaderCandidate MakeCandidate(const std::filesystem::path& header_path,
 													const std::filesystem::path& project_root)
 		{
-			const auto absolute_path = AbsoluteNormalized(header_path);
+			const auto absolute_path = AbsoluteLexicallyNormalized(header_path);
 			const auto project_relative_path = RelativeToProject(absolute_path, project_root);
 			return HeaderCandidate{
 				.absolute_path = absolute_path,
@@ -135,7 +160,7 @@ namespace mockfakegen
 										std::error_code& error)
 		{
 			error.clear();
-			if (!entry.is_regular_file(error))
+			if (!std::filesystem::is_regular_file(entry.path(), error))
 			{
 				return false;
 			}
@@ -400,8 +425,19 @@ namespace mockfakegen
 			return result;
 		}
 
+		std::set<std::filesystem::path> visited_directories;
+		std::error_code input_canonical_error;
+		if (const auto canonical_input = CanonicalNormalized(input_root, input_canonical_error);
+			canonical_input.has_value())
+		{
+			visited_directories.insert(*canonical_input);
+		}
+
 		std::error_code iterator_error;
-		auto iterator = std::filesystem::recursive_directory_iterator(input_root, iterator_error);
+		auto iterator = std::filesystem::recursive_directory_iterator(
+			input_root,
+			std::filesystem::directory_options::follow_directory_symlink,
+			iterator_error);
 		const auto end = std::filesystem::recursive_directory_iterator();
 		if (iterator_error)
 		{
@@ -417,35 +453,93 @@ namespace mockfakegen
 			const auto entry = *iterator;
 			const auto entry_path = entry.path();
 
-			std::error_code type_error;
-			const auto is_directory = entry.is_directory(type_error);
-			if (type_error)
+			std::error_code symlink_error;
+			const auto is_symlink = entry.is_symlink(symlink_error);
+			if (symlink_error)
 			{
 				AddError(result.diagnostics,
 						 HeaderScanDiagnosticCode::FilesystemError,
 						 entry_path,
-						 "failed to inspect path type: " + type_error.message());
+						 "failed to inspect symlink status: " + symlink_error.message());
 			}
 			else
 			{
-				std::error_code symlink_error;
-				const auto is_symlink = entry.is_symlink(symlink_error);
-				if (symlink_error)
+				bool should_skip_entry = false;
+				bool is_directory = false;
+				if (is_symlink)
 				{
-					AddError(result.diagnostics,
-							 HeaderScanDiagnosticCode::FilesystemError,
-							 entry_path,
-							 "failed to inspect symlink status: " + symlink_error.message());
+					std::error_code target_error;
+					const auto target = CanonicalNormalized(entry_path, target_error);
+					if (!target.has_value())
+					{
+						iterator.disable_recursion_pending();
+						should_skip_entry = true;
+						AddInfo(result.diagnostics,
+								HeaderScanDiagnosticCode::SkippedSymlinkPath,
+								entry_path,
+								"skipped symlink path because target could not be resolved: " +
+									target_error.message());
+					}
+					else if (!IsSameOrUnder(*target, project_root))
+					{
+						iterator.disable_recursion_pending();
+						should_skip_entry = true;
+						AddInfo(result.diagnostics,
+								HeaderScanDiagnosticCode::SkippedSymlinkPath,
+								entry_path,
+								"skipped symlink path outside project root.");
+					}
+					else
+					{
+						std::error_code target_type_error;
+						is_directory = std::filesystem::is_directory(*target, target_type_error);
+						if (target_type_error)
+						{
+							iterator.disable_recursion_pending();
+							should_skip_entry = true;
+							AddError(result.diagnostics,
+									 HeaderScanDiagnosticCode::FilesystemError,
+									 entry_path,
+									 "failed to inspect symlink target type: " +
+										 target_type_error.message());
+						}
+						else if (is_directory && !visited_directories.insert(*target).second)
+						{
+							iterator.disable_recursion_pending();
+							should_skip_entry = true;
+							AddInfo(
+								result.diagnostics,
+								HeaderScanDiagnosticCode::SkippedSymlinkPath,
+								entry_path,
+								"skipped symlink directory because target was already visited.");
+						}
+					}
 				}
-				else if (is_symlink)
+				else
 				{
-					iterator.disable_recursion_pending();
-					AddInfo(result.diagnostics,
-							HeaderScanDiagnosticCode::SkippedSymlinkPath,
-							entry_path,
-							"skipped symlink path to avoid recursive or external traversal.");
+					std::error_code type_error;
+					is_directory = entry.is_directory(type_error);
+					if (type_error)
+					{
+						should_skip_entry = true;
+						AddError(result.diagnostics,
+								 HeaderScanDiagnosticCode::FilesystemError,
+								 entry_path,
+								 "failed to inspect path type: " + type_error.message());
+					}
+					else if (is_directory)
+					{
+						std::error_code directory_canonical_error;
+						if (const auto directory =
+								CanonicalNormalized(entry_path, directory_canonical_error);
+							directory.has_value())
+						{
+							visited_directories.insert(*directory);
+						}
+					}
 				}
-				else if (is_directory && IsSameOrUnder(entry_path, output_dir))
+
+				if (!should_skip_entry && is_directory && IsSameOrUnder(entry_path, output_dir))
 				{
 					iterator.disable_recursion_pending();
 					AddInfo(result.diagnostics,
@@ -453,7 +547,8 @@ namespace mockfakegen
 							entry_path,
 							"skipped configured output directory.");
 				}
-				else if (is_directory && DirectoryLooksLikeGeneratedOutput(entry_path))
+				else if (!should_skip_entry && is_directory &&
+						 DirectoryLooksLikeGeneratedOutput(entry_path))
 				{
 					iterator.disable_recursion_pending();
 					AddInfo(result.diagnostics,
@@ -461,9 +556,9 @@ namespace mockfakegen
 							entry_path,
 							"skipped directory containing mockfakegen generated output markers.");
 				}
-				else
+				else if (!should_skip_entry)
 				{
-					const auto absolute_entry_path = AbsoluteNormalized(entry_path);
+					const auto absolute_entry_path = AbsoluteLexicallyNormalized(entry_path);
 					const auto relative = RelativeToProject(absolute_entry_path, project_root);
 					const auto input_relative = RelativeToProject(absolute_entry_path, input_root);
 					const auto relative_path = relative.generic_string();

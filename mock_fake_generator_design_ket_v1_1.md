@@ -589,14 +589,14 @@ mock 未登録時の挙動を選べる。
 除外するものは以下である。
 
 - `--exclude <glob>` に一致するファイル
-- symlink loop を起こすパス
+- project-root 外へ出る symlink または symlink loop を起こすパス
 - 出力フォルダ配下
 - `third_party`, `external`, `build` など、設定で除外されたパス
 - generated marker が付いた過去の生成物
 
 ### 8.2 パス管理
 
-内部では全パスを canonical absolute path で保持する。
+project-root containment や symlink loop 判定は canonical absolute path で行う。候補 header の project relative path と include spelling は、明示された include tree の見え方を保つため lexical absolute path から算出する。
 
 生成物の include には、`--project-root` からの相対パスを優先する。
 
@@ -1850,7 +1850,7 @@ target_link_libraries(HogeTest PRIVATE
 
 - `.h` の再帰探索
 - exclude rule 適用
-- symlink 対策
+- project-root 内の safe symlink file/directory の追跡と unsafe symlink 対策
 - project relative path 算出
 - suffix/prefix 判定と診断用 path 表記補助
 

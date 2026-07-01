@@ -12,7 +12,7 @@ Implemented:
 
 - CLI parsing and end-to-end runner.
 - Header scanning with built-in exclusion of generated output, build directories,
-  `third_party`, `external`, symlinks, and configured excludes.
+  `third_party`, `external`, unsafe symlinks, and configured excludes.
 - `compile_commands.json` based Clang parsing with synthetic translation-unit fallback.
 - Code generation for supported public class methods, optional special members, optional
   static data definitions, and interface-mock mode.
