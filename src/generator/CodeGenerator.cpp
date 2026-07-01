@@ -277,7 +277,9 @@ namespace mockfakegen
 
 		[[nodiscard]] std::string FakeSourceName(const ClassModel& class_model)
 		{
-			if (class_model.interface_mock)
+			if (class_model.interface_mock ||
+				(class_model.fake_methods.empty() && class_model.fake_constructors.empty() &&
+				 class_model.fake_destructors.empty() && class_model.static_data_members.empty()))
 			{
 				return {};
 			}
@@ -286,6 +288,11 @@ namespace mockfakegen
 				return class_model.fake_source_name;
 			}
 			return DefaultFakeSourceName(class_model.name);
+		}
+
+		[[nodiscard]] bool HasFakeSource(const ClassModel& class_model)
+		{
+			return !FakeSourceName(class_model).empty();
 		}
 
 		void CountFileName(std::map<std::string, std::size_t>& counts, std::string name)
@@ -402,7 +409,7 @@ namespace mockfakegen
 			for (const auto& class_model : class_models)
 			{
 				CountFileName(mock_header_counts, MockHeaderName(class_model));
-				if (!class_model.interface_mock)
+				if (HasFakeSource(class_model))
 				{
 					CountFileName(fake_source_counts, FakeSourceName(class_model));
 				}
@@ -415,7 +422,7 @@ namespace mockfakegen
 				auto resolved_class = class_model;
 				const auto mock_collision =
 					FileNameCount(mock_header_counts, MockHeaderName(class_model)) > 1U;
-				const auto fake_collision = !class_model.interface_mock &&
+				const auto fake_collision = HasFakeSource(class_model) &&
 					FileNameCount(fake_source_counts, FakeSourceName(class_model)) > 1U;
 				if (mock_collision || fake_collision)
 				{
@@ -436,6 +443,7 @@ namespace mockfakegen
 			std::string default_fake_source;
 			std::string source_header;
 			std::string parse_mode;
+			std::string generation_mode;
 			std::size_t generated_methods = 0U;
 			std::size_t unsupported_items = 0U;
 			bool link_ready = true;
@@ -474,9 +482,12 @@ namespace mockfakegen
 			const auto mock_header = MockHeaderName(class_model);
 			const auto fake_source = FakeSourceName(class_model);
 			const auto default_mock_header = DefaultMockHeaderName(class_model.name);
-			const auto default_fake_source = class_model.interface_mock
-				? std::string{}
-				: DefaultFakeSourceName(class_model.name);
+			const auto has_fake_source = HasFakeSource(class_model);
+			const auto default_fake_source =
+				has_fake_source ? DefaultFakeSourceName(class_model.name) : std::string{};
+			const auto generation_mode = class_model.interface_mock
+				? std::string("interface-mock")
+				: (has_fake_source ? std::string("link-replacement") : std::string("mock-only"));
 			return ClassReportEntry{
 				.qualified_name = QualifiedClassName(class_model),
 				.mock_header = mock_header,
@@ -485,6 +496,7 @@ namespace mockfakegen
 				.default_fake_source = default_fake_source,
 				.source_header = SourceHeaderName(class_model),
 				.parse_mode = ParseModeName(class_model.source_header),
+				.generation_mode = generation_mode,
 				.generated_methods = class_model.mock_methods.size(),
 				.unsupported_items = class_model.unsupported_items.size(),
 				.link_ready = IsLinkReady(class_model),
@@ -901,9 +913,30 @@ namespace mockfakegen
 			return text;
 		}
 
+		[[nodiscard]] const std::vector<SimpleMethodModel>&
+		MockMethods(const SimpleClassModel& class_model)
+		{
+			return class_model.mock_methods.empty() ? class_model.methods
+													: class_model.mock_methods;
+		}
+
+		[[nodiscard]] const std::vector<SimpleMethodModel>&
+		FakeMethods(const SimpleClassModel& class_model)
+		{
+			return class_model.fake_methods.empty() ? class_model.methods
+													: class_model.fake_methods;
+		}
+
+		[[nodiscard]] bool HasFakeSource(const SimpleClassModel& class_model)
+		{
+			return !class_model.interface_mock &&
+				(!FakeMethods(class_model).empty() || !class_model.fake_constructors.empty() ||
+				 !class_model.fake_destructors.empty() || !class_model.static_data_members.empty());
+		}
+
 		[[nodiscard]] bool NeedsUtilityInclude(const SimpleClassModel& class_model)
 		{
-			for (const auto& method : class_model.methods)
+			for (const auto& method : FakeMethods(class_model))
 			{
 				if (method.ref_qualifier == RefQualifierKind::RValue)
 				{
@@ -986,7 +1019,7 @@ namespace mockfakegen
 			}
 			out << " = default;\n\n";
 
-			for (const auto& method : class_model.methods)
+			for (const auto& method : MockMethods(class_model))
 			{
 				out << member_indent << "MOCK_METHOD(" << GMockReturnType(method) << ", "
 					<< method.name << ", (" << JoinGMockParameterTypes(method.parameters) << "), ("
@@ -1077,7 +1110,7 @@ namespace mockfakegen
 					<< indent << "}\n";
 			}
 
-			for (const auto& method : class_model.methods)
+			for (const auto& method : FakeMethods(class_model))
 			{
 				separate_definition();
 				const auto parameter_declarations = JoinParameterDeclarations(method.parameters);
@@ -1117,12 +1150,13 @@ namespace mockfakegen
 			return out.str();
 		}
 
-		[[nodiscard]] GeneratedSourceClass SourceClass(const SimpleClassModel& class_model)
+		[[nodiscard]] GeneratedSourceClass SourceClass(const SimpleClassModel& class_model,
+													   std::size_t generated_method_count)
 		{
 			return GeneratedSourceClass{
 				.qualified_name = QualifiedClassName(class_model),
 				.source_header = class_model.header_include,
-				.generated_method_count = class_model.methods.size(),
+				.generated_method_count = generated_method_count,
 				.link_ready = class_model.link_ready && class_model.link_readiness_reasons.empty(),
 			};
 		}
@@ -1132,7 +1166,7 @@ namespace mockfakegen
 			return MakeGeneratedFile(MockHeaderFileName(class_model),
 									 BuildMockHeaderContent(class_model),
 									 GeneratedFileKind::MockHeader,
-									 SourceClass(class_model));
+									 SourceClass(class_model, MockMethods(class_model).size()));
 		}
 
 		[[nodiscard]] GeneratedFile GenerateFakeSource(const SimpleClassModel& class_model)
@@ -1140,7 +1174,7 @@ namespace mockfakegen
 			return MakeGeneratedFile(FakeSourceFileName(class_model),
 									 BuildFakeSourceContent(class_model),
 									 GeneratedFileKind::FakeSource,
-									 SourceClass(class_model));
+									 SourceClass(class_model, FakeMethods(class_model).size()));
 		}
 
 		[[nodiscard]] SimpleClassModel ToSimpleClassModel(const ClassModel& class_model)
@@ -1152,6 +1186,8 @@ namespace mockfakegen
 				.mock_header_name = MockHeaderName(class_model),
 				.fake_source_name = FakeSourceName(class_model),
 				.methods = {},
+				.mock_methods = {},
+				.fake_methods = {},
 				.fake_constructors = {},
 				.fake_destructors = {},
 				.static_data_members = {},
@@ -1159,9 +1195,10 @@ namespace mockfakegen
 				.link_readiness_reasons = LinkReadinessReasons(class_model),
 				.interface_mock = class_model.interface_mock,
 			};
-			simple_class.methods.reserve(class_model.mock_methods.size());
 
-			for (const auto& method : class_model.mock_methods)
+			const auto append_method = [](std::vector<SimpleMethodModel>& methods,
+										  const MethodModel& method,
+										  bool is_override)
 			{
 				SimpleMethodModel simple_method{
 					.return_type = method.return_type_spelling,
@@ -1170,7 +1207,7 @@ namespace mockfakegen
 					.parameters = {},
 					.is_const = method.is_const,
 					.is_noexcept = method.is_noexcept,
-					.is_override = class_model.interface_mock && method.is_virtual,
+					.is_override = is_override,
 					.ref_qualifier = method.ref_qualifier,
 				};
 				simple_method.parameters.reserve(method.parameters.size());
@@ -1185,7 +1222,21 @@ namespace mockfakegen
 					});
 				}
 
-				simple_class.methods.push_back(std::move(simple_method));
+				methods.push_back(std::move(simple_method));
+			};
+
+			simple_class.mock_methods.reserve(class_model.mock_methods.size());
+			for (const auto& method : class_model.mock_methods)
+			{
+				append_method(simple_class.mock_methods,
+							  method,
+							  class_model.interface_mock && method.is_virtual);
+			}
+
+			simple_class.fake_methods.reserve(class_model.fake_methods.size());
+			for (const auto& method : class_model.fake_methods)
+			{
+				append_method(simple_class.fake_methods, method, false);
 			}
 
 			simple_class.fake_constructors.reserve(class_model.fake_constructors.size());
@@ -1234,8 +1285,11 @@ namespace mockfakegen
 	{
 		std::vector<GeneratedFile> files;
 		files.push_back(GenerateMockHeader(class_model));
-		files.push_back(GenerateFakeSource(class_model));
-		files.push_back(MakeThreadLocalRuntimeHeader());
+		if (HasFakeSource(class_model))
+		{
+			files.push_back(GenerateFakeSource(class_model));
+			files.push_back(MakeThreadLocalRuntimeHeader());
+		}
 		SortGeneratedFiles(files);
 		return files;
 	}
@@ -1399,6 +1453,7 @@ namespace mockfakegen
 			}
 			out << "      \"source_header\": " << JsonString(entry.source_header) << ",\n"
 				<< "      \"parse_mode\": " << JsonString(entry.parse_mode) << ",\n"
+				<< "      \"generation_mode\": " << JsonString(entry.generation_mode) << ",\n"
 				<< "      \"generated_methods\": " << entry.generated_methods << ",\n"
 				<< "      \"unsupported_methods\": " << entry.unsupported_items << ",\n"
 				<< "      \"unsupported_items\": " << entry.unsupported_items << ",\n"
@@ -1472,9 +1527,10 @@ namespace mockfakegen
 			   "product `.cpp` files in the same test target. Link each generated fake "
 			   "source instead of the product implementation it replaces.\n\n"
 			<< "## Generated Classes\n\n"
-			<< "| Class | Source header | Parse mode | Mock header | Fake source | Link ready | "
+			<< "| Class | Source header | Parse mode | Generation mode | Mock header | Fake source "
+			   "| Link ready | "
 			   "Link-readiness reason | Generated methods | Unsupported items |\n"
-			<< "|---|---|---|---|---|---|---|---:|---:|\n";
+			<< "|---|---|---|---|---|---|---|---|---:|---:|\n";
 
 		for (const auto& entry : class_entries)
 		{
@@ -1491,10 +1547,11 @@ namespace mockfakegen
 
 			out << "| " << MarkdownCell(entry.qualified_name) << " | "
 				<< MarkdownCell(entry.source_header) << " | " << MarkdownCell(entry.parse_mode)
-				<< " | " << MarkdownCell(entry.mock_header) << " | "
-				<< MarkdownCell(entry.fake_source) << " | " << (entry.link_ready ? "yes" : "no")
-				<< " | " << MarkdownCell(link_readiness_reason) << " | " << entry.generated_methods
-				<< " | " << entry.unsupported_items << " |\n";
+				<< " | " << MarkdownCell(entry.generation_mode) << " | "
+				<< MarkdownCell(entry.mock_header) << " | " << MarkdownCell(entry.fake_source)
+				<< " | " << (entry.link_ready ? "yes" : "no") << " | "
+				<< MarkdownCell(link_readiness_reason) << " | " << entry.generated_methods << " | "
+				<< entry.unsupported_items << " |\n";
 		}
 
 		out << "\n## Diagnostics\n\n";
@@ -1562,37 +1619,23 @@ namespace mockfakegen
 	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
 													   ProjectGenerationOptions options)
 	{
-		std::vector<ClassModel> mode_class_models(class_models.begin(), class_models.end());
-		const auto interface_mode = options.interface_mock ||
-			std::any_of(mode_class_models.begin(),
-						mode_class_models.end(),
-						[](const auto& class_model)
-						{
-							return class_model.interface_mock;
-						});
-		if (interface_mode)
-		{
-			for (auto& class_model : mode_class_models)
-			{
-				class_model.interface_mock = true;
-			}
-		}
-
-		const auto resolved_class_models = ResolveQualifiedFilenameCollisions(mode_class_models);
+		const auto resolved_class_models = ResolveQualifiedFilenameCollisions(class_models);
 		std::vector<GeneratedFile> files;
-		files.reserve((resolved_class_models.size() * (interface_mode ? 1U : 2U)) + 4U);
+		files.reserve((resolved_class_models.size() * 2U) + 4U);
+		bool has_fake_source = false;
 		for (const auto& class_model : resolved_class_models)
 		{
 			auto simple_class = ToSimpleClassModel(class_model);
 			simple_class.registry_mode = options.registry_mode;
 			files.push_back(GenerateMockHeader(simple_class));
-			if (!interface_mode)
+			if (HasFakeSource(simple_class))
 			{
 				files.push_back(GenerateFakeSource(simple_class));
+				has_fake_source = true;
 			}
 		}
 
-		if (!interface_mode)
+		if (has_fake_source)
 		{
 			files.push_back(MakeRuntimeHeader(options.registry_mode));
 		}
@@ -1600,7 +1643,7 @@ namespace mockfakegen
 		{
 			files.push_back(GenerateAllMocksHeader(files));
 		}
-		if (options.emit_cmake_fragment && !interface_mode)
+		if (options.emit_cmake_fragment && has_fake_source)
 		{
 			files.push_back(GenerateCMakeFragment(files));
 		}

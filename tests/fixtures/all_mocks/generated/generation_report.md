@@ -12,10 +12,10 @@ Do not link generated `FakeXXX.cpp` files together with the corresponding produc
 
 ## Generated Classes
 
-| Class | Source header | Parse mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
-|---|---|---|---|---|---|---|---:|---:|
-| Alpha | Alpha.h | synthetic-tu | MockAlpha.h | FakeAlpha.cpp | yes |  | 1 | 0 |
-| Beta | Beta.h | synthetic-tu | MockBeta.h | FakeBeta.cpp | yes |  | 1 | 0 |
+| Class | Source header | Parse mode | Generation mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
+|---|---|---|---|---|---|---|---|---:|---:|
+| Alpha | Alpha.h | synthetic-tu | link-replacement | MockAlpha.h | FakeAlpha.cpp | yes |  | 1 | 0 |
+| Beta | Beta.h | synthetic-tu | link-replacement | MockBeta.h | FakeBeta.cpp | yes |  | 1 | 0 |
 
 ## Diagnostics
 

@@ -57,6 +57,8 @@ namespace mockfakegen
 		std::string mock_header_name;
 		std::string fake_source_name;
 		std::vector<SimpleMethodModel> methods;
+		std::vector<SimpleMethodModel> mock_methods = {};
+		std::vector<SimpleMethodModel> fake_methods = {};
 		std::vector<SimpleConstructorModel> fake_constructors = {};
 		std::vector<SimpleDestructorModel> fake_destructors = {};
 		std::vector<SimpleStaticDataMemberModel> static_data_members = {};

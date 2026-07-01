@@ -88,6 +88,7 @@
       "fake_source": "FakeService.cpp",
       "source_header": "Service.h",
       "parse_mode": "synthetic-tu",
+      "generation_mode": "link-replacement",
       "generated_methods": 1,
       "unsupported_methods": 2,
       "unsupported_items": 2,

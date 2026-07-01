@@ -707,6 +707,42 @@ namespace
 		Expect(class_model.unsupported_items[0].reason.find("pure virtual") != std::string::npos,
 			   "non-pure interface diagnostic should explain pure virtual requirement");
 	}
+
+	void InterfaceModeKeepsConcreteClassesLinkSeam()
+	{
+		TempTree tree;
+		tree.Write("include/MixedInterface.h",
+				   "#pragma once\n"
+				   "class Concrete {\n"
+				   "public:\n"
+				   "  bool Run();\n"
+				   "};\n"
+				   "class IStorage {\n"
+				   "public:\n"
+				   "  virtual ~IStorage() = default;\n"
+				   "  virtual bool Save() = 0;\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/MixedInterface.h",
+							mockfakegen::ClassExtractionOptions{.interface_mock = true});
+
+		Expect(result.classes.size() == 2U, "mixed interface fixture should extract two classes");
+		const auto& concrete =
+			result.classes[0].qualified_name == "Concrete" ? result.classes[0] : result.classes[1];
+		const auto& interface_model =
+			result.classes[0].qualified_name == "IStorage" ? result.classes[0] : result.classes[1];
+		Expect(!concrete.interface_mock,
+			   "non-virtual concrete class should remain link-seam in interface option mode");
+		Expect(concrete.mock_methods.size() == 1U, "concrete mock method should be extracted");
+		Expect(concrete.fake_methods.size() == 1U, "concrete fake method should be extracted");
+		Expect(interface_model.interface_mock, "pure interface should be marked interface mock");
+		Expect(interface_model.mock_methods.size() == 1U,
+			   "pure interface mock method should be extracted");
+		Expect(interface_model.fake_methods.empty(),
+			   "pure interface should not create fake methods");
+	}
 } // namespace
 
 int main()
@@ -731,5 +767,6 @@ int main()
 	ReportsUnsafeStaticDataWhenEnabled();
 	ExtractsInterfaceMockWhenEnabled();
 	ReportsUnsupportedInterfaceConstructs();
+	InterfaceModeKeepsConcreteClassesLinkSeam();
 	return 0;
 }

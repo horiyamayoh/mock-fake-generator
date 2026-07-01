@@ -146,7 +146,10 @@ namespace
 				{
 					MethodNamed("Run"),
 				},
-			.fake_methods = {},
+			.fake_methods =
+				{
+					MethodNamed("Run"),
+				},
 			.unsupported_items = {},
 		};
 	}
@@ -274,6 +277,29 @@ namespace
 			.fake_methods = {},
 			.unsupported_items = {},
 			.interface_mock = true,
+		};
+	}
+
+	[[nodiscard]] mockfakegen::ClassModel SplitMethodModel()
+	{
+		return mockfakegen::ClassModel{
+			.name = "Split",
+			.qualified_name = "Split",
+			.namespaces = {},
+			.mock_name = "MockSplit",
+			.mock_header_name = "MockSplit.h",
+			.fake_source_name = "FakeSplit.cpp",
+			.source_header = HeaderNamed("Split.h"),
+			.mock_methods =
+				{
+					MethodNamed("ObserveOnly"),
+					MethodNamed("Forwarded"),
+				},
+			.fake_methods =
+				{
+					MethodNamed("Forwarded"),
+				},
+			.unsupported_items = {},
 		};
 	}
 
@@ -429,6 +455,8 @@ namespace
 			   "manifest should include validation command count");
 		Expect(Contains(manifest.content, "\"parse_mode\": \"unknown\""),
 			   "manifest should include class parse mode");
+		Expect(Contains(manifest.content, "\"generation_mode\": \"link-replacement\""),
+			   "manifest should include class generation mode");
 		Expect(Contains(manifest.content, "\"by_component\""),
 			   "manifest should group diagnostics by component");
 		Expect(Contains(manifest.content, "\"code\": \"unsupported_function_template\""),
@@ -555,6 +583,70 @@ namespace
 			   "shared-owner fake should not expect a raw pointer registry");
 	}
 
+	void SeparatesMockAndFakeMethods()
+	{
+		const std::vector classes = {SplitMethodModel()};
+
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
+
+		const auto& mock = FindFile(files, "MockSplit.h");
+		Expect(Contains(mock.content, "MOCK_METHOD(void, ObserveOnly, (), ());"),
+			   "mock header should include mock-only method");
+		Expect(Contains(mock.content, "MOCK_METHOD(void, Forwarded, (), ());"),
+			   "mock header should include forwarded method");
+
+		const auto& fake = FindFile(files, "FakeSplit.cpp");
+		Expect(!Contains(fake.content, "Split::ObserveOnly()"),
+			   "fake source should not define mock-only method");
+		Expect(Contains(fake.content, "void Split::Forwarded()"),
+			   "fake source should define fake method");
+		Expect(fake.source_class->generated_method_count == 1U,
+			   "fake source metadata should count fake methods only");
+	}
+
+	void GeneratesMixedInterfaceAndConcreteProject()
+	{
+		const std::vector classes = {InterfaceModel(), ReportBetaModel()};
+
+		const auto files =
+			mockfakegen::GenerateMockFakeProject(classes,
+												 mockfakegen::ProjectGenerationOptions{
+													 .interface_mock = true,
+												 });
+
+		Expect(HasFile(files, "MockIStorage.h"), "mixed project should emit interface mock");
+		Expect(HasFile(files, "MockBeta.h"), "mixed project should emit concrete mock");
+		Expect(!HasFile(files, "FakeIStorage.cpp"),
+			   "mixed project should not emit fake for interface mock");
+		Expect(HasFile(files, "FakeBeta.cpp"), "mixed project should emit fake for concrete class");
+		Expect(HasFile(files, "MockFakeRuntime.h"),
+			   "mixed project should emit runtime for concrete fake");
+		Expect(HasFile(files, "CMakeLists.fragment.cmake"),
+			   "mixed project should emit CMake fragment for concrete fake");
+
+		const auto& fragment = FindFile(files, "CMakeLists.fragment.cmake");
+		Expect(Contains(fragment.content, "FakeBeta.cpp"),
+			   "mixed CMake fragment should list concrete fake");
+		Expect(!Contains(fragment.content, "FakeIStorage.cpp"),
+			   "mixed CMake fragment should omit interface mock");
+
+		const auto& all_mocks = FindFile(files, "AllMocks.h");
+		Expect(Contains(all_mocks.content, "#include \"MockBeta.h\""),
+			   "AllMocks should include concrete mock");
+		Expect(Contains(all_mocks.content, "#include \"MockIStorage.h\""),
+			   "AllMocks should include interface mock");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"generation_mode\": \"interface-mock\""),
+			   "manifest should identify interface mock-only class");
+		Expect(Contains(manifest.content, "\"generation_mode\": \"link-replacement\""),
+			   "manifest should identify link replacement class");
+		Expect(Contains(manifest.content, "\"fake_source\": \"\""),
+			   "manifest should record fake absence for interface class");
+		Expect(Contains(manifest.content, "\"fake_source\": \"FakeBeta.cpp\""),
+			   "manifest should record concrete fake source");
+	}
+
 	void GeneratesSpecialMemberFakes()
 	{
 		const std::vector classes = {SpecialMemberModel()};
@@ -661,8 +753,8 @@ namespace
 			   "report should include diagnostic summary");
 		Expect(Contains(report.content, "`FakeXXX.cpp`"), "report should include link warning");
 		Expect(Contains(report.content,
-						"| alpha::Alpha | include/Alpha.h | unknown | MockAlpha.h | "
-						"FakeAlpha.cpp | no | unsupported items remain | 2 | 1 |"),
+						"| alpha::Alpha | include/Alpha.h | unknown | mock-only | MockAlpha.h | "
+						" | no | unsupported items remain | 2 | 1 |"),
 			   "report should include generated class row");
 		Expect(Contains(report.content,
 						"| include/Alpha.h | alpha::Alpha | alpha::Alpha::Convert | function "
@@ -751,6 +843,8 @@ int main()
 	KeepsShortFilenamesWithoutCollision();
 	ProjectOptionsSelectGlobalMutexRuntime();
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
+	SeparatesMockAndFakeMethods();
+	GeneratesMixedInterfaceAndConcreteProject();
 	GeneratesSpecialMemberFakes();
 	GeneratesStaticDataDefinitions();
 	GeneratesInterfaceMockProject();

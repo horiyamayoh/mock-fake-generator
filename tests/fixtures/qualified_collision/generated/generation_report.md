@@ -12,10 +12,10 @@ Do not link generated `FakeXXX.cpp` files together with the corresponding produc
 
 ## Generated Classes
 
-| Class | Source header | Parse mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
-|---|---|---|---|---|---|---|---:|---:|
-| a::Hoge | a/Hoge.h | synthetic-tu | Mock_a_Hoge.h | Fake_a_Hoge.cpp | yes |  | 1 | 0 |
-| b::Hoge | b/Hoge.h | synthetic-tu | Mock_b_Hoge.h | Fake_b_Hoge.cpp | yes |  | 1 | 0 |
+| Class | Source header | Parse mode | Generation mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
+|---|---|---|---|---|---|---|---|---:|---:|
+| a::Hoge | a/Hoge.h | synthetic-tu | link-replacement | Mock_a_Hoge.h | Fake_a_Hoge.cpp | yes |  | 1 | 0 |
+| b::Hoge | b/Hoge.h | synthetic-tu | link-replacement | Mock_b_Hoge.h | Fake_b_Hoge.cpp | yes |  | 1 | 0 |
 
 ## Diagnostics
 

@@ -372,6 +372,7 @@ namespace mockfakegen
 
 				const auto namespaces = NamespaceParts(declaration->getDeclContext());
 				const auto name = declaration->getNameAsString();
+				const auto interface_mock = ShouldUseInterfaceMockMode(*declaration);
 				auto class_model = ClassModel{
 					.name = name,
 					.qualified_name = BuildQualifiedName(namespaces, name),
@@ -386,9 +387,9 @@ namespace mockfakegen
 					.fake_destructors = {},
 					.static_data_members = {},
 					.unsupported_items = {},
-					.interface_mock = options_.interface_mock,
+					.interface_mock = interface_mock,
 				};
-				if (options_.interface_mock)
+				if (interface_mock)
 				{
 					ExtractInterfaceMembers(*declaration, class_model);
 				}
@@ -465,6 +466,24 @@ namespace mockfakegen
 				}
 
 				return IsInTargetHeader(declaration);
+			}
+
+			[[nodiscard]] bool
+			ShouldUseInterfaceMockMode(const clang::CXXRecordDecl& declaration) const
+			{
+				if (!options_.interface_mock)
+				{
+					return false;
+				}
+				for (const auto* child : declaration.decls())
+				{
+					const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(child);
+					if (method != nullptr && !method->isImplicit() && method->isVirtual())
+					{
+						return true;
+					}
+				}
+				return false;
 			}
 
 			[[nodiscard]] bool IsInTargetHeader(const clang::Decl* declaration) const
