@@ -128,16 +128,10 @@ third_party/ket/        ket Git submodule
 ket is imported whole under `third_party/ket`, but this project does not build ket as a
 subproject. The root CMake selects only the modules needed by `mockfakegen_ket`.
 
-Initial selected modules:
+Selected modules:
 
-- `ascii`
 - `cli`
-- `concurrency`
-- `contract`
-- `file`
 - `parse`
-- `scope`
-- `string`
 
 Generated test-double files must not depend on ket. That rule applies to `MockXXX.h`,
 `FakeXXX.cpp`, `MockFakeRuntime.h`, `AllMocks.h`, and generated CMake fragments.

@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
+include(GNUInstallDirs)
 
 option(MOCKFAKEGEN_BUILD_TESTS "Build mockfakegen tests." ON)
 option(MOCKFAKEGEN_ENABLE_FORMAT_TARGETS "Enable format and check-format targets." ON)
@@ -97,33 +98,17 @@ set(MOCKFAKEGEN_KET_MODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ket/modu
 
 # third_party/ket is a full Git submodule, but it is not built as a CMake
 # subdirectory. Keep ket behind this explicit adapter target: select only the
-# module include directories and .cpp files used by tool-side support code.
-# Generated-output targets intentionally do not receive these include paths.
-add_library(
-	mockfakegen_ket STATIC
-	"${MOCKFAKEGEN_KET_MODULE_DIR}/ascii/ket_ascii.cpp"
-	"${MOCKFAKEGEN_KET_MODULE_DIR}/file/ket_file.cpp"
-)
+# module include directories used by tool-side support code. Generated-output
+# targets intentionally do not receive these include paths.
+add_library(mockfakegen_ket INTERFACE)
 target_include_directories(
 	mockfakegen_ket
 	SYSTEM
-	PUBLIC
-		"${MOCKFAKEGEN_KET_MODULE_DIR}/ascii"
+	INTERFACE
 		"${MOCKFAKEGEN_KET_MODULE_DIR}/cli"
-		"${MOCKFAKEGEN_KET_MODULE_DIR}/concurrency"
-		"${MOCKFAKEGEN_KET_MODULE_DIR}/contract"
-		"${MOCKFAKEGEN_KET_MODULE_DIR}/file"
 		"${MOCKFAKEGEN_KET_MODULE_DIR}/parse"
-		"${MOCKFAKEGEN_KET_MODULE_DIR}/scope"
-		"${MOCKFAKEGEN_KET_MODULE_DIR}/string"
 )
-target_compile_features(mockfakegen_ket PUBLIC cxx_std_23)
-set_target_properties(
-	mockfakegen_ket
-	PROPERTIES
-		CXX_EXTENSIONS OFF
-)
-mockfakegen_apply_sanitizers(mockfakegen_ket)
+target_compile_features(mockfakegen_ket INTERFACE cxx_std_23)
 
 add_library(
 	mockfakegen_core
@@ -169,6 +154,11 @@ set_target_properties(
 )
 mockfakegen_apply_strict_warnings(mockfakegen)
 mockfakegen_apply_sanitizers(mockfakegen)
+
+install(
+	TARGETS mockfakegen
+	RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+)
 
 if(MOCKFAKEGEN_ENABLE_FORMAT_TARGETS)
 	find_package(Python3 COMPONENTS Interpreter)
@@ -246,6 +236,18 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	endforeach()
 	list(REMOVE_DUPLICATES MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES)
 	string(JOIN "|" MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES_TEXT ${MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES})
+
+	add_test(
+		NAME mockfakegen_install_smoke
+		COMMAND
+			"${CMAKE_COMMAND}"
+			"-DMOCKFAKEGEN_BINARY_DIR=${CMAKE_BINARY_DIR}"
+			"-DMOCKFAKEGEN_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/install-smoke"
+			"-DMOCKFAKEGEN_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}"
+			"-DMOCKFAKEGEN_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}"
+			-P
+			"${CMAKE_CURRENT_SOURCE_DIR}/cmake/MockFakeGenInstallSmoke.cmake"
+	)
 
 	add_executable(mockfakegen_config_cli_test tests/config/config_cli_test.cpp)
 	target_link_libraries(mockfakegen_config_cli_test PRIVATE mockfakegen_core)

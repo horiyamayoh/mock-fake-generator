@@ -1,14 +1,9 @@
-#include "ket_ascii.h"
 #include "ket_cli.h"
-#include "ket_concurrency.h"
-#include "ket_contract.h"
-#include "ket_file.h"
 #include "ket_parse.h"
-#include "ket_scope.h"
-#include "ket_string.h"
 
-int main()
+int main(int argc, char** argv)
 {
-	const auto has_expected_prefix = ket::ascii::StartsWith("mockfakegen", "mock");
-	return has_expected_prefix ? 0 : 1;
+	const ket::cli::ArgvView args(argc, argv);
+	const auto parsed = ket::parse::UInt<unsigned>("23");
+	return args.Size() > 0U && parsed.has_value() && *parsed == 23U ? 0 : 1;
 }
