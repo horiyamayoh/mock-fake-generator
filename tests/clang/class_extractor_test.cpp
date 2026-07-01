@@ -135,6 +135,34 @@ namespace
 		Expect(result.classes[0].qualified_name == "Defined", "defined class should be extracted");
 	}
 
+	void IgnoresDefaultedSpecialMembersWithoutFakeSpecialMembers()
+	{
+		TempTree tree;
+		tree.Write("include/Hoge.h",
+				   "#pragma once\n"
+				   "class Hoge {\n"
+				   "public:\n"
+				   "  Hoge() = default;\n"
+				   "  ~Hoge() = default;\n"
+				   "  bool DoSomething();\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/Hoge.h");
+
+		Expect(result.classes.size() == 1U, "class with defaulted special members should extract");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.qualified_name == "Hoge", "Hoge should be extracted");
+		Expect(class_model.unsupported_items.empty(),
+			   "defaulted constructor and destructor should not be unsupported");
+		Expect(class_model.mock_methods.size() == 1U, "normal method should remain mockable");
+		Expect(class_model.fake_methods.size() == 1U, "normal method should remain fakeable");
+		Expect(class_model.fake_constructors.empty(),
+			   "defaulted constructor should not generate a fake");
+		Expect(class_model.fake_destructors.empty(),
+			   "defaulted destructor should not generate a fake");
+		Expect(class_model.link_ready, "class should remain link-ready");
+	}
+
 	void RecordsClassTemplateAsUnsupported()
 	{
 		TempTree tree;
@@ -892,6 +920,7 @@ int main()
 	ExtractsGlobalClass();
 	ExtractsNamespacedClass();
 	SkipsForwardDeclarationAnonymousStructAndSystemHeaders();
+	IgnoresDefaultedSpecialMembersWithoutFakeSpecialMembers();
 	RecordsClassTemplateAsUnsupported();
 	RecordsClassTemplateSpecializationsAsUnsupported();
 	ReportsPureVirtualInNormalMode();

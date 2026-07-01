@@ -684,11 +684,26 @@ namespace
 			   "CMake fragment should honor emit-cmake-fragment false");
 	}
 
-	void StrictModeFailsUnsupportedInput(const std::filesystem::path& temp_root,
-										 const std::filesystem::path& product_dir,
-										 const std::filesystem::path& build_dir)
+	void StrictModeFailsUnsupportedInput(const std::filesystem::path& temp_root)
 	{
+		const auto product_dir = temp_root / "strict-product";
+		const auto build_dir = temp_root / "strict-build";
 		const auto output_dir = temp_root / "strict";
+		WriteText(product_dir / "Hard.h",
+				  "#pragma once\n"
+				  "class Hard {\n"
+				  "public:\n"
+				  "  bool Inline() { return true; }\n"
+				  "  bool Supported();\n"
+				  "};\n");
+		WriteText(product_dir / "Hard.cpp",
+				  "#include \"Hard.h\"\n"
+				  "bool Hard::Supported() { return true; }\n");
+		const auto source = product_dir / "Hard.cpp";
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(product_dir.string()) + " -c " + ShellQuote(source.string()) + " -o hard.o";
+		WriteSingleCompileCommand(build_dir, product_dir, source, command);
+
 		auto args = BaseArgs(product_dir, build_dir, output_dir);
 		Append(args,
 			   {
@@ -700,11 +715,11 @@ namespace
 			   });
 
 		const auto result = RunMockfakegen(temp_root, args, "strict");
-		Expect(result.exit_code == 1, "strict mode should fail unsupported constructors");
+		Expect(result.exit_code == 1, "strict mode should fail unsupported inline methods");
 		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
 			   "strict mode should still emit report when policy allows it");
 		Expect(Contains(ReadText(output_dir / "generation_report.md"),
-						"constructor fake generation is not supported"),
+						"inline method body is not supported"),
 			   "strict report should include unsupported reason");
 	}
 
@@ -980,7 +995,7 @@ int main()
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
-	StrictModeFailsUnsupportedInput(temp_root, product_dir, build_dir);
+	StrictModeFailsUnsupportedInput(temp_root);
 	TopLevelUnsupportedAppearsInManifest(temp_root);
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);

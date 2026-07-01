@@ -1272,6 +1272,10 @@ namespace mockfakegen
 								   const clang::CXXRecordDecl& declaration,
 								   ClassModel& class_model)
 			{
+				if (constructor.isDefaulted())
+				{
+					return;
+				}
 				if (!options_.fake_special_members)
 				{
 					RecordUnsupportedMethod(class_model,
@@ -1318,15 +1322,6 @@ namespace mockfakegen
 											type_issue->reason);
 					return;
 				}
-				if (constructor.isDefaulted())
-				{
-					RecordUnsupportedMethod(class_model,
-											constructor,
-											UnsupportedReasonCode::DefaultedMethod,
-											"defaulted_method",
-											"defaulted constructor is not generated as a fake");
-					return;
-				}
 				if (HasBodyInTargetHeader(constructor))
 				{
 					RecordUnsupportedMethod(class_model,
@@ -1364,6 +1359,10 @@ namespace mockfakegen
 			void RecordDestructor(const clang::CXXDestructorDecl& destructor,
 								  ClassModel& class_model)
 			{
+				if (destructor.isDefaulted())
+				{
+					return;
+				}
 				if (!options_.fake_special_members)
 				{
 					RecordUnsupportedMethod(class_model,
@@ -1398,15 +1397,6 @@ namespace mockfakegen
 											UnsupportedReasonCode::Destructor,
 											"destructor",
 											"destructor exception specification is not supported");
-					return;
-				}
-				if (destructor.isDefaulted())
-				{
-					RecordUnsupportedMethod(class_model,
-											destructor,
-											UnsupportedReasonCode::DefaultedMethod,
-											"defaulted_method",
-											"defaulted destructor is not generated as a fake");
 					return;
 				}
 				if (HasBodyInTargetHeader(destructor))
