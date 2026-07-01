@@ -261,6 +261,26 @@ namespace mockfakegen
 			return true;
 		}
 
+		[[nodiscard]] std::optional<std::filesystem::path>
+		ResolvePhysicalPath(std::vector<ConfigError>& errors,
+							std::string_view option,
+							const std::filesystem::path& path)
+		{
+			std::error_code canonical_error;
+			const auto canonical = std::filesystem::weakly_canonical(path, canonical_error);
+			if (canonical_error)
+			{
+				AddError(errors,
+						 ConfigErrorCode::InvalidOptionValue,
+						 option,
+						 "failed to resolve path for " + std::string(option) + ": " +
+							 canonical_error.message());
+				return std::nullopt;
+			}
+
+			return canonical.lexically_normal();
+		}
+
 		[[nodiscard]] std::string ProgramNameOrDefault(std::string_view program_name)
 		{
 			if (program_name.empty())
@@ -790,6 +810,21 @@ namespace mockfakegen
 					 ConfigErrorCode::InvalidOptionValue,
 					 kInputRootOption,
 					 "--input-root must be the same as or under --project-root.");
+		}
+		else if (input_root.has_value() && project_root.has_value())
+		{
+			const auto physical_input_root =
+				ResolvePhysicalPath(result.errors, kInputRootOption, *input_root);
+			const auto physical_project_root =
+				ResolvePhysicalPath(result.errors, kProjectRootOption, *project_root);
+			if (physical_input_root.has_value() && physical_project_root.has_value() &&
+				!IsSameOrUnder(*physical_input_root, *physical_project_root))
+			{
+				AddError(result.errors,
+						 ConfigErrorCode::InvalidOptionValue,
+						 kInputRootOption,
+						 "--input-root must resolve to the same as or under --project-root.");
+			}
 		}
 
 		if (input_root.has_value())

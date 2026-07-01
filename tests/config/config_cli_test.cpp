@@ -700,6 +700,106 @@ namespace
 			   "path relationship diagnostic should be deterministic");
 	}
 
+	void ReportsSymlinkedInputRootEscapingProjectRoot()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "project";
+		const auto outside_root = tree.root() / "outside";
+		const auto input_root = project_root / "include";
+		std::filesystem::create_directories(project_root);
+		std::filesystem::create_directories(outside_root);
+		std::error_code symlink_error;
+		std::filesystem::create_directory_symlink(outside_root, input_root, symlink_error);
+		if (symlink_error)
+		{
+			return;
+		}
+
+		const std::vector<std::string> args{
+			"mockfakegen",
+			"--input-root",
+			input_root.string(),
+			"--output-dir",
+			(project_root / "generated").string(),
+			"--build-path",
+			(project_root / "build").string(),
+			"--project-root",
+			project_root.string(),
+		};
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "symlinked input-root escaping project-root should fail");
+		Expect(result.errors.size() == 1U, "canonical path relationship should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "canonical path relationship should use invalid option value code");
+		Expect(result.errors[0].option == "--input-root",
+			   "canonical path relationship should identify input-root");
+		Expect(result.errors[0].message ==
+				   "--input-root must resolve to the same as or under --project-root.",
+			   "canonical path relationship diagnostic should be deterministic");
+	}
+
+	void RunCliRejectsSymlinkedInputRootEscapeBeforeScanning()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "project";
+		const auto outside_root = tree.root() / "outside";
+		const auto input_root = project_root / "include";
+		const auto output_dir = project_root / "generated";
+		const auto build_path = project_root / "build";
+		std::filesystem::create_directories(project_root);
+		std::filesystem::create_directories(outside_root);
+		std::filesystem::create_directories(build_path);
+		std::error_code symlink_error;
+		std::filesystem::create_directory_symlink(outside_root, input_root, symlink_error);
+		if (symlink_error)
+		{
+			return;
+		}
+
+		const std::vector<std::string> args{
+			"mockfakegen",
+			"--input-root",
+			input_root.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_path.string(),
+			"--project-root",
+			project_root.string(),
+			"--validate",
+			"none",
+			"--format-style",
+			"none",
+		};
+		std::vector<const char*> argv;
+		argv.reserve(args.size());
+		for (const auto& arg : args)
+		{
+			argv.push_back(arg.c_str());
+		}
+		std::ostringstream out;
+		std::ostringstream err;
+
+		const auto exit_code =
+			mockfakegen::RunCli(static_cast<int>(argv.size()), argv.data(), out, err);
+
+		Expect(exit_code == 2, "symlinked input-root escape should fail at config phase");
+		Expect(Contains(err.str(),
+						"--input-root must resolve to the same as or under --project-root."),
+			   "canonical input-root error should be printed");
+		Expect(!std::filesystem::exists(output_dir / "MockEscaped.h"),
+			   "escaped header should not be generated");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "config error manifest should be written");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"component\": \"config\""),
+			   "manifest should record config failure");
+		Expect(!Contains(manifest, "\"component\": \"scanner\""),
+			   "manifest should not include scanner diagnostics after config failure");
+	}
+
 	void HelpDoesNotRequirePaths()
 	{
 		const std::vector<std::string> args{"mockfakegen", "--help"};
@@ -838,6 +938,8 @@ int main()
 	ReportsDeferredDesignOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();
+	ReportsSymlinkedInputRootEscapingProjectRoot();
+	RunCliRejectsSymlinkedInputRootEscapeBeforeScanning();
 	HelpDoesNotRequirePaths();
 	RunCliHelpWithErrorsPrintsErrorsAndUsage();
 	RunCliConfigErrorsEmitDiagnosticArtifacts();
