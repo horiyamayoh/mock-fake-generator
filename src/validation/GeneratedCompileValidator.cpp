@@ -279,6 +279,32 @@ namespace mockfakegen
 			return argv;
 		}
 
+		void MoveToOwnProcessGroup(pid_t child) noexcept
+		{
+			if (::setpgid(child, child) != 0 && errno != EACCES && errno != EINVAL &&
+				errno != ESRCH)
+			{
+				// Best effort: direct-child timeout handling remains as a fallback below.
+			}
+		}
+
+		void KillProcessGroup(pid_t leader) noexcept
+		{
+			(void)::kill(-leader, SIGKILL);
+			(void)::kill(leader, SIGKILL);
+		}
+
+		void WaitForChild(pid_t child, int& status) noexcept
+		{
+			while (::waitpid(child, &status, 0) < 0)
+			{
+				if (errno != EINTR)
+				{
+					break;
+				}
+			}
+		}
+
 		[[nodiscard]] bool ReadAvailableOutput(int fd, std::string& output)
 		{
 			std::array<char, 4096U> buffer{};
@@ -337,6 +363,7 @@ namespace mockfakegen
 
 			if (child == 0)
 			{
+				MoveToOwnProcessGroup(0);
 				::close(pipe_fds[0]);
 				(void)::dup2(pipe_fds[1], STDOUT_FILENO);
 				(void)::dup2(pipe_fds[1], STDERR_FILENO);
@@ -346,6 +373,7 @@ namespace mockfakegen
 				::_exit(127);
 			}
 
+			MoveToOwnProcessGroup(child);
 			::close(pipe_fds[1]);
 			const auto current_flags = ::fcntl(pipe_fds[0], F_GETFL, 0);
 			if (current_flags >= 0)
@@ -371,8 +399,8 @@ namespace mockfakegen
 				if (!child_exited && timeout.count() > 0 &&
 					std::chrono::steady_clock::now() >= deadline)
 				{
-					(void)::kill(child, SIGKILL);
-					(void)::waitpid(child, &status, 0);
+					KillProcessGroup(child);
+					WaitForChild(child, status);
 					child_exited = true;
 					result.timed_out = true;
 					result.exit_code = 124;

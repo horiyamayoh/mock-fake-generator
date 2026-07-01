@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -27,6 +28,26 @@ namespace
 	[[nodiscard]] bool Contains(std::string_view text, std::string_view token)
 	{
 		return text.find(token) != std::string_view::npos;
+	}
+
+	[[nodiscard]] std::string ShellQuote(std::string_view value)
+	{
+		std::string quoted;
+		quoted.reserve(value.size() + 2U);
+		quoted += '\'';
+		for (const auto character : value)
+		{
+			if (character == '\'')
+			{
+				quoted += "'\\''";
+			}
+			else
+			{
+				quoted += character;
+			}
+		}
+		quoted += '\'';
+		return quoted;
 	}
 
 	class TempTree
@@ -463,10 +484,16 @@ namespace
 	void CompileValidationTimesOut()
 	{
 		TempTree tree;
+		const auto leaked_marker = tree.root() / "leaked-grandchild.txt";
 		tree.Write("slow-compiler.sh",
 				   "#!/bin/sh\n"
-				   "sleep 2\n"
-				   "exit 0\n");
+				   "(\n"
+				   "  sleep 1\n"
+				   "  echo leaked > " +
+					   ShellQuote(leaked_marker.string()) +
+					   "\n"
+					   ") &\n"
+					   "wait\n");
 		std::filesystem::permissions(tree.root() / "slow-compiler.sh",
 									 std::filesystem::perms::owner_exec,
 									 std::filesystem::perm_options::add);
@@ -482,6 +509,9 @@ namespace
 		Expect(result.commands[0].exit_code == 124, "timeout exit should be recorded");
 		Expect(Contains(result.diagnostics[0].message, "timed out"),
 			   "timeout diagnostic should be explicit");
+		std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+		Expect(!std::filesystem::exists(leaked_marker),
+			   "timeout should kill wrapper compiler descendants");
 	}
 
 	void KeepsFailedArtifactsWhenRequested()
