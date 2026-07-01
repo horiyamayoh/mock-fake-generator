@@ -524,6 +524,72 @@ namespace
 			   "fake source should qualify public nested type");
 	}
 
+	void FinalInterfaceIsUnsupportedBeforeCompileValidation(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "final-interface-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "final-interface-build";
+		const auto output_dir = temp_root / "final-interface-generated";
+		WriteText(include_dir / "IFace.h",
+				  "#pragma once\n"
+				  "class IFace final {\n"
+				  "public:\n"
+				  "  virtual ~IFace() = default;\n"
+				  "  virtual void Run() = 0;\n"
+				  "};\n");
+		const auto source = source_dir / "IFace.cpp";
+		WriteText(source, "#include \"IFace.h\"\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) + " -o iface.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--interface-mock",
+				   "true",
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "final_interface");
+
+		Expect(result.exit_code == 0, "best-effort final interface unsupported should succeed");
+		Expect(std::filesystem::exists(output_dir / "MockIFace.h"),
+			   "final interface diagnostic mock should be written");
+		Expect(std::filesystem::exists(output_dir / "MockFakeRuntime.h"),
+			   "diagnostic non-interface mock should include generated runtime");
+		Expect(!std::filesystem::exists(output_dir / "FakeIFace.cpp"),
+			   "final interface should not publish a fake source");
+		const auto mock_header = ReadText(output_dir / "MockIFace.h");
+		Expect(!Contains(mock_header, ": public IFace"),
+			   "final interface mock should not derive from final product class");
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(!Contains(stderr_text, "cannot derive from"),
+			   "final interface should not fail during compile validation");
+		Expect(Contains(stderr_text, "final interface class cannot be mocked"),
+			   "final interface should emit unsupported diagnostic");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"link_ready\": false"),
+			   "manifest should mark final interface not link-ready");
+		Expect(Contains(manifest, "\"code\": \"unsupported_interface_construct\""),
+			   "manifest should include interface construct diagnostic");
+		Expect(Contains(manifest, "final interface class cannot be mocked"),
+			   "manifest should explain final interface unsupported reason");
+	}
+
 	void NestedGeneratedOutputIsNotReingested(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "scanner-generated-product";
@@ -1397,6 +1463,7 @@ int main()
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
+	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
 	NestedGeneratedOutputIsNotReingested(temp_root);
 	QualifiedFilenameCollisionsAppearInCliArtifacts(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);

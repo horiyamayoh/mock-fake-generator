@@ -935,6 +935,52 @@ namespace
 			   "non-pure interface diagnostic should explain pure virtual requirement");
 	}
 
+	void ReportsFinalInterfaceConstructs()
+	{
+		TempTree tree;
+		tree.Write("include/FinalInterface.h",
+				   "#pragma once\n"
+				   "class FinalIface final {\n"
+				   "public:\n"
+				   "  virtual ~FinalIface() = default;\n"
+				   "  virtual void Run() = 0;\n"
+				   "};\n"
+				   "class MethodFinalIface {\n"
+				   "public:\n"
+				   "  virtual ~MethodFinalIface() = default;\n"
+				   "  virtual void Run() final = 0;\n"
+				   "  virtual int Keep() = 0;\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/FinalInterface.h",
+							mockfakegen::ClassExtractionOptions{.interface_mock = true});
+
+		Expect(result.classes.size() == 2U, "final interface fixture should extract two classes");
+		const auto& final_class = FindClass(result, "FinalIface");
+		Expect(!final_class.interface_mock,
+			   "final interface class should not remain in deriving mock mode");
+		Expect(final_class.mock_methods.empty(), "final interface class should not emit overrides");
+		Expect(UnsupportedKindCount(final_class, "interface_construct") == 1U,
+			   "final interface class should be unsupported");
+		Expect(final_class.unsupported_items[0].reason.find("final interface class") !=
+				   std::string::npos,
+			   "final class diagnostic should be specific");
+
+		const auto& final_method = FindClass(result, "MethodFinalIface");
+		Expect(final_method.interface_mock, "method-final interface should remain interface mode");
+		Expect(final_method.mock_methods.size() == 1U,
+			   "non-final pure virtual method should still be generated");
+		Expect(final_method.mock_methods[0].name == "Keep",
+			   "final pure virtual method should be skipped");
+		Expect(UnsupportedKindCount(final_method, "interface_construct") == 1U,
+			   "final method should be unsupported");
+		Expect(final_method.unsupported_items[0].reason.find("final virtual method") !=
+				   std::string::npos,
+			   "final method diagnostic should be specific");
+	}
+
 	void InterfaceModeKeepsConcreteClassesLinkSeam()
 	{
 		TempTree tree;
@@ -998,6 +1044,7 @@ int main()
 	ExtractsInterfaceMockWhenEnabled();
 	InterfaceModeSupportsImplicitNonVirtualDestructor();
 	ReportsUnsupportedInterfaceConstructs();
+	ReportsFinalInterfaceConstructs();
 	InterfaceModeKeepsConcreteClassesLinkSeam();
 	return 0;
 }

@@ -1837,10 +1837,15 @@ namespace mockfakegen
 		std::vector<GeneratedFile> files;
 		files.reserve((resolved_class_models.size() * 2U) + 4U);
 		bool has_fake_source = false;
+		bool needs_runtime_header = false;
 		for (const auto& class_model : resolved_class_models)
 		{
 			auto simple_class = ToSimpleClassModel(class_model);
 			simple_class.registry_mode = options.registry_mode;
+			if (!simple_class.interface_mock)
+			{
+				needs_runtime_header = true;
+			}
 			files.push_back(GenerateMockHeader(simple_class));
 			if (HasFakeSource(simple_class))
 			{
@@ -1849,7 +1854,7 @@ namespace mockfakegen
 			}
 		}
 
-		if (has_fake_source)
+		if (needs_runtime_header)
 		{
 			files.push_back(MakeRuntimeHeader(options.registry_mode, options.fallback_policy));
 		}

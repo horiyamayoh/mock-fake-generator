@@ -1105,6 +1105,19 @@ namespace mockfakegen
 			void ExtractInterfaceMembers(const clang::CXXRecordDecl& declaration,
 										 ClassModel& class_model)
 			{
+				if (declaration.isEffectivelyFinal())
+				{
+					class_model.interface_mock = false;
+					RecordUnsupportedMethod(
+						class_model,
+						declaration,
+						UnsupportedReasonCode::InterfaceConstruct,
+						"interface_construct",
+						"final interface class cannot be mocked because generated mocks must "
+						"derive from it");
+					return;
+				}
+
 				for (const auto* child : declaration.decls())
 				{
 					const auto* function_template =
@@ -1223,6 +1236,17 @@ namespace mockfakegen
 							UnsupportedReasonCode::InterfaceConstruct,
 							"interface_construct",
 							"static member function is not part of a pure interface");
+						continue;
+					}
+					if (method->hasAttr<clang::FinalAttr>())
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::InterfaceConstruct,
+							"interface_construct",
+							"final virtual method cannot be mocked because generated methods must "
+							"override it");
 						continue;
 					}
 					if (!method->isVirtual() || !method->isPureVirtual())
