@@ -559,6 +559,106 @@ namespace
 		Expect(std::filesystem::exists(output_dir / "FakeB.cpp"), "B fake should be published");
 	}
 
+	void CompileValidationDoesNotAggregateMockHeadersWhenAllMocksDisabled(
+		const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "isolated-mock-headers-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "isolated-mock-headers-build";
+		const auto output_dir = temp_root / "isolated-mock-headers-generated";
+		WriteText(include_dir / "A.h",
+				  "#pragma once\n"
+				  "struct SharedTag { int value; };\n"
+				  "class A {\n"
+				  "public:\n"
+				  "  bool Run(SharedTag tag);\n"
+				  "};\n");
+		WriteText(include_dir / "B.h",
+				  "#pragma once\n"
+				  "struct SharedTag { double value; };\n"
+				  "class B {\n"
+				  "public:\n"
+				  "  bool Run(SharedTag tag);\n"
+				  "};\n");
+		const auto source_a = source_dir / "A.cpp";
+		const auto source_b = source_dir / "B.cpp";
+		WriteText(source_a, "#include \"A.h\"\n");
+		WriteText(source_b, "#include \"B.h\"\n");
+		const auto command_a = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source_a.string()) + " -o a.o";
+		const auto command_b = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source_b.string()) + " -o b.o";
+		const auto json = std::string("[\n") + "  {\n" +
+			"    \"directory\": " + JsonString(product_root.string()) + ",\n" +
+			"    \"command\": " + JsonString(command_a) + ",\n" +
+			"    \"file\": " + JsonString(source_a.string()) + "\n" + "  },\n" + "  {\n" +
+			"    \"directory\": " + JsonString(product_root.string()) + ",\n" +
+			"    \"command\": " + JsonString(command_b) + ",\n" +
+			"    \"file\": " + JsonString(source_b.string()) + "\n" + "  }\n" + "]\n";
+		WriteText(build_dir / "compile_commands.json", json);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--emit-all-mocks",
+				   "false",
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "isolated_mock_headers_validation");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0,
+			   "compile validation should not aggregate unrelated mock headers");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 4"),
+			   "isolated mock header validation should compile each mock and fake separately");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "isolated mock header validation should not produce validation errors");
+		Expect(!std::filesystem::exists(output_dir / "AllMocks.h"),
+			   "all-mocks header should not be emitted for this fixture");
+		Expect(std::filesystem::exists(output_dir / "MockA.h"), "A mock should be published");
+		Expect(std::filesystem::exists(output_dir / "MockB.h"), "B mock should be published");
+		Expect(std::filesystem::exists(output_dir / "FakeA.cpp"), "A fake should be published");
+		Expect(std::filesystem::exists(output_dir / "FakeB.cpp"), "B fake should be published");
+
+		const auto aggregate_source = temp_root / "isolated-mock-headers-aggregate.cpp";
+		const auto aggregate_object = temp_root / "isolated-mock-headers-aggregate.o";
+		WriteText(aggregate_source,
+				  "#include \"MockA.h\"\n"
+				  "#include \"MockB.h\"\n");
+		std::string aggregate_command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23";
+		aggregate_command += " -I ";
+		aggregate_command += ShellQuote(include_dir.string());
+		aggregate_command += " -I ";
+		aggregate_command += ShellQuote(output_dir.string());
+		for (const auto& include : SplitPipeList(MOCKFAKEGEN_GMOCK_INCLUDE_DIRS))
+		{
+			aggregate_command += " -I ";
+			aggregate_command += ShellQuote(include);
+		}
+		aggregate_command += " -c ";
+		aggregate_command += ShellQuote(aggregate_source.string());
+		aggregate_command += " -o ";
+		aggregate_command += ShellQuote(aggregate_object.string());
+		const auto aggregate_result =
+			RunShellCommand(temp_root, aggregate_command, "isolated_mock_headers_aggregate");
+		Expect(aggregate_result.exit_code != 0,
+			   "fixture aggregate mock header include should fail independently");
+	}
+
 	void CompileValidationUsesCompileDatabaseCompiler(const std::filesystem::path& temp_root)
 	{
 #if defined(__unix__)
@@ -2161,6 +2261,7 @@ int main()
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);
+	CompileValidationDoesNotAggregateMockHeadersWhenAllMocksDisabled(temp_root);
 	CompileValidationUsesCompileDatabaseCompiler(temp_root);
 	CompileValidationAcceptsPublicNestedTemplateAndAliasTypes(temp_root);
 	CompileValidationAcceptsDeclaratorAwareReturnTypes(temp_root);
