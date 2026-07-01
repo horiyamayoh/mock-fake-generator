@@ -436,6 +436,30 @@ namespace
 			   "failure diagnostic should keep stderr summary");
 	}
 
+	void AllMocksDoesNotHideBrokenMockHeader()
+	{
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile(
+				"AllMocks.h", "#pragma once\n", mockfakegen::GeneratedFileKind::AllMocksHeader),
+			mockfakegen::MakeGeneratedFile("MockBroken.h",
+										   "#pragma once\n"
+										   "struct MockBroken\n"
+										   "{\n"
+										   "\tvoid Broken(;\n"
+										   "};\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+		};
+
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(CompileOptions(), files);
+
+		Expect(!result.ok(), "AllMocks.h should not hide a broken mock header");
+		Expect(result.commands.size() == 1U, "broken mock header should fail smoke command");
+		Expect(result.diagnostics.size() == 1U,
+			   "broken mock header with AllMocks should produce one diagnostic");
+		Expect(Contains(result.diagnostics[0].stderr_summary, "MockBroken.h"),
+			   "diagnostic stderr should mention the directly included broken mock header");
+	}
+
 	void CompileValidationTimesOut()
 	{
 		TempTree tree;
@@ -610,6 +634,7 @@ int main()
 	SyntaxValidationReportsSyntaxStage();
 	NoneValidationSkipsCompiler();
 	CompileValidationReportsCxxFailure();
+	AllMocksDoesNotHideBrokenMockHeader();
 	CompileValidationTimesOut();
 	KeepsFailedArtifactsWhenRequested();
 	InvalidArtifactDirectoryReportsDiagnostic();

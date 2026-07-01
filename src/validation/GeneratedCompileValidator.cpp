@@ -508,12 +508,9 @@ namespace mockfakegen
 			{
 				out << "#include \"AllMocks.h\"\n";
 			}
-			else
+			for (const auto& header : MockHeaders(files))
 			{
-				for (const auto& header : MockHeaders(files))
-				{
-					out << "#include \"" << header.generic_string() << "\"\n";
-				}
+				out << "#include \"" << header.generic_string() << "\"\n";
 			}
 			out << "\nint main()\n"
 				<< "{\n"
