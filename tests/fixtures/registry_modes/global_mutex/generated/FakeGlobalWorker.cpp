@@ -3,9 +3,9 @@
 
 bool GlobalWorker::Run()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockGlobalWorker>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockGlobalWorker>())
 	{
-		return mock->Run();
+		return mockfake_current_mock->Run();
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("GlobalWorker::Run()");

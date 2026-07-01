@@ -6,9 +6,9 @@ namespace a
 
 	bool Hoge::Ping()
 	{
-		if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 		{
-			return mock->Ping();
+			return mockfake_current_mock->Ping();
 		}
 
 		return ::mockfake::MissingMockReturn<bool>("a::Hoge::Ping()");

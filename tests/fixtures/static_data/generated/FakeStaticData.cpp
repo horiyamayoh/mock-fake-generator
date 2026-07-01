@@ -7,9 +7,9 @@ const int StaticData::limit{};
 
 int StaticData::ReadCount()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockStaticData>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockStaticData>())
 	{
-		return mock->ReadCount();
+		return mockfake_current_mock->ReadCount();
 	}
 
 	return ::mockfake::MissingMockReturn<int>("StaticData::ReadCount()");

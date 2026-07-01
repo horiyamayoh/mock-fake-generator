@@ -5,9 +5,9 @@
 
 int Hoge::Get(int value)
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Get(std::move(value));
+		return mockfake_current_mock->Get(std::move(value));
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::Get(int)");
@@ -15,9 +15,9 @@ int Hoge::Get(int value)
 
 int Hoge::Get(const char* text)
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Get(text);
+		return mockfake_current_mock->Get(text);
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::Get(const char*)");

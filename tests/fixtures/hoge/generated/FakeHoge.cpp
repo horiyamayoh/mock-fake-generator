@@ -5,9 +5,9 @@
 
 bool Hoge::Initialize(int argc, char** argv)
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Initialize(std::move(argc), argv);
+		return mockfake_current_mock->Initialize(std::move(argc), argv);
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("Hoge::Initialize(int, char**)");
@@ -15,9 +15,9 @@ bool Hoge::Initialize(int argc, char** argv)
 
 void Hoge::Finalize()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		mock->Finalize();
+		mockfake_current_mock->Finalize();
 		return;
 	}
 
@@ -26,9 +26,9 @@ void Hoge::Finalize()
 
 bool Hoge::DoSomething()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->DoSomething();
+		return mockfake_current_mock->DoSomething();
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("Hoge::DoSomething()");

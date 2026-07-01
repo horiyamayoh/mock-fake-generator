@@ -5,9 +5,9 @@
 
 std::pair<bool, int> Hoge::GetPair()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->GetPair();
+		return mockfake_current_mock->GetPair();
 	}
 
 	return ::mockfake::MissingMockReturn<std::pair<bool, int>>("Hoge::GetPair()");
@@ -15,9 +15,9 @@ std::pair<bool, int> Hoge::GetPair()
 
 void Hoge::SetMap(std::map<int, double> value)
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		mock->SetMap(std::move(value));
+		mockfake_current_mock->SetMap(std::move(value));
 		return;
 	}
 
@@ -26,9 +26,9 @@ void Hoge::SetMap(std::map<int, double> value)
 
 std::pair<int, std::pair<int, int>> Hoge::Nest()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Nest();
+		return mockfake_current_mock->Nest();
 	}
 
 	return ::mockfake::MissingMockReturn<std::pair<int, std::pair<int, int>>>("Hoge::Nest()");

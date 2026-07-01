@@ -3,9 +3,9 @@
 
 int SharedWorker::Run()
 {
-	if (auto mock = ::mockfake::CurrentMock<MockSharedWorker>())
+	if (auto mockfake_current_mock = ::mockfake::CurrentMock<MockSharedWorker>())
 	{
-		return mock->Run();
+		return mockfake_current_mock->Run();
 	}
 
 	return ::mockfake::MissingMockReturn<int>("SharedWorker::Run()");

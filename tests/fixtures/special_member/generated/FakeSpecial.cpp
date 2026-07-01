@@ -12,9 +12,9 @@ Special::~Special() noexcept {}
 
 bool Special::Touch(int delta)
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockSpecial>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockSpecial>())
 	{
-		return mock->Touch(std::move(delta));
+		return mockfake_current_mock->Touch(std::move(delta));
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("Special::Touch(int)");

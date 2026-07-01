@@ -8,9 +8,10 @@ namespace app::v1
 
 	Count Supported::CountItems(Mode mode) const noexcept
 	{
-		if (auto* mock = ::mockfake::CurrentMock<MockSupported>())
+		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockSupported>())
 		{
-			return static_cast<const MockSupported&>(*mock).CountItems(std::move(mode));
+			return static_cast<const MockSupported&>(*mockfake_current_mock)
+				.CountItems(std::move(mode));
 		}
 
 		return ::mockfake::MissingMockReturn<Count>(
@@ -19,9 +20,9 @@ namespace app::v1
 
 	Ratio Supported::Scale(Ratio value)
 	{
-		if (auto* mock = ::mockfake::CurrentMock<MockSupported>())
+		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockSupported>())
 		{
-			return mock->Scale(std::move(value));
+			return mockfake_current_mock->Scale(std::move(value));
 		}
 
 		return ::mockfake::MissingMockReturn<Ratio>("app::v1::Supported::Scale(Ratio)");
@@ -29,9 +30,9 @@ namespace app::v1
 
 	Mode Supported::DefaultMode()
 	{
-		if (auto* mock = ::mockfake::CurrentMock<MockSupported>())
+		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockSupported>())
 		{
-			return mock->DefaultMode();
+			return mockfake_current_mock->DefaultMode();
 		}
 
 		return ::mockfake::MissingMockReturn<Mode>("app::v1::Supported::DefaultMode()");

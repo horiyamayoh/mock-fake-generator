@@ -903,6 +903,29 @@ namespace mockfakegen
 			return parameter.is_rvalue_ref || parameter.is_nonconst_by_value;
 		}
 
+		[[nodiscard]] bool HasParameterNamed(const std::vector<SimpleParameterModel>& parameters,
+											 std::string_view name)
+		{
+			return std::any_of(parameters.begin(),
+							   parameters.end(),
+							   [name](const auto& parameter)
+							   {
+								   return parameter.name == name;
+							   });
+		}
+
+		[[nodiscard]] std::string
+		MockLookupVariableName(const std::vector<SimpleParameterModel>& parameters)
+		{
+			constexpr std::string_view base_name = "mockfake_current_mock";
+			std::string name{base_name};
+			for (std::size_t suffix = 1U; HasParameterNamed(parameters, name); ++suffix)
+			{
+				name = std::string(base_name) + "_" + std::to_string(suffix);
+			}
+			return name;
+		}
+
 		[[nodiscard]] std::string
 		ParameterForwardingExpression(const SimpleParameterModel& parameter)
 		{
@@ -1062,6 +1085,7 @@ namespace mockfakegen
 
 		[[nodiscard]] std::string MockCallExpression(const SimpleMethodModel& method,
 													 const std::string& parameter_names,
+													 std::string_view mock_lookup_name,
 													 std::string_view mock_class_name)
 		{
 			std::string text;
@@ -1069,21 +1093,28 @@ namespace mockfakegen
 			{
 				text += "std::move(static_cast<const ";
 				text += mock_class_name;
-				text += "&>(*mock)).";
+				text += "&>(*";
+				text += mock_lookup_name;
+				text += ")).";
 			}
 			else if (method.ref_qualifier == RefQualifierKind::RValue)
 			{
-				text += "std::move(*mock).";
+				text += "std::move(*";
+				text += mock_lookup_name;
+				text += ").";
 			}
 			else if (method.is_const)
 			{
 				text += "static_cast<const ";
 				text += mock_class_name;
-				text += "&>(*mock).";
+				text += "&>(*";
+				text += mock_lookup_name;
+				text += ").";
 			}
 			else
 			{
-				text += "mock->";
+				text += mock_lookup_name;
+				text += "->";
 			}
 			text += method.name;
 			text += '(';
@@ -1237,7 +1268,9 @@ namespace mockfakegen
 				separate_definition();
 				const auto parameter_declarations = JoinParameterDeclarations(method.parameters);
 				const auto parameter_names = JoinParameterForwardingExpressions(method.parameters);
-				const auto mock_call = MockCallExpression(method, parameter_names, mock_class_name);
+				const auto mock_lookup_name = MockLookupVariableName(method.parameters);
+				const auto mock_call =
+					MockCallExpression(method, parameter_names, mock_lookup_name, mock_class_name);
 				const auto signature = DiagnosticSignature(class_model, method);
 				const auto is_void_return = method.return_type == "void";
 
@@ -1248,8 +1281,8 @@ namespace mockfakegen
 					<< "::" << method.name << '(' << parameter_declarations << ')'
 					<< MethodQualifiers(method) << "\n"
 					<< indent << "{\n"
-					<< body_indent << "if (" << mock_lookup_declarator
-					<< " mock = ::mockfake::CurrentMock<" << mock_class_name << ">())\n"
+					<< body_indent << "if (" << mock_lookup_declarator << " " << mock_lookup_name
+					<< " = ::mockfake::CurrentMock<" << mock_class_name << ">())\n"
 					<< body_indent << "{\n";
 
 				if (is_void_return)

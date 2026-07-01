@@ -3,9 +3,9 @@
 
 int Alpha::Get()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockAlpha>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockAlpha>())
 	{
-		return mock->Get();
+		return mockfake_current_mock->Get();
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Alpha::Get()");

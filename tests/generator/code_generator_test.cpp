@@ -243,6 +243,46 @@ namespace
 		};
 	}
 
+	[[nodiscard]] mockfakegen::ClassModel MockNameCollisionModel()
+	{
+		mockfakegen::ParameterModel mock_parameter;
+		mock_parameter.type_spelling = "int";
+		mock_parameter.gmock_type_spelling = "int";
+		mock_parameter.generated_name = "mock";
+		mock_parameter.is_nonconst_by_value = true;
+
+		mockfakegen::ParameterModel generated_parameter;
+		generated_parameter.type_spelling = "int";
+		generated_parameter.gmock_type_spelling = "int";
+		generated_parameter.generated_name = "mockfake_current_mock";
+		generated_parameter.is_nonconst_by_value = true;
+
+		auto save = MethodNamed("Save");
+		save.return_type_spelling = "bool";
+		save.gmock_return_type_spelling = "bool";
+		save.parameters = {mock_parameter};
+		save.signature_for_report = "sample::Collision::Save(int)";
+
+		auto store = MethodNamed("Store");
+		store.return_type_spelling = "bool";
+		store.gmock_return_type_spelling = "bool";
+		store.parameters = {generated_parameter};
+		store.signature_for_report = "sample::Collision::Store(int)";
+
+		return mockfakegen::ClassModel{
+			.name = "Collision",
+			.qualified_name = "sample::Collision",
+			.namespaces = {"sample"},
+			.mock_name = "MockCollision",
+			.mock_header_name = "MockCollision.h",
+			.fake_source_name = "FakeCollision.cpp",
+			.source_header = HeaderNamed("Collision.h"),
+			.mock_methods = {save, store},
+			.fake_methods = {save, store},
+			.unsupported_items = {},
+		};
+	}
+
 	[[nodiscard]] mockfakegen::ClassModel InterfaceModel()
 	{
 		mockfakegen::ParameterModel key;
@@ -420,7 +460,7 @@ namespace
 			   "fake should include mock header");
 		Expect(Contains(fake.content, "bool Hoge::Initialize(int argc, char** argv)"),
 			   "Initialize fake signature should be generated");
-		Expect(Contains(fake.content, "return mock->Initialize(argc, argv);"),
+		Expect(Contains(fake.content, "return mockfake_current_mock->Initialize(argc, argv);"),
 			   "Initialize fake should forward arguments");
 		Expect(
 			Contains(
@@ -429,7 +469,8 @@ namespace
 			"Initialize fake should call missing mock fallback");
 		Expect(Contains(fake.content, "void Hoge::Finalize()"),
 			   "Finalize fake should be generated");
-		Expect(Contains(fake.content, "mock->Finalize();"), "Finalize fake should forward");
+		Expect(Contains(fake.content, "mockfake_current_mock->Finalize();"),
+			   "Finalize fake should forward");
 
 		const auto& runtime = FindFile(files, "MockFakeRuntime.h");
 		Expect(runtime.kind == mockfakegen::GeneratedFileKind::RuntimeHeader,
@@ -602,9 +643,13 @@ namespace
 			   "shared-owner mock alias should use shared scope API");
 
 		const auto& fake = FindFile(files, "FakeBeta.cpp");
-		Expect(Contains(fake.content, "if (auto mock = ::mockfake::CurrentMock<MockBeta>())"),
+		Expect(Contains(fake.content,
+						"if (auto mockfake_current_mock = "
+						"::mockfake::CurrentMock<MockBeta>())"),
 			   "shared-owner fake should retain a shared_ptr copy while forwarding");
-		Expect(!Contains(fake.content, "if (auto* mock = ::mockfake::CurrentMock<MockBeta>())"),
+		Expect(!Contains(fake.content,
+						 "if (auto* mockfake_current_mock = "
+						 "::mockfake::CurrentMock<MockBeta>())"),
 			   "shared-owner fake should not expect a raw pointer registry");
 
 		const auto& manifest = FindFile(files, "manifest.json");
@@ -790,6 +835,28 @@ namespace
 			   "static data definitions should be emitted before methods");
 	}
 
+	void AvoidsMockLookupVariableParameterCollisions()
+	{
+		const auto files = mockfakegen::GenerateMockFakeProject(
+			std::vector<mockfakegen::ClassModel>{MockNameCollisionModel()});
+
+		const auto& fake = FindFile(files, "FakeCollision.cpp");
+		Expect(Contains(fake.content,
+						"if (auto* mockfake_current_mock = "
+						"::mockfake::CurrentMock<MockCollision>())"),
+			   "parameter named mock should not collide with generated lookup variable");
+		Expect(Contains(fake.content, "return mockfake_current_mock->Save(std::move(mock));"),
+			   "forwarding should still refer to the product parameter named mock");
+		Expect(Contains(fake.content,
+						"if (auto* mockfake_current_mock_1 = "
+						"::mockfake::CurrentMock<MockCollision>())"),
+			   "parameter named like the generated lookup variable should force a suffix");
+		Expect(Contains(fake.content,
+						"return mockfake_current_mock_1->Store("
+						"std::move(mockfake_current_mock));"),
+			   "suffixed lookup variable should preserve forwarding expression");
+	}
+
 	void GeneratesInterfaceMockProject()
 	{
 		const std::vector classes = {InterfaceModel()};
@@ -954,6 +1021,7 @@ int main()
 	GeneratesMixedInterfaceAndConcreteProject();
 	GeneratesSpecialMemberFakes();
 	GeneratesStaticDataDefinitions();
+	AvoidsMockLookupVariableParameterCollisions();
 	GeneratesInterfaceMockProject();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();

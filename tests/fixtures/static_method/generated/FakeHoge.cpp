@@ -5,9 +5,9 @@
 
 int Hoge::GetCount()
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->GetCount();
+		return mockfake_current_mock->GetCount();
 	}
 
 	return ::mockfake::MissingMockReturn<int>("Hoge::GetCount()");
@@ -15,9 +15,9 @@ int Hoge::GetCount()
 
 bool Hoge::Save(int value)
 {
-	if (auto* mock = ::mockfake::CurrentMock<MockHoge>())
+	if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockHoge>())
 	{
-		return mock->Save(std::move(value));
+		return mockfake_current_mock->Save(std::move(value));
 	}
 
 	return ::mockfake::MissingMockReturn<bool>("Hoge::Save(int)");
