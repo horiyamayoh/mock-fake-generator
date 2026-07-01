@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #if defined(__unix__)
@@ -72,6 +73,28 @@ namespace
 		}
 		quoted += '\'';
 		return quoted;
+	}
+
+	[[nodiscard]] std::vector<std::string> SplitPipeList(std::string_view text)
+	{
+		std::vector<std::string> values;
+		std::size_t offset = 0U;
+		while (offset <= text.size())
+		{
+			const auto separator = text.find('|', offset);
+			const auto end = separator == std::string_view::npos ? text.size() : separator;
+			const auto value = text.substr(offset, end - offset);
+			if (!value.empty())
+			{
+				values.emplace_back(value);
+			}
+			if (separator == std::string_view::npos)
+			{
+				break;
+			}
+			offset = separator + 1U;
+		}
+		return values;
 	}
 
 	[[nodiscard]] int DecodeSystemStatus(int status) noexcept
@@ -165,6 +188,26 @@ namespace
 		};
 	}
 
+	[[nodiscard]] CommandResult RunShellCommand(const std::filesystem::path& temp_root,
+												std::string command,
+												std::string_view label)
+	{
+		const auto stdout_path = temp_root / (std::string(label) + ".stdout.txt");
+		const auto stderr_path = temp_root / (std::string(label) + ".stderr.txt");
+		command += " > ";
+		command += ShellQuote(stdout_path.string());
+		command += " 2> ";
+		command += ShellQuote(stderr_path.string());
+
+		const auto status = std::system(command.c_str());
+		const auto exit_code = status == -1 ? 1 : DecodeSystemStatus(status);
+		return CommandResult{
+			.exit_code = exit_code,
+			.stdout_path = stdout_path,
+			.stderr_path = stderr_path,
+		};
+	}
+
 	[[nodiscard]] std::vector<std::string> BaseArgs(const std::filesystem::path& product_dir,
 													const std::filesystem::path& build_dir,
 													const std::filesystem::path& output_dir)
@@ -219,6 +262,98 @@ namespace
 			   "report should document link replacement");
 	}
 
+	void DumpCommandFailure(std::string_view label, const CommandResult& result)
+	{
+		if (result.exit_code == 0)
+		{
+			return;
+		}
+
+		std::cerr << label << " failed with exit code " << result.exit_code << '\n';
+		std::cerr << "--- stdout ---\n" << ReadText(result.stdout_path);
+		std::cerr << "--- stderr ---\n" << ReadText(result.stderr_path);
+	}
+
+	void CompileLinkAndRunGeneratedSmoke(const std::filesystem::path& temp_root,
+										 const std::filesystem::path& product_dir,
+										 const std::filesystem::path& output_dir)
+	{
+		const auto smoke_dir = temp_root / "generated-smoke";
+		const auto smoke_source = smoke_dir / "generated_smoke.cpp";
+		const auto smoke_executable = smoke_dir / "generated_smoke";
+		WriteText(smoke_source,
+				  "#include <gmock/gmock.h>\n"
+				  "#include <gtest/gtest.h>\n"
+				  "\n"
+				  "#include \"Hoge.h\"\n"
+				  "#include \"MockHoge.h\"\n"
+				  "\n"
+				  "namespace\n"
+				  "{\n"
+				  "    using ::testing::Return;\n"
+				  "\n"
+				  "    TEST(CliGeneratedSmoke, ForwardsCallsThroughScopedMock)\n"
+				  "    {\n"
+				  "        MockHoge mock;\n"
+				  "        ScopedMockHoge scoped_mock(mock);\n"
+				  "        Hoge hoge;\n"
+				  "\n"
+				  "        char arg0[] = \"mockfakegen\";\n"
+				  "        char* argv[] = {arg0, nullptr};\n"
+				  "\n"
+				  "        EXPECT_CALL(mock, Initialize(1, argv)).WillOnce(Return(true));\n"
+				  "        EXPECT_CALL(mock, DoSomething()).WillOnce(Return(true));\n"
+				  "        EXPECT_CALL(mock, Finalize());\n"
+				  "\n"
+				  "        EXPECT_TRUE(hoge.Initialize(1, argv));\n"
+				  "        EXPECT_TRUE(hoge.DoSomething());\n"
+				  "        hoge.Finalize();\n"
+				  "    }\n"
+				  "} // namespace\n");
+
+		std::string compile_command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23";
+		compile_command += " -I ";
+		compile_command += ShellQuote(product_dir.string());
+		compile_command += " -I ";
+		compile_command += ShellQuote(output_dir.string());
+		for (const auto& include_dir : SplitPipeList(MOCKFAKEGEN_GMOCK_INCLUDE_DIRS))
+		{
+			compile_command += " -I ";
+			compile_command += ShellQuote(include_dir);
+		}
+		compile_command += ' ';
+		compile_command += ShellQuote(smoke_source.string());
+		compile_command += ' ';
+		compile_command += ShellQuote((output_dir / "FakeHoge.cpp").string());
+		for (const auto& link_file : SplitPipeList(MOCKFAKEGEN_GMOCK_LINK_FILES))
+		{
+			compile_command += ' ';
+			compile_command += ShellQuote(link_file);
+		}
+#if defined(__unix__)
+		compile_command += " -pthread";
+#endif
+		compile_command += " -o ";
+		compile_command += ShellQuote(smoke_executable.string());
+
+		Expect(!Contains(compile_command, "third_party/ket"),
+			   "generated-output smoke compile should not use ket include directories");
+		Expect(!Contains(compile_command, "mockfakegen_ket"),
+			   "generated-output smoke compile should not link mockfakegen_ket");
+		Expect(!Contains(compile_command, (product_dir / "Hoge.cpp").string()),
+			   "generated-output smoke compile should not link the product implementation");
+
+		const auto compile_result =
+			RunShellCommand(temp_root, std::move(compile_command), "generated_smoke_compile");
+		DumpCommandFailure("generated smoke compile", compile_result);
+		Expect(compile_result.exit_code == 0, "generated smoke should compile and link");
+
+		const auto run_result = RunShellCommand(
+			temp_root, ShellQuote(smoke_executable.string()), "generated_smoke_run");
+		DumpCommandFailure("generated smoke run", run_result);
+		Expect(run_result.exit_code == 0, "generated smoke executable should pass");
+	}
+
 	void GeneratesAndValidatesFromRealCli(const std::filesystem::path& temp_root,
 										  const std::filesystem::path& product_dir,
 										  const std::filesystem::path& build_dir)
@@ -246,6 +381,7 @@ namespace
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "compile validation should not produce errors");
 		ExpectGeneratedCoreFiles(output_dir);
+		CompileLinkAndRunGeneratedSmoke(temp_root, product_dir, output_dir);
 	}
 
 	void SyntaxValidationRunsFromRealCli(const std::filesystem::path& temp_root,
@@ -515,6 +651,7 @@ namespace
 		auto args = BaseArgs(product_dir, build_dir, output_dir);
 		Append(args,
 			   {
+				   "--best-effort",
 				   "--validate",
 				   "none",
 				   "--format-style",
@@ -822,6 +959,8 @@ int main()
 {
 	Expect(std::string_view(MOCKFAKEGEN_GMOCK_INCLUDE_DIRS).size() != 0U,
 		   "test should receive gMock include dirs");
+	Expect(std::string_view(MOCKFAKEGEN_GMOCK_LINK_FILES).size() != 0U,
+		   "test should receive gMock link files");
 #if defined(__unix__)
 	setenv("MOCKFAKEGEN_GMOCK_INCLUDE_DIRS", MOCKFAKEGEN_GMOCK_INCLUDE_DIRS, 1);
 	setenv("MOCKFAKEGEN_CXX_COMPILER", MOCKFAKEGEN_CXX_COMPILER, 1);
