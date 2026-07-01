@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "model/GeneratedFile.h"
+#include "model/ProjectModel.h"
 
 namespace mockfakegen
 {
@@ -34,6 +35,9 @@ namespace mockfakegen
 
 	struct OutputWriteDiagnostic
 	{
+		DiagnosticSeverity severity = DiagnosticSeverity::Error;
+		std::string code;
+		std::string kind;
 		std::filesystem::path path;
 		std::string message;
 	};

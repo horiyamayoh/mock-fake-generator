@@ -289,10 +289,10 @@ namespace mockfakegen
 		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const OutputWriteDiagnostic& diagnostic)
 		{
 			RunDiagnostic result;
-			result.severity = DiagnosticSeverity::Error;
+			result.severity = diagnostic.severity;
 			result.component = "writer";
-			result.code = "write_failure";
-			result.kind = "output_write";
+			result.code = diagnostic.code;
+			result.kind = diagnostic.kind;
 			result.path = diagnostic.path;
 			result.message = diagnostic.message;
 			result.suggested_action = "check --output-dir, --overwrite, and filesystem permissions";
@@ -652,7 +652,29 @@ namespace mockfakegen
 		std::vector<RunDiagnostic> writer_diagnostics;
 		AppendRunDiagnostics(writer_diagnostics, write_result.diagnostics);
 		PrintRunDiagnostics(err, writer_diagnostics);
+		AppendRunDiagnostics(run_diagnostics, writer_diagnostics);
 		PrintOutputSummary(out, write_result);
+
+		if (!write_result.ok() && !config.dry_run)
+		{
+			const auto diagnostic_report = GenerateGenerationReport(
+				resolve_result.project.classes,
+				GenerationReportMetadata{
+					.diagnostics = run_diagnostics,
+					.validation_commands = ToRunCommands(validation_result.commands),
+				});
+			const auto report_write_result = WriteGeneratedFiles(
+				OutputWriterOptions{
+					.output_dir = config.output_dir,
+					.dry_run = false,
+					.overwrite = config.overwrite,
+				},
+				std::span<const GeneratedFile>(&diagnostic_report, 1U));
+			std::vector<RunDiagnostic> report_writer_diagnostics;
+			AppendRunDiagnostics(report_writer_diagnostics, report_write_result.diagnostics);
+			PrintRunDiagnostics(err, report_writer_diagnostics);
+			PrintOutputSummary(out, report_write_result);
+		}
 
 		out << "mockfakegen: extracted " << resolve_result.project.classes.size()
 			<< " class(es), generated " << selected_files.size() << " file(s)\n";

@@ -266,7 +266,7 @@ namespace
 										const std::filesystem::path& product_dir,
 										const std::filesystem::path& build_dir)
 	{
-		const auto output_dir = temp_root / "generated";
+		const auto output_dir = temp_root / "overwrite-generated";
 		WriteText(output_dir / "MockHoge.h", "// user edit\n");
 
 		auto blocked_args = BaseArgs(product_dir, build_dir, output_dir);
@@ -283,6 +283,16 @@ namespace
 		Expect(blocked.exit_code == 1, "existing changed file should fail without overwrite");
 		Expect(ReadText(output_dir / "MockHoge.h") == "// user edit\n",
 			   "blocked publish should preserve existing file");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "write failure should emit diagnostic report");
+		Expect(!std::filesystem::exists(output_dir / "manifest.json"),
+			   "write failure should not emit manifest");
+		const auto blocked_report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(blocked_report, "writer"), "writer diagnostic should appear in report");
+		Expect(Contains(blocked_report, "output_conflict"),
+			   "writer diagnostic code should appear in report");
+		Expect(Contains(blocked_report, "MockHoge.h"),
+			   "writer diagnostic path should appear in report");
 
 		auto overwrite_args = blocked_args;
 		overwrite_args.push_back("--overwrite");
