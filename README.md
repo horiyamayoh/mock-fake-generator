@@ -15,8 +15,8 @@ of being silently skipped.
 
 Current intentional limits are documented in
 [`docs/user_guide.md`](docs/user_guide.md): C++23 only, `.h` headers only, public class
-members only, deferred external config files, deferred extra CLI include/define args,
-and unsupported C++ constructs reported with reasons.
+members only, deferred external config files/class filters, and unsupported C++
+constructs reported with reasons.
 
 The design source of truth remains
 [`mock_fake_generator_design_ket_v1_1.md`](mock_fake_generator_design_ket_v1_1.md).

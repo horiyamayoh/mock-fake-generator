@@ -370,6 +370,44 @@ namespace
 			   "synthetic parse mode string should be reportable");
 	}
 
+	void SyntheticFallbackUsesExtraCompilerArgs()
+	{
+		TempTree tree;
+		tree.Write("sdk/Dependency.h", "#pragma once\nstruct Dependency { int value; };\n");
+		tree.Write("include/NeedsRescue.h",
+				   "#pragma once\n"
+				   "#ifndef CLI_DEFINE_ENABLED\n"
+				   "#error expected CLI define\n"
+				   "#endif\n"
+				   "#ifndef CLI_EXTRA_ARG_ENABLED\n"
+				   "#error expected CLI extra arg\n"
+				   "#endif\n"
+				   "#include \"Dependency.h\"\n"
+				   "class NeedsRescue { public: bool Run(Dependency dependency); };\n");
+		std::filesystem::create_directories(tree.root() / "build");
+		const auto sdk_dir = tree.root() / "sdk";
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/NeedsRescue.h")},
+			.extra_include_dirs = {sdk_dir},
+			.extra_args = {"-DCLI_DEFINE_ENABLED=1", "-DCLI_EXTRA_ARG_ENABLED=1"},
+		});
+
+		Expect(result.ok(), "CLI compiler args should rescue synthetic fallback");
+		Expect(result.project.classes.size() == 1U, "rescued fallback should extract class");
+		Expect(result.project.classes[0].qualified_name == "NeedsRescue",
+			   "rescued fallback class should be extracted");
+		Expect(HasAdjacentCompileArg(
+				   result.parse_attempts[0].compile_args, "-I", sdk_dir.generic_string()),
+			   "synthetic parse args should include CLI include dir");
+		Expect(HasCompileArg(result.validation_args, "-DCLI_DEFINE_ENABLED=1"),
+			   "validation args should include CLI define");
+		Expect(HasCompileArg(result.validation_args, "-DCLI_EXTRA_ARG_ENABLED=1"),
+			   "validation args should include CLI extra arg");
+	}
+
 	void FallsBackToSyntheticTuWhenRealTuDoesNotIncludeHeader()
 	{
 		TempTree tree;
@@ -687,6 +725,7 @@ int main()
 	ParsesHeaderThroughRealTu();
 	PreservesSeparatePairedValidationArgs();
 	FallsBackToSyntheticTuWithoutCompileDatabase();
+	SyntheticFallbackUsesExtraCompilerArgs();
 	FallsBackToSyntheticTuWhenRealTuDoesNotIncludeHeader();
 	ParsesOutOfTreeCompileDatabaseWithCommandDirectoryRelativePaths();
 	RecordsRealTuParseFailuresAsAttempts();

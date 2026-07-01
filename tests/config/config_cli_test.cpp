@@ -141,6 +141,9 @@ namespace
 		Expect(!result.config->fake_special_members, "fake-special-members should default false");
 		Expect(!result.config->fake_static_data, "fake-static-data should default false");
 		Expect(!result.config->interface_mock, "interface-mock should default false");
+		Expect(result.config->include_dirs.empty(), "include dirs should default empty");
+		Expect(result.config->defines.empty(), "defines should default empty");
+		Expect(result.config->extra_args.empty(), "extra args should default empty");
 		Expect(result.config->format_style == mockfakegen::FormatStyleKind::File,
 			   "format style should default to file");
 		Expect(result.config->validate == mockfakegen::ValidationMode::Compile,
@@ -260,6 +263,39 @@ namespace
 			"include/internal/**",
 		};
 		Expect(result.config->exclude_globs == expected, "exclude globs should preserve order");
+	}
+
+	void ParsesCompilerRescueArgs()
+	{
+		auto args = ValidArgs();
+		args.push_back("--include-dir");
+		args.push_back("sdk/include");
+		args.push_back("--include-dir=generated/include");
+		args.push_back("--define");
+		args.push_back("FEATURE=1");
+		args.push_back("--define=SECOND_FEATURE");
+		args.push_back("--extra-arg");
+		args.push_back("-Wno-unknown-warning-option");
+		args.push_back("--extra-arg");
+		args.push_back("--target=x86_64-linux-gnu");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "compiler rescue args should parse");
+		const std::vector<std::filesystem::path> expected_include_dirs{
+			ExpectedPath("sdk/include"),
+			ExpectedPath("generated/include"),
+		};
+		const std::vector<std::string> expected_defines{"FEATURE=1", "SECOND_FEATURE"};
+		const std::vector<std::string> expected_extra_args{
+			"-Wno-unknown-warning-option",
+			"--target=x86_64-linux-gnu",
+		};
+		Expect(result.config->include_dirs == expected_include_dirs,
+			   "include dirs should normalize and preserve order");
+		Expect(result.config->defines == expected_defines, "defines should preserve order");
+		Expect(result.config->extra_args == expected_extra_args,
+			   "extra args should accept option-looking separate values");
 	}
 
 	void RejectsInvalidHeaderFilterRegex()
@@ -633,9 +669,6 @@ namespace
 		};
 		const std::vector<Case> cases = {
 			{"--class-filter", "Hoge"},
-			{"--include-dir", "include/generated"},
-			{"--define", "FEATURE=1"},
-			{"--extra-arg", "-Wno-error"},
 			{"--include-struct", "true"},
 			{"--access", "private"},
 		};
@@ -913,6 +946,7 @@ int main()
 	ParsesValidateLink();
 	ParsesValidationControls();
 	ParsesScannerFilters();
+	ParsesCompilerRescueArgs();
 	RejectsInvalidHeaderFilterRegex();
 	UsageMentionsEveryPublicOption();
 	ReportsMissingRequiredOptions();

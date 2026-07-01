@@ -198,6 +198,27 @@ namespace mockfakegen
 			return link_files;
 		}
 
+		[[nodiscard]] std::string DefineCompilerArg(std::string_view value)
+		{
+			if (value.starts_with("-D"))
+			{
+				return std::string(value);
+			}
+			return "-D" + std::string(value);
+		}
+
+		[[nodiscard]] std::vector<std::string> ConfigCompilerArgs(const Config& config)
+		{
+			std::vector<std::string> args;
+			args.reserve(config.defines.size() + config.extra_args.size());
+			for (const auto& define : config.defines)
+			{
+				args.push_back(DefineCompilerArg(define));
+			}
+			args.insert(args.end(), config.extra_args.begin(), config.extra_args.end());
+			return args;
+		}
+
 		[[nodiscard]] RunDiagnostic ToRunDiagnostic(const ConfigError& diagnostic)
 		{
 			RunDiagnostic result;
@@ -715,6 +736,8 @@ namespace mockfakegen
 			.fake_special_members = config.fake_special_members,
 			.fake_static_data = config.fake_static_data,
 			.interface_mock = config.interface_mock,
+			.extra_include_dirs = config.include_dirs,
+			.extra_args = ConfigCompilerArgs(config),
 		});
 		AppendRunDiagnostics(run_diagnostics, resolve_result.diagnostics);
 		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);

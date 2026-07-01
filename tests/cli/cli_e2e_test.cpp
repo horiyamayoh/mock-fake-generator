@@ -1224,6 +1224,75 @@ namespace
 			   "manifest should record synthetic fallback parse mode");
 	}
 
+	void CliCompilerArgsRescueMissingCompileDatabase(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "cli-compiler-args-product";
+		const auto include_dir = product_root / "include";
+		const auto sdk_dir = product_root / "sdk";
+		const auto build_dir = temp_root / "cli-compiler-args-build";
+		const auto output_dir = temp_root / "cli-compiler-args-generated";
+		std::filesystem::create_directories(build_dir);
+		WriteText(sdk_dir / "Dependency.h", "#pragma once\nstruct Dependency { int value; };\n");
+		WriteText(include_dir / "CliArgs.h",
+				  "#pragma once\n"
+				  "#ifndef CLI_DEFINE_ENABLED\n"
+				  "#error expected CLI define\n"
+				  "#endif\n"
+				  "#ifndef CLI_EXTRA_ARG_ENABLED\n"
+				  "#error expected CLI extra arg\n"
+				  "#endif\n"
+				  "#include \"Dependency.h\"\n"
+				  "class CliArgs {\n"
+				  "public:\n"
+				  "  bool Run(Dependency dependency);\n"
+				  "};\n");
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--include-dir",
+				   sdk_dir.string(),
+				   "--define",
+				   "CLI_DEFINE_ENABLED=1",
+				   "--extra-arg",
+				   "-DCLI_EXTRA_ARG_ENABLED=1",
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "cli_compiler_args");
+
+		Expect(result.exit_code == 0, "CLI compiler args should rescue missing compile database");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "rescued CLI compiler args should reach compile validation");
+		Expect(!Contains(stderr_text, "synthetic TU parse failed"),
+			   "CLI compiler args should prevent synthetic parse failure");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "CLI compiler args should prevent validation failure");
+		Expect(std::filesystem::exists(output_dir / "MockCliArgs.h"),
+			   "rescued CLI compiler args should publish mock header");
+		Expect(std::filesystem::exists(output_dir / "FakeCliArgs.cpp"),
+			   "rescued CLI compiler args should publish fake source");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"code\": \"compile_database_not_found\""),
+			   "manifest should retain missing compile database warning");
+		Expect(Contains(manifest, "\"parse_mode\": \"synthetic-tu\""),
+			   "manifest should record synthetic fallback parse mode");
+	}
+
 	void RegistryModeAffectsRuntime(const std::filesystem::path& temp_root,
 									const std::filesystem::path& product_dir,
 									const std::filesystem::path& build_dir)
@@ -1596,6 +1665,7 @@ int main()
 	PrivateTypeUsesAppearUnsupportedInManifest(temp_root);
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
 	MissingCompileDatabaseDiagnosticIsPrintedOnce(temp_root);
+	CliCompilerArgsRescueMissingCompileDatabase(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);

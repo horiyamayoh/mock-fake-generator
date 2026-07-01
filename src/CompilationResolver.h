@@ -56,6 +56,8 @@ namespace mockfakegen
 		bool fake_special_members = false;
 		bool fake_static_data = false;
 		bool interface_mock = false;
+		std::vector<std::filesystem::path> extra_include_dirs = {};
+		std::vector<std::string> extra_args = {};
 	};
 
 	struct CompilationResolveResult

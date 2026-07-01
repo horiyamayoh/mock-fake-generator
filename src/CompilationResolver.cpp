@@ -391,14 +391,28 @@ namespace mockfakegen
 			return args;
 		}
 
+		void AppendExtraCompilerArgs(std::vector<std::string>& args,
+									 const CompilationResolverOptions& options)
+		{
+			for (const auto& include_dir : options.extra_include_dirs)
+			{
+				args.push_back("-I");
+				args.push_back(AbsoluteNormalized(include_dir).generic_string());
+			}
+			args.insert(args.end(), options.extra_args.begin(), options.extra_args.end());
+		}
+
 		[[nodiscard]] ParsedTranslationUnit
-		ParseTranslationUnit(const clang::tooling::CompileCommand& command)
+		ParseTranslationUnit(const clang::tooling::CompileCommand& command,
+							 const CompilationResolverOptions& options)
 		{
 			ParsedTranslationUnit result;
 			result.source_path = CommandRelativePath(command, command.Filename);
 			result.command_directory = CommandDirectory(command);
 			result.tool_args = SanitizeCompileCommandArgs(command, false);
 			result.compile_args = SanitizeCompileCommandArgs(command, true);
+			AppendExtraCompilerArgs(result.tool_args, options);
+			AppendExtraCompilerArgs(result.compile_args, options);
 			const auto executable = command.CommandLine.empty()
 				? std::filesystem::path("clang++")
 				: std::filesystem::path(command.CommandLine.front());
@@ -732,7 +746,8 @@ namespace mockfakegen
 		[[nodiscard]] std::vector<std::string>
 		NearestCompileArgs(const HeaderModel& header,
 						   const std::vector<clang::tooling::CompileCommand>& commands,
-						   const std::filesystem::path& project_root)
+						   const std::filesystem::path& project_root,
+						   const CompilationResolverOptions& options)
 		{
 			std::optional<std::vector<std::string>> best_args;
 			std::size_t best_score = 0U;
@@ -765,10 +780,13 @@ namespace mockfakegen
 			{
 				auto args = *best_args;
 				AppendProjectRootInclude(args, project_root);
+				AppendExtraCompilerArgs(args, options);
 				return args;
 			}
 
-			return BuildSyntheticTuFallbackArgs(project_root);
+			auto args = BuildSyntheticTuFallbackArgs(project_root);
+			AppendExtraCompilerArgs(args, options);
+			return args;
 		}
 
 		void AppendUniqueValidationArgs(std::vector<std::string>& validation_args,
@@ -842,7 +860,7 @@ namespace mockfakegen
 
 		for (const auto& command : commands)
 		{
-			auto parsed = ParseTranslationUnit(command);
+			auto parsed = ParseTranslationUnit(command, options);
 			if (!ParseSucceeded(parsed))
 			{
 				const auto code = parsed.read_failure
@@ -915,7 +933,8 @@ namespace mockfakegen
 
 			auto synthetic_header = header;
 			synthetic_header.parsed_by_synthetic_tu = true;
-			const auto compile_args = NearestCompileArgs(synthetic_header, commands, project_root);
+			const auto compile_args =
+				NearestCompileArgs(synthetic_header, commands, project_root, options);
 			auto synthetic = ParseHeaderWithSyntheticTu({
 				.header_path = synthetic_header.absolute_path,
 				.project_root = project_root,

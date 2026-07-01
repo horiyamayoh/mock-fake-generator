@@ -31,8 +31,7 @@ Intentional limits:
 - Public class members only.
 - Class declarations in anonymous namespaces, nested class definitions, templates, and
   several complex method forms are reported as unsupported.
-- External config files, class filters, CLI-provided include dirs, CLI-provided defines,
-  and CLI-provided extra compiler args are recognized but deferred.
+- External config files and class filters are recognized but deferred.
 - Generated output never depends on ket.
 
 ## Requirements
@@ -113,9 +112,9 @@ The CLI accepts both `--option value` and `--option=value` for value options.
 | `--fake-special-members <bool>` | supported | `false` | Generate safe constructor/destructor fakes when supported. |
 | `--fake-static-data <bool>` | supported | `false` | Generate safe static data member definitions when supported. |
 | `--interface-mock <bool>` | supported | `false` | Generate inheritance-based interface mocks instead of link-replacement fakes. |
-| `--include-dir <path>` | deferred, repeatable | none | Recognized, but extra CLI include dirs are not implemented yet. |
-| `--define <macro>` | deferred, repeatable | none | Recognized, but extra CLI defines are not implemented yet. |
-| `--extra-arg <arg>` | deferred, repeatable | none | Recognized, but extra CLI compiler args are not implemented yet. |
+| `--include-dir <path>` | supported, repeatable | none | Add an include directory to synthetic fallback parsing and generated compile/link validation. |
+| `--define <macro>` | supported, repeatable | none | Add a preprocessor definition to synthetic fallback parsing and generated compile/link validation. Values may be written as `NAME` or `NAME=value`; a leading `-D` is also accepted. |
+| `--extra-arg <arg>` | supported, repeatable | none | Add an extra compiler argument to parsing and generated compile/link validation. Separate-form option-looking values are accepted, for example `--extra-arg --target=x86_64-linux-gnu`. |
 | `--dry-run` | supported | off | Resolve and plan writes without changing files. |
 | `--overwrite` | supported | off | Allow replacing existing generated files. |
 | `--strict` | supported | off | Return failure for unsupported items and link-readiness warnings. |
@@ -395,7 +394,7 @@ members.
 - `missing_required_option`, `missing_option_value`, `unknown_option`,
   `conflicting_option`, `duplicate_option`: fix the CLI invocation.
 - `deferred_option`: the option is known but not implemented yet. Remove it or use the
-  corresponding build-system configuration.
+  corresponding implemented CLI/build-system configuration.
 - `scanner_input_root_missing`, `scanner_input_root_not_directory`,
   `scanner_filesystem_error`: check `--input-root`, `--project-root`, permissions, and
   generated-output placement.

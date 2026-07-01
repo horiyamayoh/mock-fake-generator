@@ -454,9 +454,9 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--fake-special-members <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な constructor/destructor fake のみ生成し、unsafe case は unsupported |
 | `--fake-static-data <bool>` | bool value | `false` | implemented | CodeGenerator / Validator | safe な static data member definition のみ生成し、unsafe case は unsupported |
 | `--interface-mock <bool>` | bool value | `false` | implemented | CodeGenerator | pure interface では継承型 Mock header のみ生成し、unsafe case は unsupported |
-| `--include-dir <path>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
-| `--define <macro>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
-| `--extra-arg <arg>` | repeatable value | none | deferred | CompilationResolver | 使用時は `DeferredOption` |
+| `--include-dir <path>` | repeatable value | none | implemented | CompilationResolver / Validator | synthetic fallback parse と generated compile/link validation に追加 |
+| `--define <macro>` | repeatable value | none | implemented | CompilationResolver / Validator | `-D...` として synthetic fallback parse と generated compile/link validation に追加 |
+| `--extra-arg <arg>` | repeatable value | none | implemented | CompilationResolver / Validator | synthetic fallback parse と generated compile/link validation に追加。`--target=...` など option-looking value も separate form で受理 |
 | `--dry-run` | presence flag | off | implemented | OutputWriter / Runner | 値付きは invalid |
 | `--overwrite` | presence flag | off | implemented | OutputWriter | 値付きは invalid |
 | `--strict` | presence flag | off | implemented | PolicyEngine / Runner | `--best-effort` との同時指定は conflict |
@@ -665,7 +665,7 @@ include:      #include "include/foo/Hoge.h"
 
 1. そのヘッダを include している translation unit の compile command
 2. 同じディレクトリ階層に最も近い translation unit の compile command
-3. `--extra-arg`, `--include-dir`, `--define` で与えた fallback command
+3. compile command または fallback command に追加される `--extra-arg`, `--include-dir`, `--define`
 4. 最小構成の `clang++ -std=c++23 -I<project-root>`
 
 利点:

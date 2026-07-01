@@ -96,8 +96,7 @@ namespace mockfakegen
 
 		[[nodiscard]] bool IsDeferredValueOption(std::string_view option) noexcept
 		{
-			return option == kConfigOption || option == kClassFilterOption ||
-				option == kIncludeDirOption || option == kDefineOption || option == kExtraArgOption;
+			return option == kConfigOption || option == kClassFilterOption;
 		}
 
 		[[nodiscard]] bool IsKnownOption(std::string_view option) noexcept
@@ -183,6 +182,7 @@ namespace mockfakegen
 						std::size_t& index,
 						std::string_view option,
 						const std::optional<std::string>& inline_value,
+						bool allow_option_like_value,
 						std::vector<ConfigError>& errors)
 		{
 			if (inline_value.has_value())
@@ -191,7 +191,8 @@ namespace mockfakegen
 			}
 
 			const auto value_index = index + 1U;
-			if (value_index >= arguments.size() || StartsWithOptionPrefix(arguments[value_index]))
+			if (value_index >= arguments.size() ||
+				(!allow_option_like_value && StartsWithOptionPrefix(arguments[value_index])))
 			{
 				AddError(errors,
 						 ConfigErrorCode::MissingOptionValue,
@@ -415,8 +416,8 @@ namespace mockfakegen
 			}
 
 			const auto should_apply = MarkOptionSeen(seen_options, result.errors, option);
-			const auto value =
-				ReadOptionValue(arguments, index, option, inline_value, result.errors);
+			const auto value = ReadOptionValue(
+				arguments, index, option, inline_value, option == kExtraArgOption, result.errors);
 			if (!value.has_value() || !should_apply)
 			{
 				continue;
@@ -655,6 +656,38 @@ namespace mockfakegen
 					config.interface_mock = true;
 				}
 			}
+			else if (option == kIncludeDirOption)
+			{
+				const auto include_dir = NormalizePathValue(result.errors, option, *value);
+				if (include_dir.has_value())
+				{
+					config.include_dirs.push_back(*include_dir);
+				}
+			}
+			else if (option == kDefineOption)
+			{
+				if (value->empty())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kDefineOption,
+							 "--define must not be empty.");
+					continue;
+				}
+				config.defines.push_back(*value);
+			}
+			else if (option == kExtraArgOption)
+			{
+				if (value->empty())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kExtraArgOption,
+							 "--extra-arg must not be empty.");
+					continue;
+				}
+				config.extra_args.push_back(*value);
+			}
 			else if (option == kJobsOption)
 			{
 				const auto parsed_jobs = support::ParsePositiveInt(*value);
@@ -891,9 +924,9 @@ namespace mockfakegen
 			"  --fake-special-members <bool> Generate safe constructor/destructor fakes.\n"
 			"  --fake-static-data <bool> Generate safe static data member definitions.\n"
 			"  --interface-mock <bool> Generate inheritance-based interface mocks.\n"
-			"  --include-dir <path>    Deferred: repeatable extra include directory.\n"
-			"  --define <macro>        Deferred: repeatable preprocessor definition.\n"
-			"  --extra-arg <arg>       Deferred: repeatable extra compiler argument.\n"
+			"  --include-dir <path>    Repeatable extra include directory for parse/validation.\n"
+			"  --define <macro>        Repeatable preprocessor definition for parse/validation.\n"
+			"  --extra-arg <arg>       Repeatable extra compiler argument for parse/validation.\n"
 			"  --dry-run               Resolve config without writing generated files.\n"
 			"  --overwrite             Allow replacing existing generated files.\n"
 			"  --strict                Fail when unsupported input is encountered.\n"
