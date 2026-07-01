@@ -660,6 +660,48 @@ namespace
 			   "manifest should record shared-owner lifetime behavior");
 	}
 
+	void MinimalGeneratorSelectsSharedOwnerRuntimeAndApi()
+	{
+		auto simple_model = HogeModel();
+		simple_model.registry_mode = mockfakegen::RegistryMode::SharedOwner;
+
+		const auto simple_files = mockfakegen::GenerateMinimalMockFake(simple_model);
+
+		const auto& simple_runtime = FindFile(simple_files, "MockFakeRuntime.h");
+		Expect(Contains(simple_runtime.content, "ScopedSharedMock"),
+			   "minimal shared-owner runtime should expose shared scope API");
+		Expect(!Contains(simple_runtime.content, "thread_local"),
+			   "minimal shared-owner runtime should not emit thread-local registry");
+
+		const auto& simple_mock = FindFile(simple_files, "MockHoge.h");
+		Expect(Contains(simple_mock.content,
+						"using ScopedMockHoge = ::mockfake::ScopedSharedMock<MockHoge>;"),
+			   "minimal shared-owner mock alias should use shared scope API");
+
+		const auto& simple_fake = FindFile(simple_files, "FakeHoge.cpp");
+		Expect(Contains(simple_fake.content,
+						"if (auto mockfake_current_mock = "
+						"::mockfake::CurrentMock<MockHoge>())"),
+			   "minimal shared-owner fake should retain a shared_ptr copy");
+		Expect(!Contains(simple_fake.content,
+						 "if (auto* mockfake_current_mock = "
+						 "::mockfake::CurrentMock<MockHoge>())"),
+			   "minimal shared-owner fake should not expect a raw pointer registry");
+
+		auto class_model = ReportBetaModel();
+		class_model.registry_mode = mockfakegen::RegistryMode::SharedOwner;
+
+		const auto class_files = mockfakegen::GenerateMinimalMockFake(class_model);
+
+		const auto& class_runtime = FindFile(class_files, "MockFakeRuntime.h");
+		Expect(Contains(class_runtime.content, "ScopedSharedMock"),
+			   "ClassModel minimal generator should preserve shared-owner runtime");
+		const auto& class_mock = FindFile(class_files, "MockBeta.h");
+		Expect(Contains(class_mock.content,
+						"using ScopedMockBeta = ::mockfake::ScopedSharedMock<MockBeta>;"),
+			   "ClassModel minimal generator should preserve shared-owner mock alias");
+	}
+
 	void ProjectOptionsSelectFallbackPolicyRuntimeAndArtifacts()
 	{
 		const std::vector classes = {ReportBetaModel()};
@@ -1016,6 +1058,7 @@ int main()
 	KeepsShortFilenamesWithoutCollision();
 	ProjectOptionsSelectGlobalMutexRuntime();
 	ProjectOptionsSelectSharedOwnerRuntimeAndApi();
+	MinimalGeneratorSelectsSharedOwnerRuntimeAndApi();
 	ProjectOptionsSelectFallbackPolicyRuntimeAndArtifacts();
 	GeneratedProjectPreservesDeclarationOrderAfterProjectSort();
 	SeparatesMockAndFakeMethods();

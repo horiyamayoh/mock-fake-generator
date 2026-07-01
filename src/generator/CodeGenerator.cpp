@@ -1348,6 +1348,7 @@ namespace mockfakegen
 				.static_data_members = {},
 				.link_ready = IsLinkReady(class_model),
 				.link_readiness_reasons = LinkReadinessReasons(class_model),
+				.registry_mode = class_model.registry_mode,
 				.interface_mock = class_model.interface_mock,
 				.mock_destructor_override = class_model.mock_destructor_override,
 			};
@@ -1448,7 +1449,7 @@ namespace mockfakegen
 		if (HasFakeSource(class_model))
 		{
 			files.push_back(GenerateFakeSource(class_model));
-			files.push_back(MakeThreadLocalRuntimeHeader());
+			files.push_back(MakeRuntimeHeader(class_model.registry_mode));
 		}
 		SortGeneratedFiles(files);
 		return files;

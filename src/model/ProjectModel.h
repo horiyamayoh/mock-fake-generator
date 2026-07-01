@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "Config.h"
+
 namespace mockfakegen
 {
 	enum class AccessKind
@@ -187,6 +189,7 @@ namespace mockfakegen
 		std::vector<UnsupportedItem> unsupported_items;
 		bool interface_mock = false;
 		bool mock_destructor_override = false;
+		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
 	};
