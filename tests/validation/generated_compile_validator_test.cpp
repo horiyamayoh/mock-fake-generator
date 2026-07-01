@@ -509,6 +509,49 @@ namespace
 			   "invalid artifact directory diagnostic should name the bad path");
 	}
 
+	void UnsafeGeneratedPathsAreRejectedBeforeStaging()
+	{
+		TempTree tree;
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile("Safe.cpp",
+										   "int mockfakegen_safe()\n"
+										   "{\n"
+										   "\treturn 1;\n"
+										   "}\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+			mockfakegen::MakeGeneratedFile("z/../../Escape.cpp",
+										   "int mockfakegen_escape()\n"
+										   "{\n"
+										   "\treturn 2;\n"
+										   "}\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+		};
+		auto options = CompileOptions();
+		options.keep_failed_artifacts = true;
+		options.artifact_dir = tree.root() / "artifacts";
+
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(options, files);
+
+		Expect(!result.ok(), "unsafe generated path should fail validation");
+		Expect(result.commands.empty(), "unsafe generated path should not run compiler");
+		Expect(result.diagnostics.size() == 1U,
+			   "unsafe generated path should produce one diagnostic");
+		Expect(Contains(result.diagnostics[0].message, "invalid generated validation path"),
+			   "unsafe generated path diagnostic should identify validation path");
+		Expect(Contains(result.diagnostics[0].message, "must not contain '..' traversal"),
+			   "unsafe generated path diagnostic should explain traversal");
+		Expect(!result.diagnostics[0].validation_artifact_path.empty(),
+			   "unsafe path failure should keep artifact root when requested");
+		Expect(std::filesystem::exists(result.diagnostics[0].validation_artifact_path),
+			   "unsafe path artifact root should exist");
+		Expect(!std::filesystem::exists(result.diagnostics[0].validation_artifact_path /
+										"generated/Safe.cpp"),
+			   "safe file should not be staged before path preflight completes");
+		Expect(
+			!std::filesystem::exists(result.diagnostics[0].validation_artifact_path / "Escape.cpp"),
+			"traversal path should not write outside generated root");
+	}
+
 	void MissingGMockIncludePathIsClear()
 	{
 		auto options = CompileOptions();
@@ -570,6 +613,7 @@ int main()
 	CompileValidationTimesOut();
 	KeepsFailedArtifactsWhenRequested();
 	InvalidArtifactDirectoryReportsDiagnostic();
+	UnsafeGeneratedPathsAreRejectedBeforeStaging();
 	MissingGMockIncludePathIsClear();
 	MentioningGMockHeaderDoesNotImplyMissingIncludePath();
 	return 0;

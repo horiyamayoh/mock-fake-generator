@@ -24,6 +24,14 @@ namespace mockfakegen
 	namespace
 	{
 		constexpr std::size_t kStderrSummaryLimit = 4000U;
+		constexpr std::string_view kReservedWriterStagingDirectoryName = ".mockfakegen-staging";
+
+		struct PathValidationResult
+		{
+			bool ok = false;
+			std::filesystem::path normalized_path;
+			std::string message;
+		};
 
 		struct TempTree
 		{
@@ -111,6 +119,105 @@ namespace mockfakegen
 			}
 
 			return GeneratedCompileValidationStage::Compile;
+		}
+
+		[[nodiscard]] bool IsParentReference(const std::filesystem::path& component)
+		{
+			return component == "..";
+		}
+
+		[[nodiscard]] bool IsCurrentReference(const std::filesystem::path& component)
+		{
+			return component == ".";
+		}
+
+		[[nodiscard]] bool HasRootEscape(const std::filesystem::path& path)
+		{
+			return path.is_absolute() || path.has_root_path() || path.has_root_name() ||
+				path.has_root_directory();
+		}
+
+		[[nodiscard]] PathValidationResult
+		ValidateGeneratedPath(const std::filesystem::path& raw_path)
+		{
+			if (raw_path.empty() || raw_path.generic_string().empty())
+			{
+				return PathValidationResult{
+					.ok = false,
+					.normalized_path = {},
+					.message = "generated output path is empty.",
+				};
+			}
+
+			if (HasRootEscape(raw_path))
+			{
+				return PathValidationResult{
+					.ok = false,
+					.normalized_path = {},
+					.message =
+						"generated output path must be relative and must not contain a root name.",
+				};
+			}
+
+			for (const auto& component : raw_path)
+			{
+				if (IsParentReference(component))
+				{
+					return PathValidationResult{
+						.ok = false,
+						.normalized_path = {},
+						.message = "generated output path must not contain '..' traversal.",
+					};
+				}
+			}
+
+			const auto normalized_path = raw_path.lexically_normal();
+			if (normalized_path.empty() || IsCurrentReference(normalized_path) ||
+				normalized_path.filename().empty())
+			{
+				return PathValidationResult{
+					.ok = false,
+					.normalized_path = {},
+					.message = "generated output path must name a file.",
+				};
+			}
+
+			if (HasRootEscape(normalized_path))
+			{
+				return PathValidationResult{
+					.ok = false,
+					.normalized_path = {},
+					.message = "normalized generated output path escapes the output directory.",
+				};
+			}
+
+			bool first_component = true;
+			for (const auto& component : normalized_path)
+			{
+				if (IsParentReference(component))
+				{
+					return PathValidationResult{
+						.ok = false,
+						.normalized_path = {},
+						.message = "normalized generated output path escapes the output directory.",
+					};
+				}
+				if (first_component && component == kReservedWriterStagingDirectoryName)
+				{
+					return PathValidationResult{
+						.ok = false,
+						.normalized_path = {},
+						.message = "generated output path uses a reserved writer staging path.",
+					};
+				}
+				first_component = false;
+			}
+
+			return PathValidationResult{
+				.ok = true,
+				.normalized_path = normalized_path,
+				.message = {},
+			};
 		}
 
 		[[nodiscard]] std::string ShellQuote(std::string_view value)
@@ -693,7 +800,49 @@ namespace mockfakegen
 		const auto generated_root = tree.root / "generated";
 		const auto artifact_path =
 			options.keep_failed_artifacts ? tree.root : std::filesystem::path{};
+		std::vector<GeneratedFile> staged_files;
+		std::map<std::string, std::filesystem::path> staged_sources_by_path;
 		for (const auto& file : CxxFiles(files))
+		{
+			auto path_result = ValidateGeneratedPath(file.relative_path);
+			if (!path_result.ok)
+			{
+				AddDiagnostic(result,
+							  StageForMode(options.mode),
+							  file.relative_path,
+							  artifact_path,
+							  "invalid generated validation path '" +
+								  file.relative_path.generic_string() +
+								  "': " + path_result.message);
+				tree.keep = options.keep_failed_artifacts;
+				return result;
+			}
+
+			const auto output_path =
+				(generated_root / path_result.normalized_path).lexically_normal();
+			const auto output_key = output_path.generic_string();
+			const auto [source, inserted] =
+				staged_sources_by_path.emplace(output_key, file.relative_path);
+			if (!inserted)
+			{
+				AddDiagnostic(result,
+							  StageForMode(options.mode),
+							  output_path,
+							  artifact_path,
+							  "validation output path collision: generated files '" +
+								  source->second.generic_string() + "' and '" +
+								  file.relative_path.generic_string() + "' both map to '" +
+								  output_key + "'.");
+				tree.keep = options.keep_failed_artifacts;
+				return result;
+			}
+
+			auto staged_file = file;
+			staged_file.relative_path = std::move(path_result.normalized_path);
+			staged_files.push_back(std::move(staged_file));
+		}
+
+		for (const auto& file : staged_files)
 		{
 			const auto output_path = generated_root / file.relative_path;
 			if (!WriteText(output_path, file.content))
@@ -709,7 +858,7 @@ namespace mockfakegen
 		}
 
 		const auto smoke_source = tree.root / "mock_headers_smoke.cpp";
-		if (!WriteText(smoke_source, BuildMockHeadersSmokeSource(files)))
+		if (!WriteText(smoke_source, BuildMockHeadersSmokeSource(staged_files)))
 		{
 			AddDiagnostic(result,
 						  StageForMode(options.mode),
@@ -720,7 +869,7 @@ namespace mockfakegen
 			return result;
 		}
 
-		const auto sorted_files = CxxFiles(files);
+		const auto& sorted_files = staged_files;
 		std::map<std::string, std::filesystem::path> fake_object_paths;
 		std::map<std::string, std::filesystem::path> object_sources_by_path;
 		if (options.mode != ValidationMode::Syntax)
