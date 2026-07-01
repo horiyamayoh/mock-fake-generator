@@ -229,13 +229,22 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	list(REMOVE_DUPLICATES MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS)
 	string(JOIN "|" MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS_TEXT ${MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS})
 	set(MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES "")
+	set(MOCKFAKEGEN_VALIDATION_GMOCK_DEPENDENCY_TARGETS "")
 	foreach(gmock_link_target IN LISTS MOCKFAKEGEN_VALIDATION_GMOCK_LINK_TARGETS)
 		if(TARGET ${gmock_link_target})
 			list(APPEND MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES "$<TARGET_FILE:${gmock_link_target}>")
+			list(APPEND MOCKFAKEGEN_VALIDATION_GMOCK_DEPENDENCY_TARGETS ${gmock_link_target})
 		endif()
 	endforeach()
 	list(REMOVE_DUPLICATES MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES)
+	list(REMOVE_DUPLICATES MOCKFAKEGEN_VALIDATION_GMOCK_DEPENDENCY_TARGETS)
 	string(JOIN "|" MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES_TEXT ${MOCKFAKEGEN_VALIDATION_GMOCK_LINK_FILES})
+
+	function(mockfakegen_add_validation_gmock_dependencies target)
+		if(MOCKFAKEGEN_VALIDATION_GMOCK_DEPENDENCY_TARGETS)
+			add_dependencies(${target} ${MOCKFAKEGEN_VALIDATION_GMOCK_DEPENDENCY_TARGETS})
+		endif()
+	endfunction()
 
 	add_test(
 		NAME mockfakegen_install_smoke
@@ -281,6 +290,7 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	mockfakegen_apply_strict_warnings(mockfakegen_cli_e2e_test)
 	mockfakegen_apply_sanitizers(mockfakegen_cli_e2e_test)
 	add_dependencies(mockfakegen_cli_e2e_test mockfakegen)
+	mockfakegen_add_validation_gmock_dependencies(mockfakegen_cli_e2e_test)
 
 	add_test(NAME mockfakegen_cli_e2e_test COMMAND mockfakegen_cli_e2e_test)
 
@@ -1215,6 +1225,7 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	)
 	mockfakegen_apply_strict_warnings(mockfakegen_generated_compile_validator_test)
 	mockfakegen_apply_sanitizers(mockfakegen_generated_compile_validator_test)
+	mockfakegen_add_validation_gmock_dependencies(mockfakegen_generated_compile_validator_test)
 
 	add_test(
 		NAME mockfakegen_generated_compile_validator_test
