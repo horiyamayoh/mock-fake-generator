@@ -60,6 +60,7 @@ namespace mockfakegen
 	{
 		ProjectModel project;
 		std::vector<HeaderParseAttempt> parse_attempts;
+		std::vector<std::string> validation_args;
 		std::vector<CompilationResolverDiagnostic> diagnostics;
 
 		[[nodiscard]] bool ok() const noexcept;

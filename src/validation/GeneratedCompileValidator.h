@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -16,6 +17,9 @@ namespace mockfakegen
 		std::filesystem::path compiler = "c++";
 		std::vector<std::filesystem::path> include_dirs;
 		std::vector<std::string> extra_args;
+		std::chrono::milliseconds command_timeout = std::chrono::seconds(30);
+		bool keep_failed_artifacts = false;
+		std::filesystem::path artifact_dir;
 	};
 
 	struct GeneratedCompileCommandResult
@@ -28,6 +32,7 @@ namespace mockfakegen
 	struct GeneratedCompileDiagnostic
 	{
 		std::filesystem::path source_path;
+		std::filesystem::path validation_artifact_path;
 		std::string message;
 		std::string command;
 		std::string stderr_summary;

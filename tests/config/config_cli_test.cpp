@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -93,6 +94,12 @@ namespace
 			   "format style should default to file");
 		Expect(result.config->validate == mockfakegen::ValidationMode::Compile,
 			   "validate should default to compile");
+		Expect(result.config->validation_timeout == std::chrono::seconds(30),
+			   "validation timeout should default to 30 seconds");
+		Expect(!result.config->validation_keep_artifacts,
+			   "validation artifacts should default to cleanup");
+		Expect(result.config->validation_artifact_dir.empty(),
+			   "validation artifact dir should default empty");
 		Expect(result.config->jobs == 3, "jobs should parse as integer");
 	}
 
@@ -151,6 +158,24 @@ namespace
 		Expect(result.ok(), "validate none config should parse");
 		Expect(result.config->validate == mockfakegen::ValidationMode::None,
 			   "validate should parse none");
+	}
+
+	void ParsesValidationControls()
+	{
+		auto args = ValidArgs();
+		args.push_back("--validation-timeout-ms=250");
+		args.push_back("--validation-keep-artifacts");
+		args.push_back("--validation-artifact-dir=validation-artifacts");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "validation controls should parse");
+		Expect(result.config->validation_timeout == std::chrono::milliseconds(250),
+			   "validation timeout should parse milliseconds");
+		Expect(result.config->validation_keep_artifacts,
+			   "validation keep artifacts flag should parse");
+		Expect(result.config->validation_artifact_dir == ExpectedPath("validation-artifacts"),
+			   "validation artifact dir should normalize");
 	}
 
 	void ReportsMissingRequiredOptions()
@@ -241,6 +266,21 @@ namespace
 		Expect(result.errors[0].option == "--validate", "invalid validate should identify option");
 		Expect(result.errors[0].message == "--validate must be none, syntax, or compile.",
 			   "invalid validate diagnostic should be deterministic");
+	}
+
+	void ReportsInvalidValidationTimeout()
+	{
+		auto args = ValidArgs();
+		args.push_back("--validation-timeout-ms=0");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "invalid validation timeout should fail");
+		Expect(result.errors.size() == 1U, "invalid validation timeout should produce one error");
+		Expect(result.errors[0].option == "--validation-timeout-ms",
+			   "invalid validation timeout should identify option");
+		Expect(result.errors[0].message == "--validation-timeout-ms must be a positive integer.",
+			   "invalid validation timeout diagnostic should be deterministic");
 	}
 
 	void ReportsStrictBestEffortConflict()
@@ -434,12 +474,14 @@ int main()
 	ParsesEmitCMakeFragmentFalse();
 	ParsesFormatStyleGoogle();
 	ParsesValidateNone();
+	ParsesValidationControls();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();
 	ReportsInvalidEmitAllMocks();
 	ReportsInvalidEmitCMakeFragment();
 	ReportsInvalidFormatStyle();
 	ReportsInvalidValidate();
+	ReportsInvalidValidationTimeout();
 	ReportsStrictBestEffortConflict();
 	ReportsDuplicateOptions();
 	ParsesGlobalMutexRegistryMode();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <iosfwd>
 #include <optional>
@@ -88,6 +89,9 @@ namespace mockfakegen
 		bool interface_mock = false;
 		FormatStyleKind format_style = FormatStyleKind::File;
 		ValidationMode validate = ValidationMode::Compile;
+		std::chrono::milliseconds validation_timeout = std::chrono::seconds(30);
+		bool validation_keep_artifacts = false;
+		std::filesystem::path validation_artifact_dir;
 		int jobs = 1;
 	};
 

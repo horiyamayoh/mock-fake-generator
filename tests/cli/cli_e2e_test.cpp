@@ -127,6 +127,18 @@ namespace
 		WriteText(build_dir / "compile_commands.json", json);
 	}
 
+	void WriteSingleCompileCommand(const std::filesystem::path& build_dir,
+								   const std::filesystem::path& directory,
+								   const std::filesystem::path& source,
+								   std::string_view command)
+	{
+		const auto json = std::string("[\n") + "  {\n" +
+			"    \"directory\": " + JsonString(directory.string()) + ",\n" +
+			"    \"command\": " + JsonString(command) + ",\n" +
+			"    \"file\": " + JsonString(source.string()) + "\n" + "  }\n" + "]\n";
+		WriteText(build_dir / "compile_commands.json", json);
+	}
+
 	[[nodiscard]] CommandResult RunMockfakegen(const std::filesystem::path& temp_root,
 											   std::vector<std::string> args,
 											   std::string_view label)
@@ -234,6 +246,90 @@ namespace
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "compile validation should not produce errors");
 		ExpectGeneratedCoreFiles(output_dir);
+	}
+
+	void SyntaxValidationRunsFromRealCli(const std::filesystem::path& temp_root,
+										 const std::filesystem::path& product_dir,
+										 const std::filesystem::path& build_dir)
+	{
+		const auto output_dir = temp_root / "syntax-generated";
+		auto args = BaseArgs(product_dir, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "syntax",
+				   "--format-style",
+				   "none",
+				   "--fake-special-members",
+				   "true",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "syntax");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "syntax validation CLI generation should succeed");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "syntax validation should run validation commands");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "syntax validation should not produce validation errors");
+		ExpectGeneratedCoreFiles(output_dir);
+	}
+
+	void CompileValidationInheritsCompileDatabaseArgs(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "compile-db-product";
+		const auto include_dir = product_root / "include";
+		const auto config_dir = product_root / "config";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "compile-db-build";
+		const auto output_dir = temp_root / "compile-db-generated";
+		WriteText(config_dir / "Dependency.h",
+				  "#pragma once\n"
+				  "struct Dependency { int value; };\n");
+		WriteText(include_dir / "Feature.h",
+				  "#pragma once\n"
+				  "#ifndef MOCKFAKEGEN_FROM_COMPILE_DB\n"
+				  "#error expected compile database define\n"
+				  "#endif\n"
+				  "#include \"Dependency.h\"\n"
+				  "class Feature { public: bool Run(Dependency dependency); };\n");
+		const auto source = source_dir / "Feature.cpp";
+		WriteText(source,
+				  "#include \"Feature.h\"\n"
+				  "bool Feature::Run(Dependency dependency) { return dependency.value != 0; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 " +
+			ShellQuote("-I" + include_dir.string()) + " " + ShellQuote("-I" + config_dir.string()) +
+			" -DMOCKFAKEGEN_FROM_COMPILE_DB -c " + ShellQuote(source.string()) + " -o feature.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "compile_db_validation");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "compile DB validation inheritance should succeed");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "compile DB validation should run compile commands");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "compile DB validation should not produce validation errors");
+		Expect(std::filesystem::exists(output_dir / "MockFeature.h"),
+			   "compile DB product mock should be generated");
 	}
 
 	void DryRunDoesNotPublishFiles(const std::filesystem::path& temp_root,
@@ -428,6 +524,7 @@ namespace
 		unsetenv("MOCKFAKEGEN_GMOCK_INCLUDE_DIRS");
 #endif
 		const auto output_dir = temp_root / "validation-failure";
+		const auto artifact_dir = temp_root / "validation-artifacts";
 		auto args = BaseArgs(product_dir, build_dir, output_dir);
 		Append(args,
 			   {
@@ -437,6 +534,9 @@ namespace
 				   "none",
 				   "--fake-special-members",
 				   "true",
+				   "--validation-keep-artifacts",
+				   "--validation-artifact-dir",
+				   artifact_dir.string(),
 			   });
 
 		const auto result = RunMockfakegen(temp_root, args, "validation_failure");
@@ -457,6 +557,10 @@ namespace
 			   "manifest should include validation command count");
 		Expect(Contains(manifest, "gMock include path is missing"),
 			   "validation diagnostic message should appear in manifest");
+		Expect(Contains(manifest, artifact_dir.generic_string()),
+			   "manifest should include kept validation artifact path");
+		Expect(std::filesystem::exists(artifact_dir),
+			   "validation artifact directory should be retained");
 	}
 } // namespace
 
@@ -476,6 +580,8 @@ int main()
 	WriteCompileCommands(build_dir, product_dir);
 
 	GeneratesAndValidatesFromRealCli(temp_root, product_dir, build_dir);
+	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
+	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);

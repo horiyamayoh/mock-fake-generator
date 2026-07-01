@@ -171,6 +171,7 @@ namespace
 								 .args =
 									 {
 										 "c++",
+										 "--driver-mode=g++",
 										 "-std=c++23",
 										 "-I" + (tree.root() / "include").generic_string(),
 										 "-DFROM_REAL_TU",
@@ -202,6 +203,10 @@ namespace
 			   "parse mode string should be reportable");
 		Expect(HasCompileArg(result.parse_attempts[0].compile_args, "-DFROM_REAL_TU"),
 			   "parse attempt should expose compile args");
+		Expect(HasCompileArg(result.validation_args, "-DFROM_REAL_TU"),
+			   "validation args should inherit real TU defines");
+		Expect(!HasCompileArg(result.validation_args, "--driver-mode=g++"),
+			   "validation args should omit clang driver mode");
 		Expect(!result.parse_attempts[0].parse_command.empty(),
 			   "parse attempt should expose parse command");
 	}

@@ -192,6 +192,10 @@ namespace mockfakegen
 				{
 					continue;
 				}
+				if (arg.starts_with("--driver-mode="))
+				{
+					continue;
+				}
 
 				args.push_back(arg);
 			}
@@ -443,6 +447,21 @@ namespace mockfakegen
 
 			return BuildSyntheticTuFallbackArgs(project_root);
 		}
+
+		void AppendUniqueValidationArgs(std::vector<std::string>& validation_args,
+										const std::vector<std::string>& compile_args)
+		{
+			for (const auto& arg : compile_args)
+			{
+				const auto exists =
+					std::find(validation_args.begin(), validation_args.end(), arg) !=
+					validation_args.end();
+				if (!exists)
+				{
+					validation_args.push_back(arg);
+				}
+			}
+		}
 	} // namespace
 
 	bool CompilationResolveResult::ok() const noexcept
@@ -494,6 +513,7 @@ namespace mockfakegen
 										  parsed.source_path.generic_string());
 				continue;
 			}
+			AppendUniqueValidationArgs(result.validation_args, parsed.compile_args);
 
 			for (auto& header : result.project.headers)
 			{
@@ -566,6 +586,7 @@ namespace mockfakegen
 										  synthetic_header.absolute_path.generic_string());
 				continue;
 			}
+			AppendUniqueValidationArgs(result.validation_args, synthetic.compile_args);
 
 			const auto extraction = ExtractClassDefinitionsFromAst(
 				*synthetic.ast,

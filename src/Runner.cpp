@@ -266,6 +266,7 @@ namespace mockfakegen
 				"rerun the recorded compiler command and fix the generated input";
 			result.command = diagnostic.command;
 			result.stderr_summary = diagnostic.stderr_summary;
+			result.validation_artifact_path = diagnostic.validation_artifact_path;
 			return result;
 		}
 
@@ -614,7 +615,10 @@ namespace mockfakegen
 				.mode = config.validate,
 				.compiler = ValidationCompiler(),
 				.include_dirs = ValidationIncludeDirs(config, resolve_result.project.headers),
-				.extra_args = {},
+				.extra_args = resolve_result.validation_args,
+				.command_timeout = config.validation_timeout,
+				.keep_failed_artifacts = config.validation_keep_artifacts,
+				.artifact_dir = config.validation_artifact_dir,
 			},
 			format_result.files);
 		AppendRunDiagnostics(run_diagnostics, validation_result.diagnostics);

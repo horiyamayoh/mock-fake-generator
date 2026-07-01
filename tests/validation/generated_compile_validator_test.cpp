@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -5,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -26,6 +28,49 @@ namespace
 	{
 		return text.find(token) != std::string_view::npos;
 	}
+
+	class TempTree
+	{
+	  public:
+		TempTree()
+			: root_(std::filesystem::temp_directory_path() /
+					("mockfakegen_compile_validator_test_" + std::to_string(UniqueSuffix())))
+		{
+			std::filesystem::remove_all(root_);
+			std::filesystem::create_directories(root_);
+		}
+
+		TempTree(const TempTree&) = delete;
+		TempTree& operator=(const TempTree&) = delete;
+
+		~TempTree()
+		{
+			std::error_code error;
+			std::filesystem::remove_all(root_, error);
+		}
+
+		[[nodiscard]] const std::filesystem::path& root() const noexcept
+		{
+			return root_;
+		}
+
+		void Write(std::string_view relative_path, std::string_view content) const
+		{
+			const auto path = root_ / std::filesystem::path(relative_path);
+			std::filesystem::create_directories(path.parent_path());
+			std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+			stream << content;
+			Expect(stream.good(), "fixture file should be written");
+		}
+
+	  private:
+		[[nodiscard]] static long long UniqueSuffix()
+		{
+			return std::chrono::steady_clock::now().time_since_epoch().count();
+		}
+
+		std::filesystem::path root_;
+	};
 
 	[[nodiscard]] std::string ReadText(const std::filesystem::path& path)
 	{
@@ -148,6 +193,9 @@ namespace
 			.compiler = MOCKFAKEGEN_CXX_COMPILER,
 			.include_dirs = include_dirs,
 			.extra_args = {},
+			.command_timeout = std::chrono::seconds(30),
+			.keep_failed_artifacts = false,
+			.artifact_dir = {},
 		};
 	}
 
@@ -176,6 +224,24 @@ namespace
 		Expect(result.ok(), "generated shared-owner output should compile");
 		Expect(!result.skipped, "shared-owner compile validation should not be skipped");
 		Expect(result.commands.size() == 2U, "mock header smoke and fake source should compile");
+	}
+
+	void SyntaxValidationUsesSyntaxOnly()
+	{
+		auto options = CompileOptions();
+		options.mode = mockfakegen::ValidationMode::Syntax;
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(result.ok(), "syntax validation should succeed for generated fixture");
+		Expect(result.commands.size() == 2U,
+			   "syntax validation should check smoke and fake source");
+		for (const auto& command : result.commands)
+		{
+			Expect(Contains(command.command, "-fsyntax-only"),
+				   "syntax validation command should use -fsyntax-only");
+		}
 	}
 
 	void NoneValidationSkipsCompiler()
@@ -214,6 +280,58 @@ namespace
 			   "failure diagnostic should keep stderr summary");
 	}
 
+	void CompileValidationTimesOut()
+	{
+		TempTree tree;
+		tree.Write("slow-compiler.sh",
+				   "#!/bin/sh\n"
+				   "sleep 2\n"
+				   "exit 0\n");
+		std::filesystem::permissions(tree.root() / "slow-compiler.sh",
+									 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::add);
+		auto options = CompileOptions();
+		options.compiler = tree.root() / "slow-compiler.sh";
+		options.command_timeout = std::chrono::milliseconds(100);
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(!result.ok(), "slow compiler should time out");
+		Expect(!result.diagnostics.empty(), "timeout should produce diagnostics");
+		Expect(result.commands[0].exit_code == 124, "timeout exit should be recorded");
+		Expect(Contains(result.diagnostics[0].message, "timed out"),
+			   "timeout diagnostic should be explicit");
+	}
+
+	void KeepsFailedArtifactsWhenRequested()
+	{
+		TempTree tree;
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile("MockBroken.h",
+										   "#pragma once\n"
+										   "struct MockBroken\n"
+										   "{\n"
+										   "\tvoid Broken(;\n"
+										   "};\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+		};
+		auto options = CompileOptions();
+		options.keep_failed_artifacts = true;
+		options.artifact_dir = tree.root() / "artifacts";
+
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(options, files);
+
+		Expect(!result.ok(), "invalid generated C++ should fail validation");
+		Expect(!result.diagnostics[0].validation_artifact_path.empty(),
+			   "kept artifact path should be recorded");
+		Expect(std::filesystem::exists(result.diagnostics[0].validation_artifact_path),
+			   "kept artifact path should exist");
+		Expect(std::filesystem::exists(result.diagnostics[0].validation_artifact_path /
+									   "generated/MockBroken.h"),
+			   "generated failing file should be retained");
+	}
+
 	void MissingGMockIncludePathIsClear()
 	{
 		auto options = CompileOptions();
@@ -239,8 +357,11 @@ int main()
 {
 	CompileValidationSucceedsForGeneratedFixture();
 	CompileValidationSucceedsForSharedOwnerGeneratedOutput();
+	SyntaxValidationUsesSyntaxOnly();
 	NoneValidationSkipsCompiler();
 	CompileValidationReportsCxxFailure();
+	CompileValidationTimesOut();
+	KeepsFailedArtifactsWhenRequested();
 	MissingGMockIncludePathIsClear();
 	return 0;
 }

@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -10,7 +13,10 @@
 #include <system_error>
 #include <utility>
 
+#include <fcntl.h>
+#include <poll.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 namespace mockfakegen
 {
@@ -21,10 +27,10 @@ namespace mockfakegen
 		struct TempTree
 		{
 			std::filesystem::path root;
+			bool keep = false;
 
-			TempTree()
-				: root(std::filesystem::temp_directory_path() /
-					   ("mockfakegen_compile_validation_" + std::to_string(UniqueSuffix())))
+			explicit TempTree(std::filesystem::path requested_root)
+				: root(std::move(requested_root))
 			{
 				std::filesystem::remove_all(root);
 				std::filesystem::create_directories(root);
@@ -35,14 +41,13 @@ namespace mockfakegen
 
 			~TempTree()
 			{
+				if (keep)
+				{
+					return;
+				}
+
 				std::error_code error;
 				std::filesystem::remove_all(root, error);
-			}
-
-		  private:
-			[[nodiscard]] static long long UniqueSuffix()
-			{
-				return std::chrono::steady_clock::now().time_since_epoch().count();
 			}
 		};
 
@@ -50,6 +55,7 @@ namespace mockfakegen
 		{
 			int exit_code = 1;
 			std::string output;
+			bool timed_out = false;
 		};
 
 		[[nodiscard]] bool IsCxxValidationInput(GeneratedFileKind kind) noexcept
@@ -117,25 +123,142 @@ namespace mockfakegen
 			return 1;
 		}
 
-		[[nodiscard]] ProcessResult RunCommand(const std::string& command)
+		[[nodiscard]] std::vector<char*> ArgvPointers(std::vector<std::string>& arguments)
+		{
+			std::vector<char*> argv;
+			argv.reserve(arguments.size() + 1U);
+			for (auto& argument : arguments)
+			{
+				argv.push_back(argument.data());
+			}
+			argv.push_back(nullptr);
+			return argv;
+		}
+
+		[[nodiscard]] bool ReadAvailableOutput(int fd, std::string& output)
+		{
+			std::array<char, 4096U> buffer{};
+			bool pipe_open = true;
+			while (pipe_open)
+			{
+				const auto count = ::read(fd, buffer.data(), buffer.size());
+				if (count > 0)
+				{
+					output.append(buffer.data(), static_cast<std::size_t>(count));
+					continue;
+				}
+				if (count == 0)
+				{
+					pipe_open = false;
+					break;
+				}
+				if (errno == EINTR)
+				{
+					continue;
+				}
+				if (errno == EAGAIN)
+				{
+					break;
+				}
+				pipe_open = false;
+			}
+			return pipe_open;
+		}
+
+		[[nodiscard]] ProcessResult RunCommand(std::vector<std::string> arguments,
+											   std::chrono::milliseconds timeout)
 		{
 			ProcessResult result;
-			std::array<char, 4096U> buffer{};
-			const auto shell_command = command + " 2>&1";
-			FILE* pipe = ::popen(shell_command.c_str(), "r");
-			if (pipe == nullptr)
+			if (arguments.empty())
 			{
+				result.output = "compiler command is empty";
+				return result;
+			}
+
+			int pipe_fds[2] = {-1, -1};
+			if (::pipe(pipe_fds) != 0)
+			{
+				result.output = "failed to create compiler output pipe";
+				return result;
+			}
+
+			const auto child = ::fork();
+			if (child < 0)
+			{
+				::close(pipe_fds[0]);
+				::close(pipe_fds[1]);
 				result.output = "failed to start compiler process";
 				return result;
 			}
 
-			while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+			if (child == 0)
 			{
-				result.output += buffer.data();
+				::close(pipe_fds[0]);
+				(void)::dup2(pipe_fds[1], STDOUT_FILENO);
+				(void)::dup2(pipe_fds[1], STDERR_FILENO);
+				::close(pipe_fds[1]);
+				auto argv = ArgvPointers(arguments);
+				::execvp(argv[0], argv.data());
+				::_exit(127);
 			}
 
-			const auto status = ::pclose(pipe);
-			result.exit_code = DecodeExitStatus(status);
+			::close(pipe_fds[1]);
+			const auto current_flags = ::fcntl(pipe_fds[0], F_GETFL, 0);
+			if (current_flags >= 0)
+			{
+				(void)::fcntl(pipe_fds[0], F_SETFL, current_flags | O_NONBLOCK);
+			}
+			const auto deadline = std::chrono::steady_clock::now() + timeout;
+			bool child_exited = false;
+			bool pipe_open = true;
+			int status = 0;
+
+			while (pipe_open || !child_exited)
+			{
+				if (!child_exited)
+				{
+					const auto wait_result = ::waitpid(child, &status, WNOHANG);
+					if (wait_result == child)
+					{
+						child_exited = true;
+					}
+				}
+
+				if (!child_exited && timeout.count() > 0 &&
+					std::chrono::steady_clock::now() >= deadline)
+				{
+					(void)::kill(child, SIGKILL);
+					(void)::waitpid(child, &status, 0);
+					child_exited = true;
+					result.timed_out = true;
+					result.exit_code = 124;
+				}
+
+				if (pipe_open)
+				{
+					pollfd descriptor{
+						.fd = pipe_fds[0],
+						.events = POLLIN | POLLHUP,
+						.revents = 0,
+					};
+					const int poll_timeout_ms = child_exited ? 0 : 50;
+					const auto poll_result = ::poll(&descriptor, 1U, poll_timeout_ms);
+					if (poll_result > 0 && (descriptor.revents & (POLLIN | POLLHUP)) != 0)
+					{
+						pipe_open = ReadAvailableOutput(pipe_fds[0], result.output);
+					}
+					else if (poll_result < 0 && errno != EINTR)
+					{
+						pipe_open = false;
+					}
+				}
+			}
+
+			::close(pipe_fds[0]);
+			if (!result.timed_out)
+			{
+				result.exit_code = DecodeExitStatus(status);
+			}
 			return result;
 		}
 
@@ -165,12 +288,14 @@ namespace mockfakegen
 
 		void AddDiagnostic(GeneratedCompileValidationResult& result,
 						   std::filesystem::path source_path,
+						   std::filesystem::path validation_artifact_path,
 						   std::string message,
 						   std::string command = {},
 						   std::string stderr_summary = {})
 		{
 			result.diagnostics.push_back(GeneratedCompileDiagnostic{
 				.source_path = std::move(source_path),
+				.validation_artifact_path = std::move(validation_artifact_path),
 				.message = std::move(message),
 				.command = std::move(command),
 				.stderr_summary = std::move(stderr_summary),
@@ -242,6 +367,16 @@ namespace mockfakegen
 			return out.str();
 		}
 
+		[[nodiscard]] bool HasStdArg(const std::vector<std::string>& args)
+		{
+			return std::any_of(args.begin(),
+							   args.end(),
+							   [](const auto& arg)
+							   {
+								   return arg == "-std" || arg.starts_with("-std=");
+							   });
+		}
+
 		[[nodiscard]] std::vector<std::string>
 		BaseCompileArguments(const GeneratedCompileValidationOptions& options,
 							 const std::filesystem::path& generated_root)
@@ -249,7 +384,10 @@ namespace mockfakegen
 			std::vector<std::string> arguments;
 			arguments.push_back(options.compiler.empty() ? std::string("c++")
 														 : options.compiler.string());
-			arguments.push_back("-std=c++23");
+			if (!HasStdArg(options.extra_args))
+			{
+				arguments.push_back("-std=c++23");
+			}
 			arguments.push_back("-I");
 			arguments.push_back(generated_root.string());
 			for (const auto& include_dir : options.include_dirs)
@@ -285,8 +423,13 @@ namespace mockfakegen
 			return arguments;
 		}
 
-		[[nodiscard]] std::string FailureMessage(std::string_view stderr_summary)
+		[[nodiscard]] std::string FailureMessage(const ProcessResult& process,
+												 std::string_view stderr_summary)
 		{
+			if (process.timed_out)
+			{
+				return "generated output compile validation timed out.";
+			}
 			if (stderr_summary.find("gmock/gmock.h") != std::string_view::npos)
 			{
 				return "gMock include path is missing or invalid; compiler could not include "
@@ -299,12 +442,13 @@ namespace mockfakegen
 							   const GeneratedCompileValidationOptions& options,
 							   const std::filesystem::path& generated_root,
 							   const std::filesystem::path& source_path,
-							   const std::filesystem::path& object_path)
+							   const std::filesystem::path& object_path,
+							   const std::filesystem::path& artifact_path)
 		{
 			const auto arguments =
 				BuildCompileCommandArguments(options, generated_root, source_path, object_path);
 			const auto command = BuildCommand(arguments);
-			const auto process = RunCommand(command);
+			const auto process = RunCommand(arguments, options.command_timeout);
 			result.commands.push_back(GeneratedCompileCommandResult{
 				.source_path = source_path,
 				.command = command,
@@ -313,8 +457,25 @@ namespace mockfakegen
 			if (process.exit_code != 0)
 			{
 				const auto summary = StderrSummary(process.output);
-				AddDiagnostic(result, source_path, FailureMessage(summary), command, summary);
+				AddDiagnostic(result,
+							  source_path,
+							  artifact_path,
+							  FailureMessage(process, summary),
+							  command,
+							  summary);
 			}
+		}
+
+		[[nodiscard]] std::filesystem::path
+		ValidationRoot(const GeneratedCompileValidationOptions& options)
+		{
+			static std::atomic<unsigned long long> counter = 0U;
+			const auto index = counter.fetch_add(1U, std::memory_order_relaxed);
+			const auto base = options.artifact_dir.empty() ? std::filesystem::temp_directory_path()
+														   : options.artifact_dir;
+			return base /
+				("mockfakegen_compile_validation_" + std::to_string(::getpid()) + "_" +
+				 std::to_string(index));
 		}
 	} // namespace
 
@@ -329,15 +490,20 @@ namespace mockfakegen
 			return result;
 		}
 
-		TempTree tree;
+		TempTree tree(ValidationRoot(options));
 		const auto generated_root = tree.root / "generated";
+		const auto artifact_path =
+			options.keep_failed_artifacts ? tree.root : std::filesystem::path{};
 		for (const auto& file : CxxFiles(files))
 		{
 			const auto output_path = generated_root / file.relative_path;
 			if (!WriteText(output_path, file.content))
 			{
-				AddDiagnostic(
-					result, output_path, "failed to write generated file for validation.");
+				AddDiagnostic(result,
+							  output_path,
+							  artifact_path,
+							  "failed to write generated file for validation.");
+				tree.keep = options.keep_failed_artifacts;
 				return result;
 			}
 		}
@@ -345,12 +511,18 @@ namespace mockfakegen
 		const auto smoke_source = tree.root / "mock_headers_smoke.cpp";
 		if (!WriteText(smoke_source, BuildMockHeadersSmokeSource(files)))
 		{
-			AddDiagnostic(result, smoke_source, "failed to write mock header smoke source.");
+			AddDiagnostic(
+				result, smoke_source, artifact_path, "failed to write mock header smoke source.");
+			tree.keep = options.keep_failed_artifacts;
 			return result;
 		}
 
-		RunCompileCommand(
-			result, options, generated_root, smoke_source, tree.root / "mock_headers_smoke.o");
+		RunCompileCommand(result,
+						  options,
+						  generated_root,
+						  smoke_source,
+						  tree.root / "mock_headers_smoke.o",
+						  artifact_path);
 
 		const auto sorted_files = CxxFiles(files);
 		for (const auto& file : sorted_files)
@@ -362,9 +534,11 @@ namespace mockfakegen
 
 			const auto source_path = generated_root / file.relative_path;
 			const auto object_path = tree.root / (file.relative_path.stem().string() + ".o");
-			RunCompileCommand(result, options, generated_root, source_path, object_path);
+			RunCompileCommand(
+				result, options, generated_root, source_path, object_path, artifact_path);
 		}
 
+		tree.keep = options.keep_failed_artifacts && !result.ok();
 		return result;
 	}
 } // namespace mockfakegen

@@ -47,6 +47,9 @@ namespace mockfakegen
 		constexpr std::string_view kEmitCMakeFragmentOption = "--emit-cmake-fragment";
 		constexpr std::string_view kFormatStyleOption = "--format-style";
 		constexpr std::string_view kValidateOption = "--validate";
+		constexpr std::string_view kValidationTimeoutMsOption = "--validation-timeout-ms";
+		constexpr std::string_view kValidationKeepArtifactsOption = "--validation-keep-artifacts";
+		constexpr std::string_view kValidationArtifactDirOption = "--validation-artifact-dir";
 		constexpr std::string_view kJobsOption = "--jobs";
 
 		[[nodiscard]] int DefaultJobs() noexcept
@@ -81,7 +84,8 @@ namespace mockfakegen
 		[[nodiscard]] bool IsPresenceFlagOption(std::string_view option) noexcept
 		{
 			return option == kHelpOption || option == kDryRunOption || option == kOverwriteOption ||
-				option == kStrictOption || option == kBestEffortOption;
+				option == kStrictOption || option == kBestEffortOption ||
+				option == kValidationKeepArtifactsOption;
 		}
 
 		[[nodiscard]] bool IsRepeatableOption(std::string_view option) noexcept
@@ -113,7 +117,9 @@ namespace mockfakegen
 				option == kOverwriteOption || option == kStrictOption ||
 				option == kBestEffortOption || option == kEmitAllMocksOption ||
 				option == kEmitManifestOption || option == kEmitCMakeFragmentOption ||
-				option == kFormatStyleOption || option == kValidateOption || option == kJobsOption;
+				option == kFormatStyleOption || option == kValidateOption ||
+				option == kValidationTimeoutMsOption || option == kValidationKeepArtifactsOption ||
+				option == kValidationArtifactDirOption || option == kJobsOption;
 		}
 
 		[[nodiscard]] std::optional<std::string> InlineValue(std::string_view argument)
@@ -382,6 +388,10 @@ namespace mockfakegen
 					best_effort_seen = true;
 					config.best_effort = true;
 					config.strict = false;
+				}
+				else if (option == kValidationKeepArtifactsOption)
+				{
+					config.validation_keep_artifacts = true;
 				}
 
 				continue;
@@ -685,6 +695,28 @@ namespace mockfakegen
 
 				config.validate = *parsed_validate;
 			}
+			else if (option == kValidationTimeoutMsOption)
+			{
+				const auto parsed_timeout = ParseJobsValue(*value);
+				if (!parsed_timeout.has_value())
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kValidationTimeoutMsOption,
+							 "--validation-timeout-ms must be a positive integer.");
+					continue;
+				}
+
+				config.validation_timeout = std::chrono::milliseconds(*parsed_timeout);
+			}
+			else if (option == kValidationArtifactDirOption)
+			{
+				const auto artifact_dir = NormalizePathValue(result.errors, option, *value);
+				if (artifact_dir.has_value())
+				{
+					config.validation_artifact_dir = *artifact_dir;
+				}
+			}
 		}
 
 		if (strict_seen && best_effort_seen)
@@ -803,6 +835,9 @@ namespace mockfakegen
 			"  --emit-cmake-fragment <bool> Generate CMakeLists.fragment.cmake when true.\n"
 			"  --format-style <style>  file, llvm, google, or none.\n"
 			"  --validate <mode>       none, syntax, or compile.\n"
+			"  --validation-timeout-ms <N> Compiler timeout per validation command.\n"
+			"  --validation-keep-artifacts Keep failed validation files for reproduction.\n"
+			"  --validation-artifact-dir <path> Directory for kept validation artifacts.\n"
 			"  --jobs <N>              Positive worker count.\n"
 			"\n"
 			"Deferred options are recognized but fail with a diagnostic until their "
