@@ -98,7 +98,7 @@ namespace
 
 		Expect(!result.ok(), "quoted ket include should fail");
 		Expect(result.diagnostics.size() == 1U, "quoted ket include should produce one diagnostic");
-		Expect(result.diagnostics[0].token == "#include \"ket_",
+		Expect(result.diagnostics[0].token == "#include \"ket_file.h\"",
 			   "diagnostic should identify quoted include token");
 	}
 
@@ -111,8 +111,22 @@ namespace
 
 		Expect(!result.ok(), "angle ket include should fail");
 		Expect(result.diagnostics.size() == 1U, "angle ket include should produce one diagnostic");
-		Expect(result.diagnostics[0].token == "#include <ket_",
+		Expect(result.diagnostics[0].token == "#include <ket_file.h>",
 			   "diagnostic should identify angle include token");
+	}
+
+	void SimilarNonKetTokensPass()
+	{
+		TempTree tree;
+		tree.Write("MockPocket.h",
+				   "#include \"ket_service.h\"\n"
+				   "namespace pocket { inline constexpr int value = 1; }\n"
+				   "auto x = pocket::value;\n");
+
+		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens({tree.root()});
+
+		Expect(result.ok(), "similar non-ket tokens should not fail");
+		Expect(result.checked_file_count == 1U, "similar token file should be checked");
 	}
 
 	void EmptyDirectoryFails()
@@ -209,6 +223,7 @@ int main()
 	KetNamespaceFails();
 	QuotedKetIncludeFails();
 	AngleKetIncludeFails();
+	SimilarNonKetTokensPass();
 	EmptyDirectoryFails();
 	GeneratedFixturesPass();
 	return 0;
