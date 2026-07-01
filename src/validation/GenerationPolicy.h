@@ -62,6 +62,7 @@ namespace mockfakegen
 	struct GenerationPolicyInput
 	{
 		std::span<const ClassModel> classes;
+		std::span<const UnsupportedItem> unsupported_items;
 		std::span<const Diagnostic> parse_diagnostics;
 		std::span<const GeneratedCompileDiagnostic> validation_diagnostics;
 	};

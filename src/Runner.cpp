@@ -652,16 +652,20 @@ namespace mockfakegen
 		AppendRunDiagnostics(run_diagnostics, validation_result.diagnostics);
 
 		const auto parse_diagnostics = PolicyParseDiagnostics(resolve_result);
-		const auto policy_decision =
-			EvaluateGenerationPolicy(config,
-									 GenerationPolicyInput{
-										 .classes = resolve_result.project.classes,
-										 .parse_diagnostics = parse_diagnostics,
-										 .validation_diagnostics = validation_result.diagnostics,
-									 });
+		const auto policy_decision = EvaluateGenerationPolicy(
+			config,
+			GenerationPolicyInput{
+				.classes = resolve_result.project.classes,
+				.unsupported_items = resolve_result.project.unsupported_items,
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_result.diagnostics,
+			});
 		const auto unsupported_diagnostics =
 			BuildUnsupportedItemDiagnostics(resolve_result.project.classes);
+		const auto top_level_unsupported_diagnostics =
+			BuildUnsupportedItemDiagnostics(resolve_result.project.unsupported_items);
 		AppendRunDiagnostics(run_diagnostics, unsupported_diagnostics);
+		AppendRunDiagnostics(run_diagnostics, top_level_unsupported_diagnostics);
 		AppendRunDiagnostics(run_diagnostics, policy_decision.diagnostics);
 		PrintRunDiagnostics(err, run_diagnostics);
 

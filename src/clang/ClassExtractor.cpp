@@ -307,6 +307,45 @@ namespace mockfakegen
 				return true;
 			}
 
+			bool VisitClassTemplateSpecializationDecl(
+				clang::ClassTemplateSpecializationDecl* declaration)
+			{
+				if (declaration == nullptr || declaration->isImplicit() ||
+					!declaration->isThisDeclarationADefinition() || !IsInTargetHeader(declaration))
+				{
+					return true;
+				}
+				if (declaration->getSpecializationKind() == clang::TSK_ImplicitInstantiation)
+				{
+					return true;
+				}
+
+				const auto name = declaration->getNameAsString();
+				if (name.empty())
+				{
+					return true;
+				}
+
+				const auto is_partial =
+					llvm::isa<clang::ClassTemplatePartialSpecializationDecl>(declaration);
+				auto item = UnsupportedItem{
+					.reason_code = UnsupportedReasonCode::ClassTemplateSpecialization,
+					.kind = is_partial ? "class_template_partial_specialization"
+									   : "class_template_specialization",
+					.class_name = name,
+					.name = name,
+					.member_signature = name,
+					.reason = is_partial
+						? "partial class template specialization is not supported"
+						: "explicit class template specialization is not supported",
+					.suggested_action = "exclude it or provide a hand-authored mock",
+					.source_range = ToSourceRange(source_manager_, declaration->getSourceRange()),
+				};
+				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
+				result_.unsupported_items.push_back(std::move(item));
+				return true;
+			}
+
 			bool VisitCXXRecordDecl(clang::CXXRecordDecl* declaration)
 			{
 				if (declaration == nullptr || !ShouldExtract(declaration))
@@ -406,6 +445,42 @@ namespace mockfakegen
 				return AbsoluteNormalized(filename.str()) == target_path_;
 			}
 
+			[[nodiscard]] bool IsMacroOrigin(const clang::Decl& declaration) const
+			{
+				const auto range = declaration.getSourceRange();
+				return declaration.getLocation().isMacroID() || range.getBegin().isMacroID() ||
+					range.getEnd().isMacroID();
+			}
+
+			[[nodiscard]] bool HasBodyInTargetHeader(const clang::FunctionDecl& function) const
+			{
+				const clang::FunctionDecl* definition = nullptr;
+				if (!function.hasBody(definition) || definition == nullptr)
+				{
+					return false;
+				}
+
+				return IsInTargetHeader(definition);
+			}
+
+			[[nodiscard]] bool HasUnsupportedAttributes(const clang::Decl& declaration) const
+			{
+				for (const auto* attribute : declaration.attrs())
+				{
+					if (attribute == nullptr || attribute->isImplicit())
+					{
+						continue;
+					}
+					if (llvm::isa<clang::OverrideAttr>(attribute) ||
+						llvm::isa<clang::FinalAttr>(attribute))
+					{
+						continue;
+					}
+					return true;
+				}
+				return false;
+			}
+
 			void ExtractMethods(const clang::CXXRecordDecl& declaration, ClassModel& class_model)
 			{
 				for (const auto* child : declaration.decls())
@@ -440,6 +515,17 @@ namespace mockfakegen
 						continue;
 					}
 
+					if (IsMacroOrigin(*method))
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::MacroOrigin,
+							"macro_origin",
+							"macro-origin method declaration is not "
+							"supported because source spelling may be unstable");
+						continue;
+					}
 					if (llvm::isa<clang::CXXConstructorDecl>(method))
 					{
 						const auto* constructor = llvm::cast<clang::CXXConstructorDecl>(method);
@@ -450,33 +536,6 @@ namespace mockfakegen
 					{
 						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
 						RecordDestructor(*destructor, class_model);
-						continue;
-					}
-					if (llvm::isa<clang::CXXConversionDecl>(method))
-					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::ConversionOperator,
-												"conversion_operator",
-												"conversion operator is not supported");
-						continue;
-					}
-					if (method->isOverloadedOperator())
-					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::OverloadedOperator,
-												"overloaded_operator",
-												"overloaded operator is not supported");
-						continue;
-					}
-					if (method->getAccess() != clang::AS_public)
-					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::NonPublicMethod,
-												"non_public_method",
-												"only public methods are generated");
 						continue;
 					}
 					if (method->isDeleted())
@@ -497,6 +556,53 @@ namespace mockfakegen
 												"defaulted method is not supported");
 						continue;
 					}
+					if (llvm::isa<clang::CXXConversionDecl>(method))
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConversionOperator,
+												"conversion_operator",
+												"conversion operator is not supported");
+						continue;
+					}
+					if (method->isOverloadedOperator())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::OverloadedOperator,
+												"overloaded_operator",
+												"overloaded operator is not supported");
+						continue;
+					}
+					if (method->isPureVirtual())
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::PureVirtualMethod,
+							"pure_virtual_method",
+							"pure virtual method requires interface mock mode and is not faked in "
+							"normal link replacement mode");
+						continue;
+					}
+					if (method->getAccess() != clang::AS_public)
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::NonPublicMethod,
+												"non_public_method",
+												"only public methods are generated");
+						continue;
+					}
+					if (method->isConsteval())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::ConstevalMethod,
+												"consteval_method",
+												"consteval method is not supported");
+						continue;
+					}
 					if (method->isConstexpr())
 					{
 						RecordUnsupportedMethod(class_model,
@@ -506,7 +612,16 @@ namespace mockfakegen
 												"constexpr method is not supported");
 						continue;
 					}
-					if (method->doesThisDeclarationHaveABody())
+					if (HasUnsupportedAttributes(*method))
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::UnsupportedAttribute,
+												"unsupported_attribute",
+												"method has attributes that are not supported");
+						continue;
+					}
+					if (HasBodyInTargetHeader(*method))
 					{
 						RecordUnsupportedMethod(class_model,
 												*method,
@@ -580,6 +695,17 @@ namespace mockfakegen
 						continue;
 					}
 
+					if (IsMacroOrigin(*method))
+					{
+						RecordUnsupportedMethod(
+							class_model,
+							*method,
+							UnsupportedReasonCode::MacroOrigin,
+							"macro_origin",
+							"macro-origin method declaration is not "
+							"supported because source spelling may be unstable");
+						continue;
+					}
 					if (llvm::isa<clang::CXXConstructorDecl>(method))
 					{
 						const auto* constructor = llvm::cast<clang::CXXConstructorDecl>(method);
@@ -590,6 +716,24 @@ namespace mockfakegen
 					{
 						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
 						RecordInterfaceDestructor(*destructor, class_model);
+						continue;
+					}
+					if (method->isDeleted())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::DeletedMethod,
+												"deleted_method",
+												"deleted method is not supported");
+						continue;
+					}
+					if (method->isDefaulted())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::DefaultedMethod,
+												"defaulted_method",
+												"defaulted method is not supported");
 						continue;
 					}
 					if (llvm::isa<clang::CXXConversionDecl>(method))
@@ -639,22 +783,13 @@ namespace mockfakegen
 							"interface mock mode requires public pure virtual methods");
 						continue;
 					}
-					if (method->isDeleted())
+					if (method->isConsteval())
 					{
 						RecordUnsupportedMethod(class_model,
 												*method,
-												UnsupportedReasonCode::DeletedMethod,
-												"deleted_method",
-												"deleted method is not supported");
-						continue;
-					}
-					if (method->isDefaulted())
-					{
-						RecordUnsupportedMethod(class_model,
-												*method,
-												UnsupportedReasonCode::DefaultedMethod,
-												"defaulted_method",
-												"defaulted method is not supported");
+												UnsupportedReasonCode::ConstevalMethod,
+												"consteval_method",
+												"consteval method is not supported");
 						continue;
 					}
 					if (method->isConstexpr())
@@ -666,7 +801,16 @@ namespace mockfakegen
 												"constexpr method is not supported");
 						continue;
 					}
-					if (method->doesThisDeclarationHaveABody())
+					if (HasUnsupportedAttributes(*method))
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												UnsupportedReasonCode::UnsupportedAttribute,
+												"unsupported_attribute",
+												"method has attributes that are not supported");
+						continue;
+					}
+					if (HasBodyInTargetHeader(*method))
 					{
 						RecordUnsupportedMethod(class_model,
 												*method,
@@ -809,8 +953,22 @@ namespace mockfakegen
 											"constructor exception specification is not supported");
 					return;
 				}
-				if (constructor.isDefaulted() || constructor.doesThisDeclarationHaveABody())
+				if (constructor.isDefaulted())
 				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::DefaultedMethod,
+											"defaulted_method",
+											"defaulted constructor is not generated as a fake");
+					return;
+				}
+				if (HasBodyInTargetHeader(constructor))
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											UnsupportedReasonCode::InlineBody,
+											"inline_body",
+											"constructor with header-local body is not supported");
 					return;
 				}
 
@@ -877,8 +1035,22 @@ namespace mockfakegen
 											"destructor exception specification is not supported");
 					return;
 				}
-				if (destructor.isDefaulted() || destructor.doesThisDeclarationHaveABody())
+				if (destructor.isDefaulted())
 				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::DefaultedMethod,
+											"defaulted_method",
+											"defaulted destructor is not generated as a fake");
+					return;
+				}
+				if (HasBodyInTargetHeader(destructor))
+				{
+					RecordUnsupportedMethod(class_model,
+											destructor,
+											UnsupportedReasonCode::InlineBody,
+											"inline_body",
+											"destructor with header-local body is not supported");
 					return;
 				}
 

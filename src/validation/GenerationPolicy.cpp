@@ -24,6 +24,13 @@ namespace mockfakegen
 			return count;
 		}
 
+		[[nodiscard]] std::size_t
+		UnsupportedItemCount(std::span<const ClassModel> classes,
+							 std::span<const UnsupportedItem> unsupported_items)
+		{
+			return UnsupportedItemCount(classes) + unsupported_items.size();
+		}
+
 		[[nodiscard]] std::string QualifiedClassName(const ClassModel& class_model)
 		{
 			if (!class_model.qualified_name.empty())
@@ -121,6 +128,18 @@ namespace mockfakegen
 					diagnostic.message = unsupported.member_signature + ": " + unsupported.reason;
 					decision.diagnostics.push_back(std::move(diagnostic));
 				}
+			}
+		}
+
+		void AddUnsupportedDiagnostics(GenerationPolicyDecision& decision,
+									   std::span<const UnsupportedItem> unsupported_items)
+		{
+			for (const auto& unsupported : unsupported_items)
+			{
+				GenerationPolicyDiagnostic diagnostic;
+				diagnostic.kind = GenerationPolicyDiagnosticKind::UnsupportedItem;
+				diagnostic.message = unsupported.member_signature + ": " + unsupported.reason;
+				decision.diagnostics.push_back(std::move(diagnostic));
 			}
 		}
 
@@ -240,11 +259,13 @@ namespace mockfakegen
 		decision.emit_manifest = config.emit_manifest;
 		decision.has_parse_failure = std::any_of(
 			input.parse_diagnostics.begin(), input.parse_diagnostics.end(), IsParseFailure);
-		decision.has_unsupported_items = UnsupportedItemCount(input.classes) != 0U;
+		decision.has_unsupported_items =
+			UnsupportedItemCount(input.classes, input.unsupported_items) != 0U;
 		decision.has_validation_failure = !input.validation_diagnostics.empty();
 
 		AddParseDiagnostics(decision, input.parse_diagnostics);
 		AddUnsupportedDiagnostics(decision, input.classes);
+		AddUnsupportedDiagnostics(decision, input.unsupported_items);
 		AddValidationDiagnostics(decision, input.validation_diagnostics);
 		AddFallbackDiagnostics(decision, config, input.classes);
 

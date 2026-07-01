@@ -123,5 +123,11 @@ namespace mockfakegen
 		{
 			SortClassModel(class_model);
 		}
+		std::stable_sort(project.unsupported_items.begin(),
+						 project.unsupported_items.end(),
+						 [](const auto& lhs, const auto& rhs)
+						 {
+							 return UnsupportedSortKey(lhs) < UnsupportedSortKey(rhs);
+						 });
 	}
 } // namespace mockfakegen

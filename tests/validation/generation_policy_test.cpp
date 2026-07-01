@@ -169,6 +169,19 @@ namespace
 		return item;
 	}
 
+	[[nodiscard]] mockfakegen::UnsupportedItem UnsupportedClassTemplate()
+	{
+		mockfakegen::UnsupportedItem item;
+		item.reason_code = mockfakegen::UnsupportedReasonCode::ClassTemplate;
+		item.kind = "class_template";
+		item.class_name = "Box";
+		item.name = "Box";
+		item.member_signature = "Box";
+		item.reason = "class template is not supported by link replacement fake generation";
+		item.suggested_action = "exclude it or provide a hand-authored mock";
+		return item;
+	}
+
 	[[nodiscard]] mockfakegen::ClassModel ServiceClass(bool include_unsupported)
 	{
 		auto method = RunMethod();
@@ -253,6 +266,7 @@ namespace
 			BestEffortConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -300,6 +314,7 @@ namespace
 			StrictConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -309,6 +324,44 @@ namespace
 		Expect(HasDiagnosticKind(decision,
 								 mockfakegen::GenerationPolicyDiagnosticKind::UnsupportedItem),
 			   "strict unsupported diagnostic should be distinct");
+	}
+
+	void TopLevelUnsupportedInfluencesPolicy()
+	{
+		const std::vector<mockfakegen::ClassModel> classes;
+		const std::vector unsupported_items = {UnsupportedClassTemplate()};
+		const std::vector<mockfakegen::Diagnostic> parse_diagnostics;
+		const std::vector<mockfakegen::GeneratedCompileDiagnostic> validation_diagnostics;
+
+		const auto best_effort_decision = mockfakegen::EvaluateGenerationPolicy(
+			BestEffortConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.unsupported_items = unsupported_items,
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(best_effort_decision.exit_code == 0,
+			   "best-effort top-level unsupported should remain zero");
+		Expect(best_effort_decision.has_unsupported_items,
+			   "top-level unsupported should be recorded");
+		Expect(HasDiagnosticKind(best_effort_decision,
+								 mockfakegen::GenerationPolicyDiagnosticKind::UnsupportedItem),
+			   "top-level unsupported diagnostic should be distinct");
+
+		const auto strict_decision = mockfakegen::EvaluateGenerationPolicy(
+			StrictConfig(),
+			mockfakegen::GenerationPolicyInput{
+				.classes = classes,
+				.unsupported_items = unsupported_items,
+				.parse_diagnostics = parse_diagnostics,
+				.validation_diagnostics = validation_diagnostics,
+			});
+
+		Expect(strict_decision.exit_code != 0, "strict top-level unsupported should be non-zero");
+		Expect(strict_decision.has_unsupported_items,
+			   "strict top-level unsupported should be recorded");
 	}
 
 	void LinkReadinessInfluencesPolicyDecision()
@@ -321,6 +374,7 @@ namespace
 			BestEffortConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -349,6 +403,7 @@ namespace
 			StrictConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -373,6 +428,7 @@ namespace
 			BestEffortConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -403,6 +459,7 @@ namespace
 			BestEffortConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -520,6 +577,7 @@ namespace
 			BestEffortConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -581,6 +639,7 @@ namespace
 			DefaultReturnConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -613,6 +672,7 @@ namespace
 			ThrowFallbackConfig(),
 			mockfakegen::GenerationPolicyInput{
 				.classes = classes,
+				.unsupported_items = {},
 				.parse_diagnostics = parse_diagnostics,
 				.validation_diagnostics = validation_diagnostics,
 			});
@@ -632,6 +692,7 @@ int main()
 {
 	BestEffortWritesGeneratedOutputAndReport();
 	StrictUnsupportedReturnsNonZero();
+	TopLevelUnsupportedInfluencesPolicy();
 	LinkReadinessInfluencesPolicyDecision();
 	ParseFailureSuppressesOutput();
 	ValidationFailureIsNonZeroAndSuppressesPublish();

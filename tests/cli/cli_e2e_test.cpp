@@ -462,6 +462,84 @@ namespace
 			   "strict report should include unsupported reason");
 	}
 
+	void TopLevelUnsupportedAppearsInManifest(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "top-level-unsupported-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "top-level-unsupported-build";
+		const auto output_dir = temp_root / "top-level-unsupported-generated";
+		WriteText(include_dir / "Box.h",
+				  "#pragma once\n"
+				  "#define MOCKFAKEGEN_DECLARE_METHOD(name) bool name();\n"
+				  "template <class T> class Box { public: T value; };\n"
+				  "class Hard {\n"
+				  "public:\n"
+				  "  virtual int Abstract() = 0;\n"
+				  "  void HeaderBody();\n"
+				  "  MOCKFAKEGEN_DECLARE_METHOD(FromMacro)\n"
+				  "  [[nodiscard]] int Marked();\n"
+				  "  consteval int Immediate() const { return 1; }\n"
+				  "  bool Supported();\n"
+				  "};\n"
+				  "inline void Hard::HeaderBody() {}\n"
+				  "class Worker { public: bool Run(); };\n");
+		const auto source = source_dir / "Worker.cpp";
+		WriteText(source,
+				  "#include \"Box.h\"\n"
+				  "bool Worker::Run() { return true; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o worker.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "top_level_unsupported");
+
+		Expect(result.exit_code == 0, "best-effort top-level unsupported should succeed");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "top-level unsupported run should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "top-level unsupported run should emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"code\": \"unsupported_class_template\""),
+			   "manifest should include top-level unsupported diagnostic code");
+		Expect(Contains(manifest, "class template is not supported"),
+			   "manifest should include top-level unsupported reason");
+		Expect(Contains(report, "unsupported_class_template"),
+			   "report diagnostics should include top-level unsupported diagnostic code");
+		Expect(Contains(report, "class template is not supported"),
+			   "report should include top-level unsupported reason");
+		Expect(Contains(manifest, "\"code\": \"unsupported_pure_virtual_method\""),
+			   "manifest should include pure virtual unsupported diagnostic code");
+		Expect(Contains(manifest, "\"code\": \"unsupported_inline_body\""),
+			   "manifest should include inline-body unsupported diagnostic code");
+		Expect(Contains(manifest, "\"code\": \"unsupported_macro_origin\""),
+			   "manifest should include macro-origin unsupported diagnostic code");
+		Expect(Contains(manifest, "\"code\": \"unsupported_attribute\""),
+			   "manifest should include attribute unsupported diagnostic code");
+		Expect(Contains(manifest, "\"code\": \"unsupported_consteval_method\""),
+			   "manifest should include consteval unsupported diagnostic code");
+	}
+
 	void RegistryModeAffectsRuntime(const std::filesystem::path& temp_root,
 									const std::filesystem::path& product_dir,
 									const std::filesystem::path& build_dir)
@@ -586,6 +664,7 @@ int main()
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
 	StrictModeFailsUnsupportedInput(temp_root, product_dir, build_dir);
+	TopLevelUnsupportedAppearsInManifest(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);

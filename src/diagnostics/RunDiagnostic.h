@@ -69,6 +69,8 @@ namespace mockfakegen
 	SummarizeDiagnosticsByComponent(std::span<const RunDiagnostic> diagnostics);
 	[[nodiscard]] std::vector<RunDiagnostic>
 	BuildUnsupportedItemDiagnostics(std::span<const ClassModel> class_models);
+	[[nodiscard]] std::vector<RunDiagnostic>
+	BuildUnsupportedItemDiagnostics(std::span<const UnsupportedItem> unsupported_items);
 	[[nodiscard]] std::vector<RunDiagnostic> BuildGeneratedOutputTokenDiagnostics(
 		std::span<const GeneratedOutputTokenDiagnostic> diagnostics);
 } // namespace mockfakegen

@@ -33,18 +33,23 @@ namespace mockfakegen
 	{
 		Unknown,
 		ClassTemplate,
+		ClassTemplateSpecialization,
 		FunctionTemplate,
 		Constructor,
 		Destructor,
 		ConversionOperator,
 		OverloadedOperator,
+		PureVirtualMethod,
 		NonPublicMethod,
 		DeletedMethod,
 		DefaultedMethod,
 		InlineBody,
 		ConstexprMethod,
+		ConstevalMethod,
 		ConditionalNoexcept,
 		VolatileMethod,
+		UnsupportedAttribute,
+		MacroOrigin,
 		StaticDataMember,
 		InterfaceConstruct,
 	};
@@ -183,6 +188,7 @@ namespace mockfakegen
 	{
 		std::vector<HeaderModel> headers;
 		std::vector<ClassModel> classes;
+		std::vector<UnsupportedItem> unsupported_items;
 		std::vector<Diagnostic> diagnostics;
 	};
 

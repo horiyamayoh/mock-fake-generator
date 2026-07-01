@@ -316,6 +316,34 @@ namespace mockfakegen
 			return value;
 		}
 
+		[[nodiscard]] std::string UnsupportedFingerprint(const UnsupportedItem& unsupported)
+		{
+			return unsupported.kind + "|" + unsupported.member_signature + "|" +
+				unsupported.source_range.begin.file.generic_string() + "|" +
+				std::to_string(unsupported.source_range.begin.line) + "|" +
+				std::to_string(unsupported.source_range.begin.column);
+		}
+
+		void MergeTopLevelUnsupportedItems(ProjectModel& project,
+										   std::vector<UnsupportedItem> unsupported_items)
+		{
+			for (auto& unsupported : unsupported_items)
+			{
+				const auto fingerprint = UnsupportedFingerprint(unsupported);
+				const auto exists =
+					std::any_of(project.unsupported_items.begin(),
+								project.unsupported_items.end(),
+								[&fingerprint](const auto& existing)
+								{
+									return UnsupportedFingerprint(existing) == fingerprint;
+								});
+				if (!exists)
+				{
+					project.unsupported_items.push_back(std::move(unsupported));
+				}
+			}
+		}
+
 		[[nodiscard]] bool HasExtractedContent(const ClassExtractionResult& extraction)
 		{
 			return !extraction.classes.empty() || !extraction.unsupported_items.empty() ||
@@ -332,6 +360,7 @@ namespace mockfakegen
 			{
 				result.project.diagnostics.push_back(std::move(diagnostic));
 			}
+			MergeTopLevelUnsupportedItems(result.project, std::move(extraction.unsupported_items));
 
 			for (auto& class_model : extraction.classes)
 			{

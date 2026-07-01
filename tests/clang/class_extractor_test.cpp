@@ -171,6 +171,19 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] bool HasTopLevelUnsupportedKind(const mockfakegen::ClassExtractionResult& result,
+												  std::string_view kind)
+	{
+		for (const auto& item : result.unsupported_items)
+		{
+			if (item.kind == kind)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	[[nodiscard]] std::size_t UnsupportedKindCount(const mockfakegen::ClassModel& class_model,
 												   std::string_view kind)
 	{
@@ -183,6 +196,132 @@ namespace
 			}
 		}
 		return count;
+	}
+
+	void RecordsClassTemplateSpecializationsAsUnsupported()
+	{
+		TempTree tree;
+		tree.Write("include/TemplateSpecializations.h",
+				   "#pragma once\n"
+				   "template <class T> class Box { public: T value; };\n"
+				   "template <> class Box<int> { public: int value; };\n"
+				   "template <class T> class Box<T*> { public: T* value; };\n"
+				   "class Normal { public: bool Run(); };\n");
+
+		const auto result = ParseAndExtract(tree, "include/TemplateSpecializations.h");
+
+		Expect(result.classes.size() == 1U,
+			   "template specializations should not become generated classes");
+		Expect(result.classes[0].qualified_name == "Normal",
+			   "non-template class should still be extracted");
+		Expect(HasTopLevelUnsupportedKind(result, "class_template"),
+			   "primary class template should be reported unsupported");
+		Expect(HasTopLevelUnsupportedKind(result, "class_template_specialization"),
+			   "explicit class template specialization should be reported unsupported");
+		Expect(HasTopLevelUnsupportedKind(result, "class_template_partial_specialization"),
+			   "partial class template specialization should be reported unsupported");
+	}
+
+	void ReportsPureVirtualInNormalMode()
+	{
+		TempTree tree;
+		tree.Write("include/AbstractLinkMode.h",
+				   "#pragma once\n"
+				   "class AbstractLinkMode {\n"
+				   "public:\n"
+				   "  virtual int Compute() = 0;\n"
+				   "  int Supported();\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/AbstractLinkMode.h");
+
+		Expect(result.classes.size() == 1U, "abstract normal-mode class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.mock_methods.size() == 1U,
+			   "pure virtual method should not be generated in normal mode");
+		Expect(class_model.mock_methods[0].name == "Supported",
+			   "supported concrete declaration should still be generated");
+		Expect(HasUnsupportedKind(class_model, "pure_virtual_method"),
+			   "pure virtual normal-mode method should be unsupported");
+		Expect(!class_model.unsupported_items[0].source_range.begin.file.empty(),
+			   "pure virtual unsupported item should keep source location");
+	}
+
+	void ReportsOutOfClassInlineDefinition()
+	{
+		TempTree tree;
+		tree.Write("include/OutOfClassInline.h",
+				   "#pragma once\n"
+				   "class OutOfClassInline {\n"
+				   "public:\n"
+				   "  void HeaderBody();\n"
+				   "  void Supported();\n"
+				   "};\n"
+				   "inline void OutOfClassInline::HeaderBody() {}\n");
+
+		const auto result = ParseAndExtract(tree, "include/OutOfClassInline.h");
+
+		Expect(result.classes.size() == 1U, "out-of-class inline fixture should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.mock_methods.size() == 1U,
+			   "header-local out-of-class definition should not be generated");
+		Expect(class_model.mock_methods[0].name == "Supported",
+			   "declaration-only method should still be generated");
+		Expect(HasUnsupportedKind(class_model, "inline_body"),
+			   "out-of-class inline definition should be reported as inline_body");
+	}
+
+	void ReportsMacroOriginMethod()
+	{
+		TempTree tree;
+		tree.Write("include/MacroOrigin.h",
+				   "#pragma once\n"
+				   "#define MOCKFAKEGEN_DECLARE_METHOD(name) bool name();\n"
+				   "class MacroOrigin {\n"
+				   "public:\n"
+				   "  MOCKFAKEGEN_DECLARE_METHOD(FromMacro)\n"
+				   "  bool Supported();\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/MacroOrigin.h");
+
+		Expect(result.classes.size() == 1U, "macro-origin fixture should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.mock_methods.size() == 1U,
+			   "macro-origin method should not be generated");
+		Expect(class_model.mock_methods[0].name == "Supported",
+			   "non-macro method should still be generated");
+		Expect(HasUnsupportedKind(class_model, "macro_origin"),
+			   "macro-origin method should be reported unsupported");
+	}
+
+	void ReportsConstevalAttributesAndDefaultedMethods()
+	{
+		TempTree tree;
+		tree.Write("include/ModernUnsupported.h",
+				   "#pragma once\n"
+				   "class ModernUnsupported {\n"
+				   "public:\n"
+				   "  consteval int Immediate() const { return 1; }\n"
+				   "  [[nodiscard]] int Marked();\n"
+				   "  ModernUnsupported& operator=(const ModernUnsupported&) = default;\n"
+				   "  bool Supported();\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/ModernUnsupported.h");
+
+		Expect(result.classes.size() == 1U, "modern unsupported fixture should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.mock_methods.size() == 1U,
+			   "unsupported modern methods should not be generated");
+		Expect(class_model.mock_methods[0].name == "Supported",
+			   "supported method should still be generated");
+		Expect(HasUnsupportedKind(class_model, "consteval_method"),
+			   "consteval method should have stable unsupported kind");
+		Expect(HasUnsupportedKind(class_model, "unsupported_attribute"),
+			   "unsupported attribute should have stable unsupported kind");
+		Expect(HasUnsupportedKind(class_model, "defaulted_method"),
+			   "defaulted method should have stable unsupported kind");
 	}
 
 	void ExtractsPublicMethodsAndQualifiersInDeclarationOrder()
@@ -538,6 +677,11 @@ int main()
 	ExtractsNamespacedClass();
 	SkipsForwardDeclarationAnonymousStructAndSystemHeaders();
 	RecordsClassTemplateAsUnsupported();
+	RecordsClassTemplateSpecializationsAsUnsupported();
+	ReportsPureVirtualInNormalMode();
+	ReportsOutOfClassInlineDefinition();
+	ReportsMacroOriginMethod();
+	ReportsConstevalAttributesAndDefaultedMethods();
 	ExtractsPublicMethodsAndQualifiersInDeclarationOrder();
 	RecordsUnsupportedMethodConstructs();
 	ExtractsSpecialMembersWhenEnabled();

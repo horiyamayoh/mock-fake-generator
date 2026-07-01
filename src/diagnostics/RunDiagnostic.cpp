@@ -108,6 +108,8 @@ namespace mockfakegen
 				return "unknown";
 			case UnsupportedReasonCode::ClassTemplate:
 				return "class_template";
+			case UnsupportedReasonCode::ClassTemplateSpecialization:
+				return "class_template_specialization";
 			case UnsupportedReasonCode::FunctionTemplate:
 				return "function_template";
 			case UnsupportedReasonCode::Constructor:
@@ -118,6 +120,8 @@ namespace mockfakegen
 				return "conversion_operator";
 			case UnsupportedReasonCode::OverloadedOperator:
 				return "overloaded_operator";
+			case UnsupportedReasonCode::PureVirtualMethod:
+				return "pure_virtual_method";
 			case UnsupportedReasonCode::NonPublicMethod:
 				return "non_public_method";
 			case UnsupportedReasonCode::DeletedMethod:
@@ -128,10 +132,16 @@ namespace mockfakegen
 				return "inline_body";
 			case UnsupportedReasonCode::ConstexprMethod:
 				return "constexpr_method";
+			case UnsupportedReasonCode::ConstevalMethod:
+				return "consteval_method";
 			case UnsupportedReasonCode::ConditionalNoexcept:
 				return "conditional_noexcept";
 			case UnsupportedReasonCode::VolatileMethod:
 				return "volatile_method";
+			case UnsupportedReasonCode::UnsupportedAttribute:
+				return "attribute";
+			case UnsupportedReasonCode::MacroOrigin:
+				return "macro_origin";
 			case UnsupportedReasonCode::StaticDataMember:
 				return "static_data_member";
 			case UnsupportedReasonCode::InterfaceConstruct:
@@ -243,6 +253,30 @@ namespace mockfakegen
 				diagnostic.suggested_action = unsupported.suggested_action;
 				diagnostics.push_back(std::move(diagnostic));
 			}
+		}
+		SortRunDiagnostics(diagnostics);
+		return diagnostics;
+	}
+
+	std::vector<RunDiagnostic>
+	BuildUnsupportedItemDiagnostics(std::span<const UnsupportedItem> unsupported_items)
+	{
+		std::vector<RunDiagnostic> diagnostics;
+		diagnostics.reserve(unsupported_items.size());
+		for (const auto& unsupported : unsupported_items)
+		{
+			RunDiagnostic diagnostic;
+			diagnostic.severity = DiagnosticSeverity::Warning;
+			diagnostic.component = "clang";
+			diagnostic.code = UnsupportedCode(unsupported);
+			diagnostic.kind = unsupported.kind;
+			diagnostic.path = unsupported.source_range.begin.file;
+			diagnostic.source_range = unsupported.source_range;
+			diagnostic.class_name = unsupported.class_name;
+			diagnostic.member = MemberName(unsupported);
+			diagnostic.message = unsupported.reason;
+			diagnostic.suggested_action = unsupported.suggested_action;
+			diagnostics.push_back(std::move(diagnostic));
 		}
 		SortRunDiagnostics(diagnostics);
 		return diagnostics;

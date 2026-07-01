@@ -108,6 +108,30 @@ namespace
 					zoo_class,
 					HogeClass(),
 				},
+			.unsupported_items =
+				{
+					mockfakegen::UnsupportedItem{
+						.reason_code =
+							mockfakegen::UnsupportedReasonCode::ClassTemplateSpecialization,
+						.kind = "class_template_specialization",
+						.class_name = "Zed",
+						.name = "Zed",
+						.member_signature = "Zed",
+						.reason = "specialization is not supported",
+						.suggested_action = "exclude this template",
+						.source_range = {},
+					},
+					mockfakegen::UnsupportedItem{
+						.reason_code = mockfakegen::UnsupportedReasonCode::ClassTemplate,
+						.kind = "class_template",
+						.class_name = "Box",
+						.name = "Box",
+						.member_signature = "Box",
+						.reason = "class template is not supported",
+						.suggested_action = "exclude this template",
+						.source_range = {},
+					},
+				},
 			.diagnostics =
 				{
 					mockfakegen::Diagnostic{
@@ -129,6 +153,8 @@ namespace
 			   "methods should sort by signature");
 		Expect(project.classes[0].unsupported_items[0].kind == "function_template",
 			   "unsupported items should remain available after sorting");
+		Expect(project.unsupported_items[0].kind == "class_template",
+			   "top-level unsupported items should sort deterministically");
 		Expect(project.diagnostics[0].message == "unsupported item",
 			   "diagnostics should stay attached to project");
 	}
