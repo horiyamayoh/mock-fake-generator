@@ -223,6 +223,28 @@ namespace
 			"built-in excluded path skip should be diagnosed");
 	}
 
+	void AllowsExplicitInputRootUnderBuiltInDirectory()
+	{
+		TempTree tree;
+		tree.Write("third_party/vendor/include/Foo.h");
+		tree.Write("third_party/vendor/include/build/BuildArtifact.h");
+
+		const auto result = mockfakegen::ScanHeaders({
+			.input_root = tree.root() / "third_party/vendor/include",
+			.project_root = tree.root(),
+			.output_dir = tree.root() / "generated",
+		});
+
+		Expect(result.ok(), "explicit built-in input root should scan successfully");
+		const auto includes = IncludeSpellings(result.headers);
+		const std::vector<std::string> expected{"third_party/vendor/include/Foo.h"};
+		Expect(includes == expected,
+			   "built-in exclusion should not apply to explicit input-root prefix");
+		Expect(
+			HasDiagnosticCode(result, mockfakegen::HeaderScanDiagnosticCode::SkippedExcludedPath),
+			"built-in excluded child path should still be diagnosed");
+	}
+
 	void AppliesConfiguredExcludesAndHeaderFilter()
 	{
 		TempTree tree;
@@ -340,6 +362,7 @@ int main()
 	ExcludesOutputDirectory();
 	ExcludesPriorGeneratedOutputAndGeneratedHeaders();
 	ExcludesBuiltInDirectories();
+	AllowsExplicitInputRootUnderBuiltInDirectory();
 	AppliesConfiguredExcludesAndHeaderFilter();
 	SkipsSymlinkPaths();
 	EmptyDirectoryIsSuccessful();

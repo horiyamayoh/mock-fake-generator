@@ -463,10 +463,11 @@ namespace mockfakegen
 				}
 				else
 				{
-					const auto relative =
-						RelativeToProject(AbsoluteNormalized(entry_path), project_root);
+					const auto absolute_entry_path = AbsoluteNormalized(entry_path);
+					const auto relative = RelativeToProject(absolute_entry_path, project_root);
+					const auto input_relative = RelativeToProject(absolute_entry_path, input_root);
 					const auto relative_path = relative.generic_string();
-					if (HasBuiltinExcludedComponent(relative))
+					if (HasBuiltinExcludedComponent(input_relative))
 					{
 						if (is_directory)
 						{
