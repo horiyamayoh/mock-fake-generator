@@ -142,6 +142,12 @@ namespace mockfakegen
 				return "attribute";
 			case UnsupportedReasonCode::MacroOrigin:
 				return "macro_origin";
+			case UnsupportedReasonCode::UnsupportedTypeSpelling:
+				return "type_spelling";
+			case UnsupportedReasonCode::PrivateNestedType:
+				return "private_nested_type";
+			case UnsupportedReasonCode::NestedClass:
+				return "nested_class";
 			case UnsupportedReasonCode::StaticDataMember:
 				return "static_data_member";
 			case UnsupportedReasonCode::InterfaceConstruct:

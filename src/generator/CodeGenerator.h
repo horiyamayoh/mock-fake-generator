@@ -16,6 +16,7 @@ namespace mockfakegen
 		std::string type;
 		std::string gmock_type = {};
 		std::string name;
+		std::string declaration = {};
 	};
 
 	struct SimpleMethodModel

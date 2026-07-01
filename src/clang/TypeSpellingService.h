@@ -29,6 +29,8 @@ namespace mockfakegen
 		explicit TypeSpellingService(const clang::ASTContext& ast_context);
 
 		[[nodiscard]] TypeSpelling SpellType(clang::QualType type) const;
+		[[nodiscard]] std::string SpellDeclaration(clang::QualType type,
+												   std::string_view name) const;
 		[[nodiscard]] ParameterModel SpellParameter(const clang::ParmVarDecl& parameter,
 													std::size_t parameter_index) const;
 

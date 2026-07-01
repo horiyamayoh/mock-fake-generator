@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -230,6 +231,13 @@ namespace mockfakegen
 			};
 		}
 
+		struct UnsupportedTypeIssue
+		{
+			UnsupportedReasonCode reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling;
+			std::string kind;
+			std::string reason;
+		};
+
 		[[nodiscard]] Diagnostic UnsupportedDiagnostic(const UnsupportedItem& item)
 		{
 			return Diagnostic{
@@ -348,7 +356,16 @@ namespace mockfakegen
 
 			bool VisitCXXRecordDecl(clang::CXXRecordDecl* declaration)
 			{
-				if (declaration == nullptr || !ShouldExtract(declaration))
+				if (declaration == nullptr)
+				{
+					return true;
+				}
+				if (IsUnsupportedNestedClassDefinition(declaration))
+				{
+					RecordUnsupportedNestedClass(*declaration);
+					return true;
+				}
+				if (!ShouldExtract(declaration))
 				{
 					return true;
 				}
@@ -401,6 +418,23 @@ namespace mockfakegen
 			}
 
 		  private:
+			[[nodiscard]] bool
+			IsUnsupportedNestedClassDefinition(const clang::CXXRecordDecl* declaration) const
+			{
+				if (declaration->isImplicit() || !declaration->isThisDeclarationADefinition() ||
+					!declaration->isClass())
+				{
+					return false;
+				}
+				if (declaration->getIdentifier() == nullptr ||
+					declaration->getNameAsString().empty())
+				{
+					return false;
+				}
+				const auto* context = declaration->getDeclContext();
+				return context != nullptr && context->isRecord() && IsInTargetHeader(declaration);
+			}
+
 			[[nodiscard]] bool ShouldExtract(const clang::CXXRecordDecl* declaration) const
 			{
 				if (declaration->isImplicit() || !declaration->isThisDeclarationADefinition())
@@ -415,6 +449,11 @@ namespace mockfakegen
 				}
 
 				if (!declaration->isClass())
+				{
+					return false;
+				}
+				if (declaration->getDeclContext() != nullptr &&
+					declaration->getDeclContext()->isRecord())
 				{
 					return false;
 				}
@@ -461,9 +500,7 @@ namespace mockfakegen
 
 			[[nodiscard]] bool IsMacroOrigin(const clang::Decl& declaration) const
 			{
-				const auto range = declaration.getSourceRange();
-				return declaration.getLocation().isMacroID() || range.getBegin().isMacroID() ||
-					range.getEnd().isMacroID();
+				return declaration.getLocation().isMacroID();
 			}
 
 			[[nodiscard]] bool HasBodyInTargetHeader(const clang::FunctionDecl& function) const
@@ -493,6 +530,166 @@ namespace mockfakegen
 					return true;
 				}
 				return false;
+			}
+
+			[[nodiscard]] bool HasAttributedType(clang::QualType type) const
+			{
+				while (!type.isNull())
+				{
+					const auto* type_ptr = type.getTypePtrOrNull();
+					if (type_ptr == nullptr)
+					{
+						return false;
+					}
+					if (llvm::isa<clang::AttributedType>(type_ptr))
+					{
+						return true;
+					}
+					const auto desugared = type.getSingleStepDesugaredType(ast_context_);
+					if (desugared == type)
+					{
+						return false;
+					}
+					type = desugared;
+				}
+				return false;
+			}
+
+			[[nodiscard]] bool HasDecltypeAutoReturn(const clang::FunctionDecl& function) const
+			{
+				const auto return_type = function.getDeclaredReturnType();
+				const auto* auto_type = return_type->getContainedAutoType();
+				return auto_type != nullptr && auto_type->isDecltypeAuto();
+			}
+
+			[[nodiscard]] bool HasTrailingReturnType(const clang::FunctionDecl& function) const
+			{
+				const auto* function_type = function.getType()->getAs<clang::FunctionProtoType>();
+				return function_type != nullptr && function_type->hasTrailingReturn();
+			}
+
+			[[nodiscard]] std::optional<std::string>
+			PrivateNestedTypeName(clang::QualType type) const
+			{
+				if (type.isNull())
+				{
+					return std::nullopt;
+				}
+				type = type.getNonReferenceType();
+				while (type->isPointerType() || type->isArrayType() || type->isMemberPointerType())
+				{
+					if (type->isPointerType())
+					{
+						type = type->getPointeeType();
+					}
+					else if (const auto* array_type = ast_context_.getAsArrayType(type);
+							 array_type != nullptr)
+					{
+						type = array_type->getElementType();
+					}
+					else if (const auto* member_pointer = type->getAs<clang::MemberPointerType>();
+							 member_pointer != nullptr)
+					{
+						type = member_pointer->getPointeeType();
+					}
+					type = type.getNonReferenceType();
+				}
+
+				if (const auto* record = type->getAsCXXRecordDecl(); record != nullptr)
+				{
+					const auto* context = record->getDeclContext();
+					if (context != nullptr && context->isRecord() &&
+						record->getAccess() != clang::AS_public)
+					{
+						return record->getQualifiedNameAsString();
+					}
+				}
+				if (const auto* enum_type = type->getAs<clang::EnumType>(); enum_type != nullptr)
+				{
+					const auto* enum_decl = enum_type->getDecl();
+					const auto* context =
+						enum_decl == nullptr ? nullptr : enum_decl->getDeclContext();
+					if (context != nullptr && context->isRecord() &&
+						enum_decl->getAccess() != clang::AS_public)
+					{
+						return enum_decl->getQualifiedNameAsString();
+					}
+				}
+				return std::nullopt;
+			}
+
+			[[nodiscard]] std::optional<UnsupportedTypeIssue>
+			UnsupportedTypeIssueForMethod(const clang::CXXMethodDecl& method) const
+			{
+				if (HasTrailingReturnType(method))
+				{
+					return UnsupportedTypeIssue{
+						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+						.kind = "trailing_return_type",
+						.reason = "trailing return type spelling is not supported",
+					};
+				}
+				if (HasDecltypeAutoReturn(method))
+				{
+					return UnsupportedTypeIssue{
+						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+						.kind = "decltype_auto_return",
+						.reason = "decltype(auto) return type is not supported",
+					};
+				}
+				if (method.getReturnType()->isFunctionPointerType() ||
+					method.getReturnType()->isFunctionReferenceType())
+				{
+					return UnsupportedTypeIssue{
+						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+						.kind = "function_pointer_return",
+						.reason = "function pointer/reference return type is not supported",
+					};
+				}
+				if (HasAttributedType(method.getReturnType()))
+				{
+					return UnsupportedTypeIssue{
+						.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+						.kind = "attributed_type",
+						.reason = "attributed type in method signature is not supported",
+					};
+				}
+				if (const auto private_type = PrivateNestedTypeName(method.getReturnType());
+					private_type.has_value())
+				{
+					return UnsupportedTypeIssue{
+						.reason_code = UnsupportedReasonCode::PrivateNestedType,
+						.kind = "private_nested_type",
+						.reason = "private nested type '" + *private_type +
+							"' is not accessible from generated code",
+					};
+				}
+				for (const auto* parameter : method.parameters())
+				{
+					if (parameter == nullptr)
+					{
+						continue;
+					}
+					if (HasAttributedType(parameter->getType()))
+					{
+						return UnsupportedTypeIssue{
+							.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+							.kind = "attributed_type",
+							.reason = "attributed type in method signature is not supported",
+						};
+					}
+					if (const auto private_type = PrivateNestedTypeName(parameter->getType());
+						private_type.has_value())
+					{
+						return UnsupportedTypeIssue{
+							.reason_code = UnsupportedReasonCode::PrivateNestedType,
+							.kind = "private_nested_type",
+							.reason = "private nested type '" + *private_type +
+								"' is not accessible from generated code",
+						};
+					}
+				}
+				return std::nullopt;
 			}
 
 			void ExtractMethods(const clang::CXXRecordDecl& declaration, ClassModel& class_model)
@@ -660,6 +857,16 @@ namespace mockfakegen
 												UnsupportedReasonCode::VolatileMethod,
 												"volatile_method",
 												"volatile method is not supported");
+						continue;
+					}
+					if (const auto type_issue = UnsupportedTypeIssueForMethod(*method);
+						type_issue.has_value())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												type_issue->reason_code,
+												type_issue->kind,
+												type_issue->reason);
 						continue;
 					}
 
@@ -849,6 +1056,16 @@ namespace mockfakegen
 												UnsupportedReasonCode::VolatileMethod,
 												"volatile_method",
 												"volatile method is not supported");
+						continue;
+					}
+					if (const auto type_issue = UnsupportedTypeIssueForMethod(*method);
+						type_issue.has_value())
+					{
+						RecordUnsupportedMethod(class_model,
+												*method,
+												type_issue->reason_code,
+												type_issue->kind,
+												type_issue->reason);
 						continue;
 					}
 
@@ -1253,6 +1470,24 @@ namespace mockfakegen
 												  std::move(reason));
 				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
 				class_model.unsupported_items.push_back(std::move(item));
+			}
+
+			void RecordUnsupportedNestedClass(const clang::CXXRecordDecl& declaration)
+			{
+				const auto name = declaration.getQualifiedNameAsString();
+				auto item = UnsupportedItem{
+					.reason_code = UnsupportedReasonCode::NestedClass,
+					.kind = "nested_class",
+					.class_name = name,
+					.name = declaration.getNameAsString(),
+					.member_signature = name,
+					.reason = "nested class definitions are not generated as independent targets",
+					.suggested_action =
+						"generate the enclosing class or provide a hand-authored mock",
+					.source_range = ToSourceRange(source_manager_, declaration.getSourceRange()),
+				};
+				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
+				result_.unsupported_items.push_back(std::move(item));
 			}
 
 			[[nodiscard]] MethodModel BuildMethodModel(const clang::CXXMethodDecl& method,

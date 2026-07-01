@@ -50,6 +50,9 @@ namespace mockfakegen
 		VolatileMethod,
 		UnsupportedAttribute,
 		MacroOrigin,
+		UnsupportedTypeSpelling,
+		PrivateNestedType,
+		NestedClass,
 		StaticDataMember,
 		InterfaceConstruct,
 	};
@@ -88,6 +91,7 @@ namespace mockfakegen
 	{
 		std::string type_spelling;
 		std::string gmock_type_spelling;
+		std::string declaration_spelling;
 		std::string original_name;
 		std::string generated_name;
 		bool has_default_argument = false;

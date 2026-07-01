@@ -780,9 +780,16 @@ namespace mockfakegen
 				{
 					text += ", ";
 				}
-				text += parameters[index].type;
-				text += ' ';
-				text += parameters[index].name;
+				if (!parameters[index].declaration.empty())
+				{
+					text += parameters[index].declaration;
+				}
+				else
+				{
+					text += parameters[index].type;
+					text += ' ';
+					text += parameters[index].name;
+				}
 			}
 			return text;
 		}
@@ -1174,6 +1181,7 @@ namespace mockfakegen
 						.type = parameter.type_spelling,
 						.gmock_type = parameter.gmock_type_spelling,
 						.name = parameter.generated_name,
+						.declaration = parameter.declaration_spelling,
 					});
 				}
 
@@ -1195,6 +1203,7 @@ namespace mockfakegen
 						.type = parameter.type_spelling,
 						.gmock_type = parameter.gmock_type_spelling,
 						.name = parameter.generated_name,
+						.declaration = parameter.declaration_spelling,
 					});
 				}
 				simple_class.fake_constructors.push_back(std::move(simple_constructor));

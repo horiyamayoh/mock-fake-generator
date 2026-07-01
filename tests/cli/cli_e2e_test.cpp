@@ -332,6 +332,62 @@ namespace
 			   "compile DB product mock should be generated");
 	}
 
+	void CompileValidationAcceptsDeclaratorAwareTypes(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "complex-types-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "complex-types-build";
+		const auto output_dir = temp_root / "complex-types-generated";
+		WriteText(include_dir / "ComplexTypes.h",
+				  "#pragma once\n"
+				  "class ComplexTypes {\n"
+				  "public:\n"
+				  "  struct Token {};\n"
+				  "  bool Use(Token token, void (*callback)(int, int), int values[]);\n"
+				  "};\n");
+		const auto source = source_dir / "ComplexTypes.cpp";
+		WriteText(source, "#include \"ComplexTypes.h\"\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o complex.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "complex_type_validation");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "declarator-aware complex type generation should compile");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "complex type run should execute compile validation");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "complex type validation should not produce validation errors");
+		Expect(std::filesystem::exists(output_dir / "MockComplexTypes.h"),
+			   "complex type mock should be generated");
+		const auto fake_source = ReadText(output_dir / "FakeComplexTypes.cpp");
+		Expect(Contains(fake_source, "void (*callback)(int, int)"),
+			   "fake source should contain name-aware function pointer declarator");
+		Expect(Contains(fake_source, "ComplexTypes::Token token"),
+			   "fake source should qualify public nested type");
+	}
+
 	void DryRunDoesNotPublishFiles(const std::filesystem::path& temp_root,
 								   const std::filesystem::path& product_dir,
 								   const std::filesystem::path& build_dir)
@@ -727,6 +783,7 @@ int main()
 	GeneratesAndValidatesFromRealCli(temp_root, product_dir, build_dir);
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
+	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
