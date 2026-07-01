@@ -186,6 +186,7 @@ namespace mockfakegen
 		std::vector<StaticDataMemberModel> static_data_members = {};
 		std::vector<UnsupportedItem> unsupported_items;
 		bool interface_mock = false;
+		bool mock_destructor_override = false;
 		bool link_ready = true;
 		std::vector<std::string> link_readiness_reasons = {};
 	};

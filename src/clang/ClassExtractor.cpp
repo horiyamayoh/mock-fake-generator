@@ -1590,6 +1590,7 @@ namespace mockfakegen
 				}
 				if (destructor.isDefaulted() || destructor.doesThisDeclarationHaveABody())
 				{
+					class_model.mock_destructor_override = true;
 					return;
 				}
 

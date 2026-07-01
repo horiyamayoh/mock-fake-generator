@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "../GoldenDiff.h"
 #include "clang/ClassExtractor.h"
@@ -49,6 +50,36 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] const mockfakegen::GeneratedFile&
+	FindFile(const std::vector<mockfakegen::GeneratedFile>& files, std::string_view path)
+	{
+		for (const auto& file : files)
+		{
+			if (file.relative_path.generic_string() == path)
+			{
+				return file;
+			}
+		}
+
+		std::cerr << "missing generated file: " << path << '\n';
+		std::exit(1);
+	}
+
+	[[nodiscard]] const mockfakegen::ClassModel&
+	FindClass(const std::vector<mockfakegen::ClassModel>& classes, std::string_view qualified_name)
+	{
+		for (const auto& class_model : classes)
+		{
+			if (class_model.qualified_name == qualified_name)
+			{
+				return class_model;
+			}
+		}
+
+		std::cerr << "missing class model: " << qualified_name << '\n';
+		std::exit(1);
+	}
+
 	void GeneratesInterfaceMockOnly()
 	{
 		const auto source_dir = std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR);
@@ -73,13 +104,23 @@ namespace
 														mockfakegen::ClassExtractionOptions{
 															.interface_mock = true,
 														});
-		Expect(extraction.classes.size() == 1U, "interface class should be extracted");
-		Expect(extraction.classes[0].mock_methods.size() == 2U,
-			   "interface pure virtual methods should be extracted");
-		Expect(extraction.classes[0].fake_methods.empty(),
-			   "interface mode should not extract fake methods");
-		Expect(extraction.classes[0].unsupported_items.empty(),
+		Expect(extraction.classes.size() == 2U, "interface classes should be extracted");
+		const auto& storage = FindClass(extraction.classes, "sample::IStorage");
+		const auto& implicit = FindClass(extraction.classes, "sample::ImplicitDtorIface");
+		Expect(storage.mock_methods.size() == 2U,
+			   "explicit-destructor interface pure virtual methods should be extracted");
+		Expect(storage.fake_methods.empty(), "interface mode should not extract fake methods");
+		Expect(storage.mock_destructor_override,
+			   "explicit virtual interface destructor should request override");
+		Expect(storage.unsupported_items.empty(),
 			   "pure interface should not report unsupported items");
+		Expect(implicit.mock_methods.size() == 1U,
+			   "implicit-destructor interface pure virtual method should be extracted");
+		Expect(implicit.fake_methods.empty(), "interface mode should not extract fake methods");
+		Expect(!implicit.mock_destructor_override,
+			   "implicit non-virtual interface destructor should not request override");
+		Expect(implicit.unsupported_items.empty(),
+			   "implicit non-virtual destructor should remain a supported interface mock");
 
 		const auto generated =
 			mockfakegen::GenerateMockFakeProject(extraction.classes,
@@ -90,13 +131,24 @@ namespace
 													 .emit_report = false,
 													 .interface_mock = true,
 												 });
-		Expect(generated.size() == 1U, "interface fixture should generate only one mock header");
+		Expect(generated.size() == 2U, "interface fixture should generate mock headers only");
 		Expect(HasFile(generated, "MockIStorage.h"),
 			   "interface fixture should generate mock header");
+		Expect(HasFile(generated, "MockImplicitDtorIface.h"),
+			   "implicit-destructor interface fixture should generate mock header");
 		Expect(!HasFile(generated, "FakeIStorage.cpp"),
 			   "interface fixture should not generate fake source");
 		Expect(!HasFile(generated, "MockFakeRuntime.h"),
 			   "interface fixture should not generate runtime");
+		Expect(Contains(FindFile(generated, "MockIStorage.h").content,
+						"~MockIStorage() override = default;"),
+			   "explicit virtual destructor should generate override");
+		Expect(Contains(FindFile(generated, "MockImplicitDtorIface.h").content,
+						"~MockImplicitDtorIface() = default;"),
+			   "implicit non-virtual destructor should omit override");
+		Expect(!Contains(FindFile(generated, "MockImplicitDtorIface.h").content,
+						 "~MockImplicitDtorIface() override"),
+			   "implicit non-virtual destructor should not generate override");
 
 		for (const auto& file : generated)
 		{

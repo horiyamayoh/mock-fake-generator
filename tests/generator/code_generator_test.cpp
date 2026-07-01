@@ -330,6 +330,7 @@ namespace
 			.fake_methods = {},
 			.unsupported_items = {},
 			.interface_mock = true,
+			.mock_destructor_override = true,
 		};
 	}
 

@@ -1171,7 +1171,7 @@ namespace mockfakegen
 				<< indent << "  public:\n"
 				<< member_indent << mock_class_name << "() = default;\n"
 				<< member_indent << "~" << mock_class_name << "()";
-			if (class_model.interface_mock)
+			if (class_model.interface_mock && class_model.mock_destructor_override)
 			{
 				out << " override";
 			}
@@ -1349,6 +1349,7 @@ namespace mockfakegen
 				.link_ready = IsLinkReady(class_model),
 				.link_readiness_reasons = LinkReadinessReasons(class_model),
 				.interface_mock = class_model.interface_mock,
+				.mock_destructor_override = class_model.mock_destructor_override,
 			};
 
 			const auto append_method = [](std::vector<SimpleMethodModel>& methods,

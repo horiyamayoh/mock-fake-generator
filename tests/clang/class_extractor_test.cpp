@@ -773,6 +773,8 @@ namespace
 		Expect(result.classes.size() == 1U, "interface class should be extracted");
 		const auto& class_model = result.classes[0];
 		Expect(class_model.interface_mock, "interface model should be marked");
+		Expect(class_model.mock_destructor_override,
+			   "explicit virtual interface destructor should request mock destructor override");
 		Expect(class_model.mock_methods.size() == 1U,
 			   "pure virtual method should be extracted for interface mock");
 		Expect(class_model.fake_methods.empty(), "interface mode should not create fake methods");
@@ -786,6 +788,35 @@ namespace
 			   "interface noexcept qualifier should be kept");
 		Expect(class_model.unsupported_items.empty(),
 			   "pure interface should not be reported unsupported");
+	}
+
+	void InterfaceModeSupportsImplicitNonVirtualDestructor()
+	{
+		TempTree tree;
+		tree.Write("include/ImplicitDtorIface.h",
+				   "#pragma once\n"
+				   "class ImplicitDtorIface {\n"
+				   "public:\n"
+				   "  virtual int Run() = 0;\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/ImplicitDtorIface.h",
+							mockfakegen::ClassExtractionOptions{.interface_mock = true});
+
+		Expect(result.classes.size() == 1U,
+			   "implicit-destructor interface class should be extracted");
+		const auto& class_model = result.classes[0];
+		Expect(class_model.interface_mock, "implicit-destructor interface should be marked");
+		Expect(!class_model.mock_destructor_override,
+			   "implicit non-virtual destructor should not request override");
+		Expect(class_model.mock_methods.size() == 1U,
+			   "pure virtual method should still be generated");
+		Expect(class_model.mock_methods[0].name == "Run",
+			   "interface method name should be extracted");
+		Expect(class_model.unsupported_items.empty(),
+			   "implicit non-virtual destructor should not make the interface unsupported");
 	}
 
 	void ReportsUnsupportedInterfaceConstructs()
@@ -878,6 +909,7 @@ int main()
 	ReportsStaticDataWhenDisabled();
 	ReportsUnsafeStaticDataWhenEnabled();
 	ExtractsInterfaceMockWhenEnabled();
+	InterfaceModeSupportsImplicitNonVirtualDestructor();
 	ReportsUnsupportedInterfaceConstructs();
 	InterfaceModeKeepsConcreteClassesLinkSeam();
 	return 0;

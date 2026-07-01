@@ -68,6 +68,7 @@ namespace mockfakegen
 		std::vector<std::string> link_readiness_reasons = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		bool interface_mock = false;
+		bool mock_destructor_override = false;
 	};
 
 	struct ProjectGenerationOptions
