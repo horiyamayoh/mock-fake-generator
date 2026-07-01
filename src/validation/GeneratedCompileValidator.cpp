@@ -8,6 +8,7 @@
 #include <csignal>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string_view>
 #include <system_error>
@@ -374,6 +375,15 @@ namespace mockfakegen
 			return headers;
 		}
 
+		[[nodiscard]] std::filesystem::path
+		FakeObjectPath(const std::filesystem::path& tree_root,
+					   const std::filesystem::path& fake_relative_path)
+		{
+			auto object_relative_path = std::filesystem::path("objects") / fake_relative_path;
+			object_relative_path.replace_extension(".o");
+			return tree_root / object_relative_path;
+		}
+
 		[[nodiscard]] bool HasAllMocksHeader(std::span<const GeneratedFile> files)
 		{
 			return std::any_of(files.begin(),
@@ -526,6 +536,23 @@ namespace mockfakegen
 							   const std::filesystem::path& object_path,
 							   const std::filesystem::path& artifact_path)
 		{
+			if (options.mode != ValidationMode::Syntax)
+			{
+				std::error_code error;
+				std::filesystem::create_directories(object_path.parent_path(), error);
+				if (error)
+				{
+					AddDiagnostic(result,
+								  GeneratedCompileValidationStage::Compile,
+								  source_path,
+								  artifact_path,
+								  "failed to create validation object directory '" +
+									  object_path.parent_path().generic_string() +
+									  "': " + error.message());
+					return;
+				}
+			}
+
 			const auto arguments =
 				BuildCompileCommandArguments(options, generated_root, source_path, object_path);
 			const auto command = BuildCommand(arguments);
@@ -693,6 +720,39 @@ namespace mockfakegen
 			return result;
 		}
 
+		const auto sorted_files = CxxFiles(files);
+		std::map<std::string, std::filesystem::path> fake_object_paths;
+		std::map<std::string, std::filesystem::path> object_sources_by_path;
+		if (options.mode != ValidationMode::Syntax)
+		{
+			for (const auto& file : sorted_files)
+			{
+				if (file.kind != GeneratedFileKind::FakeSource)
+				{
+					continue;
+				}
+
+				const auto object_path = FakeObjectPath(tree.root, file.relative_path);
+				const auto object_key = object_path.lexically_normal().generic_string();
+				const auto [source, inserted] =
+					object_sources_by_path.emplace(object_key, file.relative_path);
+				if (!inserted)
+				{
+					AddDiagnostic(result,
+								  GeneratedCompileValidationStage::Compile,
+								  generated_root / file.relative_path,
+								  artifact_path,
+								  "validation object path collision: fake sources '" +
+									  source->second.generic_string() + "' and '" +
+									  file.relative_path.generic_string() + "' both map to '" +
+									  object_key + "'.");
+					tree.keep = options.keep_failed_artifacts;
+					return result;
+				}
+				fake_object_paths.emplace(file.relative_path.generic_string(), object_path);
+			}
+		}
+
 		RunCompileCommand(result,
 						  options,
 						  generated_root,
@@ -705,7 +765,6 @@ namespace mockfakegen
 			object_paths.push_back(tree.root / "mock_headers_smoke.o");
 		}
 
-		const auto sorted_files = CxxFiles(files);
 		for (const auto& file : sorted_files)
 		{
 			if (file.kind != GeneratedFileKind::FakeSource)
@@ -714,7 +773,9 @@ namespace mockfakegen
 			}
 
 			const auto source_path = generated_root / file.relative_path;
-			const auto object_path = tree.root / (file.relative_path.stem().string() + ".o");
+			const auto object_path = options.mode == ValidationMode::Syntax
+				? tree.root / (file.relative_path.stem().string() + ".o")
+				: fake_object_paths.at(file.relative_path.generic_string());
 			RunCompileCommand(
 				result, options, generated_root, source_path, object_path, artifact_path);
 			if (options.mode != ValidationMode::Syntax)

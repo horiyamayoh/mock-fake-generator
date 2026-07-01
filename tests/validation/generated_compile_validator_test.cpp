@@ -192,6 +192,42 @@ namespace
 			});
 	}
 
+	[[nodiscard]] std::vector<mockfakegen::GeneratedFile> SameStemFakeFiles()
+	{
+		return {
+			mockfakegen::MakeGeneratedFile("a/FakeService.cpp",
+										   "int mockfakegen_fake_a()\n"
+										   "{\n"
+										   "\treturn 1;\n"
+										   "}\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+			mockfakegen::MakeGeneratedFile("b/FakeService.cpp",
+										   "int mockfakegen_fake_b()\n"
+										   "{\n"
+										   "\treturn 2;\n"
+										   "}\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+		};
+	}
+
+	[[nodiscard]] std::vector<mockfakegen::GeneratedFile> CollidingObjectPathFakeFiles()
+	{
+		return {
+			mockfakegen::MakeGeneratedFile("a/FakeService.cpp",
+										   "int mockfakegen_fake_cpp()\n"
+										   "{\n"
+										   "\treturn 1;\n"
+										   "}\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+			mockfakegen::MakeGeneratedFile("a/FakeService.cc",
+										   "int mockfakegen_fake_cc()\n"
+										   "{\n"
+										   "\treturn 2;\n"
+										   "}\n",
+										   mockfakegen::GeneratedFileKind::FakeSource),
+		};
+	}
+
 	[[nodiscard]] mockfakegen::GeneratedCompileValidationOptions CompileOptions()
 	{
 		const auto source_dir = std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR);
@@ -276,6 +312,48 @@ namespace
 			   "duplicate-symbol diagnostic should explain link substitution boundary");
 		Expect(Contains(result.diagnostics[0].command, HogeProductSource().string()),
 			   "duplicate-symbol diagnostic should keep the product source in the command");
+	}
+
+	void LinkValidationUsesUniqueObjectPathsForSameStemFakes()
+	{
+		auto options = CompileOptions();
+		options.mode = mockfakegen::ValidationMode::Link;
+		options.link_files.clear();
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, SameStemFakeFiles());
+
+		Expect(result.ok(), "same-stem fake sources in different directories should link");
+		Expect(result.commands.size() == 4U,
+			   "same-stem case should compile smoke, compile both fakes, and link");
+		const auto& link_command = result.commands.back().command;
+		Expect(Contains(link_command, "objects/a/FakeService.o"),
+			   "link command should include object path preserving directory a");
+		Expect(Contains(link_command, "objects/b/FakeService.o"),
+			   "link command should include object path preserving directory b");
+	}
+
+	void LinkValidationReportsObjectPathCollision()
+	{
+		auto options = CompileOptions();
+		options.mode = mockfakegen::ValidationMode::Link;
+		options.link_files.clear();
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, CollidingObjectPathFakeFiles());
+
+		Expect(!result.ok(), "object path collision should fail validation");
+		Expect(result.commands.empty(), "object path collision should fail before compiler runs");
+		Expect(result.diagnostics.size() == 1U,
+			   "object path collision should produce one diagnostic");
+		Expect(result.diagnostics[0].stage == mockfakegen::GeneratedCompileValidationStage::Compile,
+			   "object path collision should record compile stage");
+		Expect(Contains(result.diagnostics[0].message, "validation object path collision"),
+			   "object path collision diagnostic should be explicit");
+		Expect(Contains(result.diagnostics[0].message, "a/FakeService.cpp"),
+			   "object path collision diagnostic should name first source");
+		Expect(Contains(result.diagnostics[0].message, "a/FakeService.cc"),
+			   "object path collision diagnostic should name second source");
 	}
 
 	void SyntaxValidationUsesSyntaxOnly()
@@ -483,6 +561,8 @@ int main()
 	CompileValidationSucceedsForSharedOwnerGeneratedOutput();
 	LinkValidationBuildsSmokeExecutable();
 	LinkValidationReportsDuplicateProductImplementation();
+	LinkValidationUsesUniqueObjectPathsForSameStemFakes();
+	LinkValidationReportsObjectPathCollision();
 	SyntaxValidationUsesSyntaxOnly();
 	SyntaxValidationReportsSyntaxStage();
 	NoneValidationSkipsCompiler();
