@@ -241,10 +241,17 @@ namespace
 		TempTree tree;
 		tree.Write("include/NestedTypes.h",
 				   "#pragma once\n"
+				   "#include <vector>\n"
 				   "class PublicNested {\n"
 				   "public:\n"
 				   "  struct Token {};\n"
+				   "  using Alias = int;\n"
 				   "  Token Make(Token token);\n"
+				   "  std::vector<Token> Items();\n"
+				   "  void Put(std::vector<Token> tokens);\n"
+				   "  Alias GetAlias();\n"
+				   "  void SetAlias(Alias value);\n"
+				   "  std::vector<Alias> AliasItems();\n"
 				   "};\n"
 				   "class PrivateNested {\n"
 				   "  class Hidden {};\n"
@@ -280,6 +287,27 @@ namespace
 			   "public nested parameter type should be qualified");
 		Expect(method.parameters[0].declaration_spelling == "PublicNested::Token token",
 			   "public nested parameter declaration should stay qualified");
+		const auto& items = FindMethod(public_nested, "Items");
+		Expect(items.return_type_spelling == "std::vector<PublicNested::Token>",
+			   "public nested template argument return type should be qualified");
+		Expect(items.gmock_return_type_spelling == "std::vector<PublicNested::Token>",
+			   "public nested template argument gMock return type should be qualified");
+		const auto& put = FindMethod(public_nested, "Put");
+		Expect(put.parameters[0].type_spelling == "std::vector<PublicNested::Token>",
+			   "public nested template argument parameter type should be qualified");
+		Expect(put.parameters[0].declaration_spelling == "std::vector<PublicNested::Token> tokens",
+			   "public nested template argument declaration should stay qualified");
+		const auto& get_alias = FindMethod(public_nested, "GetAlias");
+		Expect(get_alias.return_type_spelling == "PublicNested::Alias",
+			   "public nested alias return type should be qualified");
+		const auto& set_alias = FindMethod(public_nested, "SetAlias");
+		Expect(set_alias.parameters[0].type_spelling == "PublicNested::Alias",
+			   "public nested alias parameter type should be qualified");
+		Expect(set_alias.parameters[0].declaration_spelling == "PublicNested::Alias value",
+			   "public nested alias declaration should stay qualified");
+		const auto& alias_items = FindMethod(public_nested, "AliasItems");
+		Expect(alias_items.return_type_spelling == "std::vector<PublicNested::Alias>",
+			   "public nested alias template argument should be qualified");
 		Expect(private_nested.mock_methods.empty(),
 			   "method using private nested type should not be generated");
 		Expect(HasUnsupportedKind(private_nested, "private_nested_type"),

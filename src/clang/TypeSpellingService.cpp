@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <cctype>
 #include <optional>
+#include <vector>
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclTemplate.h>
+#include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
 
 namespace mockfakegen
@@ -67,7 +70,7 @@ namespace mockfakegen
 			return declaration;
 		}
 
-		struct NestedTagName
+		struct NestedTypeName
 		{
 			std::string unqualified;
 			std::string qualified;
@@ -98,36 +101,175 @@ namespace mockfakegen
 			return type;
 		}
 
-		[[nodiscard]] std::optional<NestedTagName>
-		FindPublicNestedTagName(const clang::ASTContext& ast_context, clang::QualType type)
+		void AddPublicNestedTypeName(std::vector<NestedTypeName>& names,
+									 const clang::NamedDecl* declaration)
 		{
+			if (declaration == nullptr)
+			{
+				return;
+			}
+			const auto* context = declaration->getDeclContext();
+			if (context == nullptr || !context->isRecord() ||
+				declaration->getAccess() != clang::AS_public)
+			{
+				return;
+			}
+			auto unqualified = declaration->getNameAsString();
+			auto qualified = declaration->getQualifiedNameAsString();
+			if (unqualified.empty() || qualified.empty())
+			{
+				return;
+			}
+			for (const auto& name : names)
+			{
+				if (name.unqualified == unqualified && name.qualified == qualified)
+				{
+					return;
+				}
+			}
+			names.push_back(NestedTypeName{
+				.unqualified = std::move(unqualified),
+				.qualified = std::move(qualified),
+			});
+		}
+
+		void CollectPublicNestedTypeNames(const clang::ASTContext& ast_context,
+										  clang::QualType type,
+										  std::vector<NestedTypeName>& names,
+										  unsigned depth = 0U);
+
+		void CollectPublicNestedTemplateArgumentTypeNames(const clang::ASTContext& ast_context,
+														  const clang::TemplateArgument& argument,
+														  std::vector<NestedTypeName>& names,
+														  unsigned depth)
+		{
+			if (depth > 64U)
+			{
+				return;
+			}
+			switch (argument.getKind())
+			{
+				case clang::TemplateArgument::Type:
+					CollectPublicNestedTypeNames(
+						ast_context, argument.getAsType(), names, depth + 1U);
+					break;
+				case clang::TemplateArgument::Declaration:
+					AddPublicNestedTypeName(
+						names, llvm::dyn_cast_or_null<clang::NamedDecl>(argument.getAsDecl()));
+					break;
+				case clang::TemplateArgument::Pack:
+					for (const auto& element : argument.pack_elements())
+					{
+						CollectPublicNestedTemplateArgumentTypeNames(
+							ast_context, element, names, depth + 1U);
+					}
+					break;
+				case clang::TemplateArgument::Null:
+				case clang::TemplateArgument::NullPtr:
+				case clang::TemplateArgument::Integral:
+				case clang::TemplateArgument::StructuralValue:
+				case clang::TemplateArgument::Template:
+				case clang::TemplateArgument::TemplateExpansion:
+				case clang::TemplateArgument::Expression:
+					break;
+			}
+		}
+
+		void CollectPublicNestedTypeNames(const clang::ASTContext& ast_context,
+										  clang::QualType type,
+										  std::vector<NestedTypeName>& names,
+										  unsigned depth)
+		{
+			if (type.isNull() || depth > 64U)
+			{
+				return;
+			}
 			type = PeelDeclaratorType(ast_context, type);
+			const auto* type_ptr = type.getTypePtrOrNull();
+			if (type_ptr == nullptr)
+			{
+				return;
+			}
+			if (const auto* typedef_type = llvm::dyn_cast<clang::TypedefType>(type_ptr);
+				typedef_type != nullptr)
+			{
+				AddPublicNestedTypeName(names, typedef_type->getDecl());
+				CollectPublicNestedTypeNames(
+					ast_context, typedef_type->desugar(), names, depth + 1U);
+				return;
+			}
+			if (const auto* elaborated_type = llvm::dyn_cast<clang::ElaboratedType>(type_ptr);
+				elaborated_type != nullptr)
+			{
+				CollectPublicNestedTypeNames(
+					ast_context, elaborated_type->getNamedType(), names, depth + 1U);
+				return;
+			}
+			if (const auto* attributed_type = llvm::dyn_cast<clang::AttributedType>(type_ptr);
+				attributed_type != nullptr)
+			{
+				CollectPublicNestedTypeNames(
+					ast_context, attributed_type->getModifiedType(), names, depth + 1U);
+				return;
+			}
+			if (const auto* adjusted_type = llvm::dyn_cast<clang::AdjustedType>(type_ptr);
+				adjusted_type != nullptr)
+			{
+				CollectPublicNestedTypeNames(
+					ast_context, adjusted_type->getAdjustedType(), names, depth + 1U);
+				return;
+			}
+			if (const auto* function_type = llvm::dyn_cast<clang::FunctionProtoType>(type_ptr);
+				function_type != nullptr)
+			{
+				CollectPublicNestedTypeNames(
+					ast_context, function_type->getReturnType(), names, depth + 1U);
+				for (const auto parameter_type : function_type->param_types())
+				{
+					CollectPublicNestedTypeNames(ast_context, parameter_type, names, depth + 1U);
+				}
+				return;
+			}
+			if (const auto* function_type = llvm::dyn_cast<clang::FunctionNoProtoType>(type_ptr);
+				function_type != nullptr)
+			{
+				CollectPublicNestedTypeNames(
+					ast_context, function_type->getReturnType(), names, depth + 1U);
+				return;
+			}
+			if (const auto* template_specialization =
+					llvm::dyn_cast<clang::TemplateSpecializationType>(type_ptr);
+				template_specialization != nullptr)
+			{
+				for (const auto& argument : template_specialization->template_arguments())
+				{
+					CollectPublicNestedTemplateArgumentTypeNames(
+						ast_context, argument, names, depth + 1U);
+				}
+			}
 			if (const auto* record = type->getAsCXXRecordDecl(); record != nullptr)
 			{
-				const auto* context = record->getDeclContext();
-				if (context != nullptr && context->isRecord() &&
-					record->getAccess() == clang::AS_public)
+				if (const auto* specialization =
+						llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(record);
+					specialization != nullptr)
 				{
-					return NestedTagName{
-						.unqualified = record->getNameAsString(),
-						.qualified = record->getQualifiedNameAsString(),
-					};
+					for (const auto& argument : specialization->getTemplateArgs().asArray())
+					{
+						CollectPublicNestedTemplateArgumentTypeNames(
+							ast_context, argument, names, depth + 1U);
+					}
 				}
+				AddPublicNestedTypeName(names, record);
 			}
 			if (const auto* enum_type = type->getAs<clang::EnumType>(); enum_type != nullptr)
 			{
-				const auto* enum_decl = enum_type->getDecl();
-				const auto* context = enum_decl == nullptr ? nullptr : enum_decl->getDeclContext();
-				if (context != nullptr && context->isRecord() &&
-					enum_decl->getAccess() == clang::AS_public)
-				{
-					return NestedTagName{
-						.unqualified = enum_decl->getNameAsString(),
-						.qualified = enum_decl->getQualifiedNameAsString(),
-					};
-				}
+				AddPublicNestedTypeName(names, enum_type->getDecl());
 			}
-			return std::nullopt;
+			const auto desugared = type.getSingleStepDesugaredType(ast_context);
+			if (desugared != type)
+			{
+				CollectPublicNestedTypeNames(ast_context, desugared, names, depth + 1U);
+			}
 		}
 
 		[[nodiscard]] bool IsIdentifierBoundary(char character)
@@ -143,7 +285,9 @@ namespace mockfakegen
 				const auto before_ok = position == 0U || IsIdentifierBoundary(text[position - 1U]);
 				const auto after = position + from.size();
 				const auto after_ok = after == text.size() || IsIdentifierBoundary(text[after]);
-				if (before_ok && after_ok)
+				const auto already_qualified =
+					position >= 2U && text[position - 1U] == ':' && text[position - 2U] == ':';
+				if (before_ok && after_ok && !already_qualified)
 				{
 					text.replace(position, from.size(), to);
 					position += to.size();
@@ -159,16 +303,22 @@ namespace mockfakegen
 														  clang::QualType type,
 														  std::string spelling)
 		{
-			const auto nested = FindPublicNestedTagName(ast_context, type);
-			if (!nested.has_value() || nested->unqualified.empty() || nested->qualified.empty())
+			std::vector<NestedTypeName> nested_names;
+			CollectPublicNestedTypeNames(ast_context, type, nested_names);
+			if (nested_names.empty())
 			{
 				return spelling;
 			}
-			if (spelling.find(nested->qualified) != std::string::npos)
+			std::sort(nested_names.begin(),
+					  nested_names.end(),
+					  [](const NestedTypeName& lhs, const NestedTypeName& rhs)
+					  {
+						  return lhs.unqualified.size() > rhs.unqualified.size();
+					  });
+			for (const auto& nested : nested_names)
 			{
-				return spelling;
+				ReplaceIdentifierToken(spelling, nested.unqualified, nested.qualified);
 			}
-			ReplaceIdentifierToken(spelling, nested->unqualified, nested->qualified);
 			return spelling;
 		}
 	} // namespace

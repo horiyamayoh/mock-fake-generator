@@ -646,6 +646,76 @@ namespace
 #endif
 	}
 
+	void CompileValidationAcceptsPublicNestedTemplateAndAliasTypes(
+		const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "public-nested-types-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "public-nested-types-build";
+		const auto output_dir = temp_root / "public-nested-types-generated";
+		WriteText(include_dir / "PublicNestedTypes.h",
+				  "#pragma once\n"
+				  "#include <vector>\n"
+				  "class PublicNestedTypes {\n"
+				  "public:\n"
+				  "  struct Token {};\n"
+				  "  using Alias = int;\n"
+				  "  std::vector<Token> Items();\n"
+				  "  void Put(std::vector<Token> tokens);\n"
+				  "  Alias GetAlias();\n"
+				  "  void SetAlias(Alias value);\n"
+				  "  std::vector<Alias> AliasItems();\n"
+				  "};\n");
+		const auto source = source_dir / "PublicNestedTypes.cpp";
+		WriteText(source, "#include \"PublicNestedTypes.h\"\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o public_nested_types.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "public_nested_type_validation");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "public nested template and alias types should compile");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "public nested type run should execute compile validation");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "public nested type validation should not produce validation errors");
+		Expect(std::filesystem::exists(output_dir / "FakePublicNestedTypes.cpp"),
+			   "public nested type fake should be generated");
+		const auto mock_header = ReadText(output_dir / "MockPublicNestedTypes.h");
+		const auto fake_source = ReadText(output_dir / "FakePublicNestedTypes.cpp");
+		Expect(Contains(mock_header, "std::vector<PublicNestedTypes::Token>"),
+			   "mock header should qualify public nested template argument");
+		Expect(Contains(mock_header, "PublicNestedTypes::Alias"),
+			   "mock header should qualify public nested alias");
+		Expect(Contains(fake_source, "std::vector<PublicNestedTypes::Token>"),
+			   "fake source should qualify public nested template argument");
+		Expect(Contains(fake_source, "PublicNestedTypes::Alias"),
+			   "fake source should qualify public nested alias");
+		Expect(!Contains(fake_source, "std::vector<Token>"),
+			   "fake source should not emit unqualified public nested template argument");
+	}
+
 	void CompileValidationAcceptsDeclaratorAwareTypes(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "complex-types-product";
@@ -2033,6 +2103,7 @@ int main()
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);
 	CompileValidationUsesCompileDatabaseCompiler(temp_root);
+	CompileValidationAcceptsPublicNestedTemplateAndAliasTypes(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
 	GeneratedNamesAvoidProductScopeCollisions(temp_root);
