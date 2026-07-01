@@ -954,6 +954,30 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	)
 
 	add_executable(
+		mockfakegen_special_member_generation_test
+		tests/fixtures/special_member/special_member_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_special_member_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_special_member_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_special_member_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_special_member_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_special_member_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_special_member_generation_test)
+
+	add_test(
+		NAME mockfakegen_special_member_generation_test
+		COMMAND mockfakegen_special_member_generation_test
+	)
+
+	add_executable(
 		mockfakegen_special_member_generated_smoke
 		tests/fixtures/special_member/special_member_generated_smoke.cpp
 		tests/fixtures/special_member/generated/FakeSpecial.cpp

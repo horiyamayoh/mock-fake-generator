@@ -39,6 +39,7 @@ namespace mockfakegen
 		Destructor,
 		ConversionOperator,
 		OverloadedOperator,
+		AssignmentOperator,
 		PureVirtualMethod,
 		NonPublicMethod,
 		DeletedMethod,

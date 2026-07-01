@@ -94,7 +94,7 @@
       "unsupported_items": 2,
       "link_ready": false,
       "link_readiness_reasons": [
-        "unsupported items remain"
+        "unsupported items remain: function_template, overloaded_operator"
       ],
       "diagnostic_summary": {
         "total": 2,

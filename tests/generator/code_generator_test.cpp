@@ -654,7 +654,7 @@ namespace
 		const auto files = mockfakegen::GenerateMockFakeProject(classes);
 
 		const auto& fake = FindFile(files, "FakeSpecial.cpp");
-		Expect(Contains(fake.content, "Special::Special(int value)\n\t\t: value_{}"),
+		Expect(Contains(fake.content, "Special::Special(int value) : value_{}"),
 			   "constructor fake should initialize safe members");
 		Expect(Contains(fake.content, "(void)value;"),
 			   "constructor fake should mark ignored parameters");
@@ -754,7 +754,7 @@ namespace
 		Expect(Contains(report.content, "`FakeXXX.cpp`"), "report should include link warning");
 		Expect(Contains(report.content,
 						"| alpha::Alpha | include/Alpha.h | unknown | mock-only | MockAlpha.h | "
-						" | no | unsupported items remain | 2 | 1 |"),
+						" | no | unsupported items remain: function_template | 2 | 1 |"),
 			   "report should include generated class row");
 		Expect(Contains(report.content,
 						"| include/Alpha.h | alpha::Alpha | alpha::Alpha::Convert | function "

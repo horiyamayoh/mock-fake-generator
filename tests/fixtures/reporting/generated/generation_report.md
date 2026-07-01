@@ -14,7 +14,7 @@ Do not link generated `FakeXXX.cpp` files together with the corresponding produc
 
 | Class | Source header | Parse mode | Generation mode | Mock header | Fake source | Link ready | Link-readiness reason | Generated methods | Unsupported items |
 |---|---|---|---|---|---|---|---|---:|---:|
-| sample::Service | Service.h | synthetic-tu | link-replacement | MockService.h | FakeService.cpp | no | unsupported items remain | 1 | 2 |
+| sample::Service | Service.h | synthetic-tu | link-replacement | MockService.h | FakeService.cpp | no | unsupported items remain: function_template, overloaded_operator | 1 | 2 |
 
 ## Diagnostics
 

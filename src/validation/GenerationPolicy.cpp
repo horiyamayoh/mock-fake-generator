@@ -75,6 +75,33 @@ namespace mockfakegen
 			return reasons;
 		}
 
+		[[nodiscard]] std::string
+		UnsupportedItemsLinkReadinessReason(std::span<const UnsupportedItem> unsupported_items)
+		{
+			std::string reason = "unsupported items remain";
+			std::vector<std::string> kinds;
+			for (const auto& item : unsupported_items)
+			{
+				if (std::find(kinds.begin(), kinds.end(), item.kind) == kinds.end())
+				{
+					kinds.push_back(item.kind);
+				}
+			}
+			if (!kinds.empty())
+			{
+				reason += ": ";
+				for (std::size_t index = 0U; index < kinds.size(); ++index)
+				{
+					if (index != 0U)
+					{
+						reason += ", ";
+					}
+					reason += kinds[index];
+				}
+			}
+			return reason;
+		}
+
 		void AppendClassLinkReadinessReasons(const Config& config,
 											 const ClassModel& class_model,
 											 std::vector<std::string>& reasons)
@@ -85,7 +112,8 @@ namespace mockfakegen
 			}
 			if (!class_model.unsupported_items.empty())
 			{
-				reasons.push_back("unsupported items remain");
+				reasons.push_back(
+					UnsupportedItemsLinkReadinessReason(class_model.unsupported_items));
 			}
 			for (const auto& method : class_model.fake_methods)
 			{

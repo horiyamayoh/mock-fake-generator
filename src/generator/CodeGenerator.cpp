@@ -183,12 +183,40 @@ namespace mockfakegen
 			return BuildQualifiedName(class_model.namespaces, class_model.name);
 		}
 
+		[[nodiscard]] std::string
+		UnsupportedItemsLinkReadinessReason(std::span<const UnsupportedItem> unsupported_items)
+		{
+			std::string reason = "unsupported items remain";
+			std::vector<std::string> kinds;
+			for (const auto& item : unsupported_items)
+			{
+				if (std::find(kinds.begin(), kinds.end(), item.kind) == kinds.end())
+				{
+					kinds.push_back(item.kind);
+				}
+			}
+			if (!kinds.empty())
+			{
+				reason += ": ";
+				for (std::size_t index = 0U; index < kinds.size(); ++index)
+				{
+					if (index != 0U)
+					{
+						reason += ", ";
+					}
+					reason += kinds[index];
+				}
+			}
+			return reason;
+		}
+
 		[[nodiscard]] std::vector<std::string> LinkReadinessReasons(const ClassModel& class_model)
 		{
 			std::vector<std::string> reasons = class_model.link_readiness_reasons;
 			if (!class_model.unsupported_items.empty())
 			{
-				reasons.push_back("unsupported items remain");
+				reasons.push_back(
+					UnsupportedItemsLinkReadinessReason(class_model.unsupported_items));
 			}
 			if (!class_model.link_ready && reasons.empty())
 			{
@@ -1120,15 +1148,12 @@ namespace mockfakegen
 				const auto parameter_declarations =
 					JoinParameterDeclarations(constructor.parameters);
 				out << indent << class_model.name << "::" << class_model.name << '('
-					<< parameter_declarations << ')' << NoexceptSuffix(constructor.is_noexcept)
-					<< "\n";
+					<< parameter_declarations << ')' << NoexceptSuffix(constructor.is_noexcept);
 				if (!constructor.member_initializers.empty())
 				{
-					out << indent
-						<< "\t: " << JoinConstructorInitializers(constructor.member_initializers)
-						<< "\n";
+					out << " : " << JoinConstructorInitializers(constructor.member_initializers);
 				}
-				out << indent << "{\n";
+				out << "\n" << indent << "{\n";
 				for (const auto& parameter : constructor.parameters)
 				{
 					out << body_indent << "(void)" << parameter.name << ";\n";
@@ -1140,9 +1165,7 @@ namespace mockfakegen
 			{
 				separate_definition();
 				out << indent << class_model.name << "::~" << class_model.name << "()"
-					<< NoexceptSuffix(destructor.is_noexcept) << "\n"
-					<< indent << "{\n"
-					<< indent << "}\n";
+					<< NoexceptSuffix(destructor.is_noexcept) << " {}\n";
 			}
 
 			for (const auto& method : FakeMethods(class_model))

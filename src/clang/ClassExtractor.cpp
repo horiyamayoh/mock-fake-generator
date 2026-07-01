@@ -146,6 +146,20 @@ namespace mockfakegen
 				exception_spec == clang::EST_NoexceptFalse;
 		}
 
+		[[nodiscard]] bool IsAssignmentOperator(const clang::CXXMethodDecl& method)
+		{
+			return method.isCopyAssignmentOperator() || method.isMoveAssignmentOperator();
+		}
+
+		[[nodiscard]] std::string AssignmentOperatorReason(const clang::CXXMethodDecl& method)
+		{
+			if (method.isMoveAssignmentOperator())
+			{
+				return "move assignment operator fake generation is not supported";
+			}
+			return "copy assignment operator fake generation is not supported";
+		}
+
 		[[nodiscard]] bool HasAccessibleDefaultConstructor(const clang::CXXRecordDecl& record)
 		{
 			if (!record.hasDefinition())
@@ -638,6 +652,37 @@ namespace mockfakegen
 			}
 
 			[[nodiscard]] std::optional<UnsupportedTypeIssue>
+			UnsupportedTypeIssueForParameters(const clang::FunctionDecl& function) const
+			{
+				for (const auto* parameter : function.parameters())
+				{
+					if (parameter == nullptr)
+					{
+						continue;
+					}
+					if (HasAttributedType(parameter->getType()))
+					{
+						return UnsupportedTypeIssue{
+							.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
+							.kind = "attributed_type",
+							.reason = "attributed type in method signature is not supported",
+						};
+					}
+					if (const auto private_type = PrivateNestedTypeName(parameter->getType());
+						private_type.has_value())
+					{
+						return UnsupportedTypeIssue{
+							.reason_code = UnsupportedReasonCode::PrivateNestedType,
+							.kind = "private_nested_type",
+							.reason = "private nested type '" + *private_type +
+								"' is not accessible from generated code",
+						};
+					}
+				}
+				return std::nullopt;
+			}
+
+			[[nodiscard]] std::optional<UnsupportedTypeIssue>
 			UnsupportedTypeIssueForMethod(const clang::CXXMethodDecl& method) const
 			{
 				if (HasTrailingReturnType(method))
@@ -683,32 +728,7 @@ namespace mockfakegen
 							"' is not accessible from generated code",
 					};
 				}
-				for (const auto* parameter : method.parameters())
-				{
-					if (parameter == nullptr)
-					{
-						continue;
-					}
-					if (HasAttributedType(parameter->getType()))
-					{
-						return UnsupportedTypeIssue{
-							.reason_code = UnsupportedReasonCode::UnsupportedTypeSpelling,
-							.kind = "attributed_type",
-							.reason = "attributed type in method signature is not supported",
-						};
-					}
-					if (const auto private_type = PrivateNestedTypeName(parameter->getType());
-						private_type.has_value())
-					{
-						return UnsupportedTypeIssue{
-							.reason_code = UnsupportedReasonCode::PrivateNestedType,
-							.kind = "private_nested_type",
-							.reason = "private nested type '" + *private_type +
-								"' is not accessible from generated code",
-						};
-					}
-				}
-				return std::nullopt;
+				return UnsupportedTypeIssueForParameters(method);
 			}
 
 			void ExtractMethods(const clang::CXXRecordDecl& declaration, ClassModel& class_model)
@@ -766,6 +786,11 @@ namespace mockfakegen
 					{
 						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
 						RecordDestructor(*destructor, class_model);
+						continue;
+					}
+					if (IsAssignmentOperator(*method))
+					{
+						RecordAssignmentOperator(*method, class_model);
 						continue;
 					}
 					if (method->isDeleted())
@@ -956,6 +981,11 @@ namespace mockfakegen
 					{
 						const auto* destructor = llvm::cast<clang::CXXDestructorDecl>(method);
 						RecordInterfaceDestructor(*destructor, class_model);
+						continue;
+					}
+					if (IsAssignmentOperator(*method))
+					{
+						RecordAssignmentOperator(*method, class_model);
 						continue;
 					}
 					if (method->isDeleted())
@@ -1203,6 +1233,16 @@ namespace mockfakegen
 											"constructor exception specification is not supported");
 					return;
 				}
+				if (const auto type_issue = UnsupportedTypeIssueForParameters(constructor);
+					type_issue.has_value())
+				{
+					RecordUnsupportedMethod(class_model,
+											constructor,
+											type_issue->reason_code,
+											type_issue->kind,
+											type_issue->reason);
+					return;
+				}
 				if (constructor.isDefaulted())
 				{
 					RecordUnsupportedMethod(class_model,
@@ -1309,6 +1349,16 @@ namespace mockfakegen
 					.is_noexcept = IsNoexcept(destructor),
 					.source_range = ToSourceRange(source_manager_, destructor.getSourceRange()),
 				});
+			}
+
+			void RecordAssignmentOperator(const clang::CXXMethodDecl& method,
+										  ClassModel& class_model)
+			{
+				RecordUnsupportedMethod(class_model,
+										method,
+										UnsupportedReasonCode::AssignmentOperator,
+										"assignment_operator",
+										AssignmentOperatorReason(method));
 			}
 
 			[[nodiscard]] bool ReferencesNestedType(clang::QualType type) const

@@ -120,6 +120,8 @@ namespace mockfakegen
 				return "conversion_operator";
 			case UnsupportedReasonCode::OverloadedOperator:
 				return "overloaded_operator";
+			case UnsupportedReasonCode::AssignmentOperator:
+				return "assignment_operator";
 			case UnsupportedReasonCode::PureVirtualMethod:
 				return "pure_virtual_method";
 			case UnsupportedReasonCode::NonPublicMethod:

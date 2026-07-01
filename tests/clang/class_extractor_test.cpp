@@ -198,6 +198,20 @@ namespace
 		return count;
 	}
 
+	[[nodiscard]] const mockfakegen::ClassModel&
+	FindClass(const mockfakegen::ClassExtractionResult& result, std::string_view name)
+	{
+		for (const auto& class_model : result.classes)
+		{
+			if (class_model.name == name)
+			{
+				return class_model;
+			}
+		}
+		std::cerr << "missing class: " << name << '\n';
+		std::exit(1);
+	}
+
 	void RecordsClassTemplateSpecializationsAsUnsupported()
 	{
 		TempTree tree;
@@ -295,7 +309,7 @@ namespace
 			   "macro-origin method should be reported unsupported");
 	}
 
-	void ReportsConstevalAttributesAndDefaultedMethods()
+	void ReportsConstevalAttributesAndAssignmentOperators()
 	{
 		TempTree tree;
 		tree.Write("include/ModernUnsupported.h",
@@ -320,8 +334,8 @@ namespace
 			   "consteval method should have stable unsupported kind");
 		Expect(HasUnsupportedKind(class_model, "unsupported_attribute"),
 			   "unsupported attribute should have stable unsupported kind");
-		Expect(HasUnsupportedKind(class_model, "defaulted_method"),
-			   "defaulted method should have stable unsupported kind");
+		Expect(HasUnsupportedKind(class_model, "assignment_operator"),
+			   "defaulted assignment operator should have stable unsupported kind");
 	}
 
 	void ReportsUnsupportedTypeSpellingCases()
@@ -420,6 +434,7 @@ namespace
 				   "  ~UnsupportedMethods();\n"
 				   "  operator bool() const;\n"
 				   "  UnsupportedMethods& operator=(const UnsupportedMethods& other);\n"
+				   "  UnsupportedMethods& operator+=(int delta);\n"
 				   "  template <class T> T Get();\n"
 				   "  void Deleted() = delete;\n"
 				   "  void Inline() {}\n"
@@ -440,8 +455,10 @@ namespace
 		Expect(HasUnsupportedKind(class_model, "destructor"), "destructor should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "conversion_operator"),
 			   "conversion operator should be unsupported");
+		Expect(HasUnsupportedKind(class_model, "assignment_operator"),
+			   "assignment operator should be unsupported with a stable kind");
 		Expect(HasUnsupportedKind(class_model, "overloaded_operator"),
-			   "overloaded operator should be unsupported");
+			   "non-assignment overloaded operator should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "function_template"),
 			   "function template should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "deleted_method"),
@@ -463,13 +480,19 @@ namespace
 		TempTree tree;
 		tree.Write("include/Special.h",
 				   "#pragma once\n"
-				   "class Special {\n"
+				   "class Base {\n"
 				   "public:\n"
-				   "  explicit Special(int value);\n"
-				   "  ~Special();\n"
+				   "  Base() = default;\n"
+				   "};\n"
+				   "class Special : public Base {\n"
+				   "public:\n"
+				   "  explicit Special(int value) noexcept;\n"
+				   "  ~Special() noexcept;\n"
 				   "  bool Touch();\n"
 				   "private:\n"
 				   "  int value_;\n"
+				   "  const int limit_;\n"
+				   "  int initialized_ = 7;\n"
 				   "};\n");
 
 		const auto result =
@@ -477,16 +500,23 @@ namespace
 							"include/Special.h",
 							mockfakegen::ClassExtractionOptions{.fake_special_members = true});
 
-		Expect(result.classes.size() == 1U, "special member fixture class should be extracted");
-		const auto& class_model = result.classes[0];
+		Expect(result.classes.size() == 2U, "base and special classes should be extracted");
+		const auto& class_model =
+			result.classes[0].name == "Special" ? result.classes[0] : result.classes[1];
 		Expect(class_model.fake_constructors.size() == 1U,
 			   "safe constructor should be generated as fake constructor");
-		Expect(class_model.fake_constructors[0].member_initializers.size() == 1U,
+		Expect(class_model.fake_constructors[0].is_noexcept,
+			   "constructor noexcept should be preserved");
+		Expect(class_model.fake_constructors[0].member_initializers.size() == 2U,
 			   "constructor should initialize default-constructible field");
 		Expect(class_model.fake_constructors[0].member_initializers[0] == "value_{}",
 			   "constructor initializer should be deterministic");
+		Expect(class_model.fake_constructors[0].member_initializers[1] == "limit_{}",
+			   "const field initializer should be synthesized");
 		Expect(class_model.fake_destructors.size() == 1U,
 			   "out-of-line destructor should be generated as fake destructor");
+		Expect(class_model.fake_destructors[0].is_noexcept,
+			   "destructor noexcept should be preserved");
 		Expect(class_model.unsupported_items.empty(),
 			   "safe special members should not be reported unsupported");
 	}
@@ -552,6 +582,64 @@ namespace
 			   "unsafe constructor diagnostic should explain base class");
 	}
 
+	void ReportsUnsafeSpecialMemberPolicyBranches()
+	{
+		TempTree tree;
+		tree.Write("include/UnsafeSpecialBranches.h",
+				   "#pragma once\n"
+				   "class NoDefault {\n"
+				   "public:\n"
+				   "  explicit NoDefault(int value);\n"
+				   "};\n"
+				   "class UnsafeField {\n"
+				   "public:\n"
+				   "  UnsafeField();\n"
+				   "private:\n"
+				   "  NoDefault field_;\n"
+				   "};\n"
+				   "class PrivateParameter {\n"
+				   "  class Token {};\n"
+				   "public:\n"
+				   "  explicit PrivateParameter(Token token);\n"
+				   "};\n"
+				   "class ThrowingSpecial {\n"
+				   "public:\n"
+				   "  ThrowingSpecial() noexcept(false);\n"
+				   "  ~ThrowingSpecial() noexcept(false);\n"
+				   "};\n");
+
+		const auto result =
+			ParseAndExtract(tree,
+							"include/UnsafeSpecialBranches.h",
+							mockfakegen::ClassExtractionOptions{.fake_special_members = true});
+
+		Expect(result.classes.size() == 4U, "all unsafe policy classes should be extracted");
+		const auto& unsafe_field = FindClass(result, "UnsafeField");
+		Expect(unsafe_field.fake_constructors.empty(),
+			   "constructor with non-default field should not be generated");
+		Expect(HasUnsupportedKind(unsafe_field, "constructor"),
+			   "non-default field should report constructor unsupported");
+		Expect(unsafe_field.unsupported_items[0].reason.find("not default-constructible") !=
+				   std::string::npos,
+			   "non-default field reason should be specific");
+
+		const auto& private_parameter = FindClass(result, "PrivateParameter");
+		Expect(private_parameter.fake_constructors.empty(),
+			   "constructor with private parameter type should not be generated");
+		Expect(HasUnsupportedKind(private_parameter, "private_nested_type"),
+			   "private parameter type should report stable unsupported kind");
+
+		const auto& throwing_special = FindClass(result, "ThrowingSpecial");
+		Expect(throwing_special.fake_constructors.empty(),
+			   "throwing constructor should not be generated");
+		Expect(throwing_special.fake_destructors.empty(),
+			   "throwing destructor should not be generated");
+		Expect(UnsupportedKindCount(throwing_special, "constructor") == 1U,
+			   "throwing constructor should report constructor unsupported");
+		Expect(UnsupportedKindCount(throwing_special, "destructor") == 1U,
+			   "throwing destructor should report destructor unsupported");
+	}
+
 	void ExtractsStaticDataWhenEnabled()
 	{
 		TempTree tree;
@@ -615,11 +703,22 @@ namespace
 		TempTree tree;
 		tree.Write("include/UnsafeStaticData.h",
 				   "#pragma once\n"
-				   "class UnsafeStaticData {\n"
+				   "class NoDefaultStatic {\n"
 				   "public:\n"
+				   "  explicit NoDefaultStatic(int value);\n"
+				   "};\n"
+				   "class UnsafeStaticData {\n"
+				   "  class PrivateToken {};\n"
+				   "public:\n"
+				   "  struct PublicToken {};\n"
 				   "  static int& ref;\n"
 				   "  static constinit int boot;\n"
 				   "  static int values[2];\n"
+				   "  static thread_local int tls;\n"
+				   "  static const int initialized = 7;\n"
+				   "  static PublicToken public_token;\n"
+				   "  static PrivateToken private_token;\n"
+				   "  static NoDefaultStatic object;\n"
 				   "};\n");
 
 		const auto result =
@@ -627,11 +726,11 @@ namespace
 							"include/UnsafeStaticData.h",
 							mockfakegen::ClassExtractionOptions{.fake_static_data = true});
 
-		Expect(result.classes.size() == 1U, "unsafe static data class should be extracted");
-		const auto& class_model = result.classes[0];
+		Expect(result.classes.size() == 2U, "unsafe static data classes should be extracted");
+		const auto& class_model = result.classes[1];
 		Expect(class_model.static_data_members.empty(),
 			   "unsafe static data should not be generated");
-		Expect(UnsupportedKindCount(class_model, "static_data_member") == 3U,
+		Expect(UnsupportedKindCount(class_model, "static_data_member") == 8U,
 			   "all unsafe static data members should be reported unsupported");
 		Expect(class_model.unsupported_items[0].reason.find("reference static data member") !=
 				   std::string::npos,
@@ -641,6 +740,18 @@ namespace
 		Expect(class_model.unsupported_items[2].reason.find("array static data member") !=
 				   std::string::npos,
 			   "array static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[3].reason.find("thread-local") != std::string::npos,
+			   "thread-local static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[4].reason.find("in-class initializer") !=
+				   std::string::npos,
+			   "initializer-dependent static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[5].reason.find("nested type") != std::string::npos,
+			   "public nested static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[6].reason.find("nested type") != std::string::npos,
+			   "private nested static data diagnostic should be specific");
+		Expect(class_model.unsupported_items[7].reason.find("not default-constructible") !=
+				   std::string::npos,
+			   "non-default static data diagnostic should be specific");
 	}
 
 	void ExtractsInterfaceMockWhenEnabled()
@@ -755,13 +866,14 @@ int main()
 	ReportsPureVirtualInNormalMode();
 	ReportsOutOfClassInlineDefinition();
 	ReportsMacroOriginMethod();
-	ReportsConstevalAttributesAndDefaultedMethods();
+	ReportsConstevalAttributesAndAssignmentOperators();
 	ReportsUnsupportedTypeSpellingCases();
 	ExtractsPublicMethodsAndQualifiersInDeclarationOrder();
 	RecordsUnsupportedMethodConstructs();
 	ExtractsSpecialMembersWhenEnabled();
 	ReportsUnsafeSpecialMemberConstructor();
 	ReportsUnsafeSpecialMemberBaseConstructor();
+	ReportsUnsafeSpecialMemberPolicyBranches();
 	ExtractsStaticDataWhenEnabled();
 	ReportsStaticDataWhenDisabled();
 	ReportsUnsafeStaticDataWhenEnabled();

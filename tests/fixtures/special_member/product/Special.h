@@ -1,13 +1,21 @@
 #pragma once
 
-class Special
+class SpecialBase
 {
   public:
-	explicit Special(int value);
-	~Special();
+	SpecialBase() = default;
+};
+
+class Special : public SpecialBase
+{
+  public:
+	explicit Special(int value) noexcept;
+	~Special() noexcept;
 
 	bool Touch(int delta);
 
   private:
 	int value_;
+	const int limit_;
+	int initialized_ = 7;
 };
