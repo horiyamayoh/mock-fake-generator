@@ -1392,6 +1392,7 @@ fake は受け取った引数を mock へ渡す。
 - lvalue reference / pointer / const reference はそのまま渡す。
 - rvalue reference は `std::move(arg)` で渡す。
 - non-const by-value は `std::move(arg)` で渡す。これにより `std::unique_ptr<T>` など move-only 型にも対応しやすい。
+- const by-value かつ copy construct できない型は mock に安全に forward できないため unsupported として診断する。
 
 例:
 

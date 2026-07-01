@@ -59,6 +59,7 @@ namespace mockfakegen
 		AnonymousNamespace,
 		StaticDataMember,
 		InterfaceConstruct,
+		UnsafeParameterForwarding,
 	};
 
 	struct SourceLocation

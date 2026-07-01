@@ -677,6 +677,78 @@ namespace mockfakegen
 				return false;
 			}
 
+			[[nodiscard]] bool
+			IsConstByValueParameterType(const clang::ParmVarDecl& parameter) const
+			{
+				const auto type = parameter.getType();
+				const auto type_spelling = type_spelling_.SpellType(type).spelling;
+				return !type->isReferenceType() && !type->isPointerType() &&
+					(type.isConstQualified() || type_spelling.starts_with("const ") ||
+					 type_spelling.ends_with(" const"));
+			}
+
+			[[nodiscard]] bool
+			HasUsableConstCopyConstructor(const clang::CXXRecordDecl& record) const
+			{
+				auto* definition = record.getDefinition();
+				if (definition == nullptr)
+				{
+					if (const auto* specialization =
+							llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(&record);
+						specialization != nullptr)
+					{
+						const auto* templated =
+							specialization->getSpecializedTemplate()->getTemplatedDecl();
+						definition = templated == nullptr ? nullptr : templated->getDefinition();
+					}
+				}
+				if (definition == nullptr)
+				{
+					return true;
+				}
+
+				for (const auto* constructor : definition->ctors())
+				{
+					if (constructor == nullptr)
+					{
+						continue;
+					}
+					unsigned type_qualifiers = 0U;
+					if (!constructor->isCopyConstructor(type_qualifiers))
+					{
+						continue;
+					}
+					if ((type_qualifiers & clang::Qualifiers::Const) == 0U)
+					{
+						continue;
+					}
+					if (constructor->getAccess() == clang::AS_public && !constructor->isDeleted())
+					{
+						return true;
+					}
+				}
+
+				if (definition->needsImplicitCopyConstructor())
+				{
+					return definition->implicitCopyConstructorHasConstParam();
+				}
+				return false;
+			}
+
+			[[nodiscard]] bool
+			HasUnsafeConstByValueParameter(const clang::ParmVarDecl& parameter) const
+			{
+				if (!IsConstByValueParameterType(parameter))
+				{
+					return false;
+				}
+				const auto* record = parameter.getType()
+										 .getCanonicalType()
+										 .getUnqualifiedType()
+										 ->getAsCXXRecordDecl();
+				return record != nullptr && !HasUsableConstCopyConstructor(*record);
+			}
+
 			[[nodiscard]] bool HasDecltypeAutoReturn(const clang::FunctionDecl& function) const
 			{
 				const auto return_type = function.getDeclaredReturnType();
@@ -887,6 +959,16 @@ namespace mockfakegen
 							.kind = "private_nested_type",
 							.reason = "private nested type '" + *private_type +
 								"' is not accessible from generated code",
+						};
+					}
+					if (HasUnsafeConstByValueParameter(*parameter))
+					{
+						const auto type = type_spelling_.SpellType(parameter->getType());
+						return UnsupportedTypeIssue{
+							.reason_code = UnsupportedReasonCode::UnsafeParameterForwarding,
+							.kind = "const_move_only_by_value_parameter",
+							.reason = "const by-value parameter type '" + type.spelling +
+								"' is not copy constructible and cannot be safely forwarded",
 						};
 					}
 				}

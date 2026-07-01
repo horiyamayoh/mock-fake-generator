@@ -286,6 +286,8 @@ Common unsupported categories include:
 - Inline method bodies when link replacement would duplicate behavior.
 - Deduced `auto`, `decltype(auto)`, trailing return types, function pointer/reference
   returns, private nested types, and attributed types in method signatures.
+- `const` by-value parameters whose type is not copy constructible, because the fake
+  cannot safely forward them to gMock.
 - Special members and static data definitions unless enabled and considered safe.
 
 Use the report's `Diagnostics` table and the manifest's `diagnostics` array as the

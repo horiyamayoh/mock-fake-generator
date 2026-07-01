@@ -19,4 +19,5 @@ class Forwarding
 	int KeepConstRef(const std::string& value);
 	int KeepPointer(int* value);
 	int KeepConstValue(const std::string value);
+	int ConstMoveOnly(const std::unique_ptr<int> value);
 };

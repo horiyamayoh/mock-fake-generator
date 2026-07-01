@@ -156,6 +156,8 @@ namespace mockfakegen
 				return "static_data_member";
 			case UnsupportedReasonCode::InterfaceConstruct:
 				return "interface_construct";
+			case UnsupportedReasonCode::UnsafeParameterForwarding:
+				return "unsafe_parameter_forwarding";
 		}
 
 		return "unknown";

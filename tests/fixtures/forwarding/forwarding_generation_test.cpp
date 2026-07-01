@@ -90,6 +90,13 @@ namespace
 			   "all forwarding methods should be generated");
 		Expect(class_model.fake_methods.size() == 12U,
 			   "all forwarding methods should be fake candidates");
+		Expect(class_model.unsupported_items.size() == 1U,
+			   "unsafe const by-value move-only method should be unsupported");
+		Expect(class_model.unsupported_items[0].kind == "const_move_only_by_value_parameter",
+			   "unsafe const by-value move-only parameter should have a specific kind");
+		Expect(class_model.unsupported_items[0].member_signature.find("ConstMoveOnly") !=
+				   std::string::npos,
+			   "unsafe const by-value diagnostic should identify the method");
 
 		const auto& const_select =
 			FindQualifiedMethod(class_model, "Select", true, mockfakegen::RefQualifierKind::None);
