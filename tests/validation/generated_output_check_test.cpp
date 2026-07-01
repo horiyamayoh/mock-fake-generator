@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -125,30 +126,80 @@ namespace
 		Expect(result.diagnostics.size() == 1U, "empty directory should produce one diagnostic");
 	}
 
+	[[nodiscard]] bool StartsWith(std::string_view text, std::string_view prefix) noexcept
+	{
+		return text.size() >= prefix.size() && text.substr(0U, prefix.size()) == prefix;
+	}
+
+	[[nodiscard]] bool IsGeneratedFixtureRoot(const std::filesystem::path& path)
+	{
+		const auto name = path.filename().generic_string();
+		return name == "generated" || StartsWith(name, "generated_runtime");
+	}
+
+	[[nodiscard]] std::vector<std::filesystem::path>
+	DiscoverGeneratedFixtureRoots(const std::filesystem::path& source_dir)
+	{
+		const auto fixtures_dir = source_dir / "tests/fixtures";
+		std::vector<std::filesystem::path> roots;
+
+		std::error_code iterator_error;
+		auto iterator = std::filesystem::recursive_directory_iterator(fixtures_dir, iterator_error);
+		const auto end = std::filesystem::recursive_directory_iterator();
+		Expect(!iterator_error, "generated fixture root discovery should start");
+		while (iterator != end)
+		{
+			const auto entry = *iterator;
+			std::error_code type_error;
+			if (entry.is_directory(type_error) && IsGeneratedFixtureRoot(entry.path()))
+			{
+				roots.push_back(entry.path());
+			}
+			Expect(!type_error, "generated fixture root type should be inspectable");
+
+			iterator.increment(iterator_error);
+			Expect(!iterator_error, "generated fixture root discovery should continue");
+		}
+
+		std::sort(roots.begin(), roots.end());
+		return roots;
+	}
+
+	[[nodiscard]] bool ContainsPath(const std::vector<std::filesystem::path>& paths,
+									const std::filesystem::path& needle)
+	{
+		return std::find(paths.begin(), paths.end(), needle) != paths.end();
+	}
+
 	void GeneratedFixturesPass()
 	{
 		const auto source_dir = std::filesystem::path(MOCKFAKEGEN_SOURCE_DIR);
-		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens({
-			source_dir / "tests/fixtures/all_mocks/generated",
-			source_dir / "tests/fixtures/comma_type/generated",
-			source_dir / "tests/fixtures/default_argument/generated",
-			source_dir / "tests/fixtures/generated_runtime",
-			source_dir / "tests/fixtures/generated_runtime_global_mutex",
-			source_dir / "tests/fixtures/generated_runtime_shared_owner",
-			source_dir / "tests/fixtures/hoge/generated",
-			source_dir / "tests/fixtures/interface_mock/generated",
-			source_dir / "tests/fixtures/namespaced/generated",
-			source_dir / "tests/fixtures/overload/generated",
-			source_dir / "tests/fixtures/qualifier/generated",
-			source_dir / "tests/fixtures/qualified_collision/generated",
-			source_dir / "tests/fixtures/reporting/generated",
-			source_dir / "tests/fixtures/special_member/generated",
-			source_dir / "tests/fixtures/static_data/generated",
-			source_dir / "tests/fixtures/static_method/generated",
-		});
+		const auto fixture_roots = DiscoverGeneratedFixtureRoots(source_dir);
+		Expect(!fixture_roots.empty(), "generated fixture roots should be discovered");
+		Expect(ContainsPath(fixture_roots, source_dir / "tests/fixtures/cxx23_matrix/generated"),
+			   "cxx23 matrix generated fixtures should be checked");
+		Expect(ContainsPath(fixture_roots, source_dir / "tests/fixtures/forwarding/generated"),
+			   "forwarding generated fixtures should be checked");
+		Expect(ContainsPath(fixture_roots,
+							source_dir / "tests/fixtures/registry_modes/global_mutex/generated"),
+			   "global mutex generated fixtures should be checked");
+		Expect(ContainsPath(fixture_roots,
+							source_dir / "tests/fixtures/registry_modes/shared_owner/generated"),
+			   "shared owner generated fixtures should be checked");
+		Expect(ContainsPath(fixture_roots,
+							source_dir / "tests/fixtures/unsupported_diagnostics/generated"),
+			   "unsupported diagnostics generated fixtures should be checked");
+		Expect(ContainsPath(fixture_roots,
+							source_dir / "tests/fixtures/generated_runtime_default_return"),
+			   "default-return runtime fixture should be checked");
+		Expect(ContainsPath(fixture_roots, source_dir / "tests/fixtures/generated_runtime_throw"),
+			   "throw runtime fixture should be checked");
+
+		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens(fixture_roots);
 
 		Expect(result.ok(), "generated fixtures should pass ket-token check");
-		Expect(result.checked_file_count == 55U, "generated fixtures should be included");
+		Expect(result.checked_file_count > fixture_roots.size(),
+			   "generated fixture files should be included");
 	}
 } // namespace
 
