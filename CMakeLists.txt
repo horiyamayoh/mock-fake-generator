@@ -1251,6 +1251,30 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 	add_test(NAME mockfakegen_reporting_generation_test COMMAND mockfakegen_reporting_generation_test)
 
 	add_executable(
+		mockfakegen_unsupported_diagnostics_generation_test
+		tests/fixtures/unsupported_diagnostics/unsupported_diagnostics_generation_test.cpp
+	)
+	target_link_libraries(mockfakegen_unsupported_diagnostics_generation_test PRIVATE mockfakegen_core)
+	target_compile_definitions(
+		mockfakegen_unsupported_diagnostics_generation_test
+		PRIVATE
+			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+	)
+	target_compile_features(mockfakegen_unsupported_diagnostics_generation_test PRIVATE cxx_std_23)
+	set_target_properties(
+		mockfakegen_unsupported_diagnostics_generation_test
+		PROPERTIES
+			CXX_EXTENSIONS OFF
+	)
+	mockfakegen_apply_strict_warnings(mockfakegen_unsupported_diagnostics_generation_test)
+	mockfakegen_apply_sanitizers(mockfakegen_unsupported_diagnostics_generation_test)
+
+	add_test(
+		NAME mockfakegen_unsupported_diagnostics_generation_test
+		COMMAND mockfakegen_unsupported_diagnostics_generation_test
+	)
+
+	add_executable(
 		mockfakegen_reporting_generated_smoke
 		tests/fixtures/reporting/reporting_generated_smoke_test.cpp
 		tests/fixtures/reporting/generated/FakeService.cpp

@@ -308,18 +308,19 @@ namespace mockfakegen
 					return true;
 				}
 
-				const auto name = declaration->getNameAsString();
-				if (name.empty())
+				const auto local_name = declaration->getNameAsString();
+				if (local_name.empty())
 				{
 					return true;
 				}
+				const auto qualified_name = declaration->getQualifiedNameAsString();
 
 				auto item = UnsupportedItem{
 					.reason_code = UnsupportedReasonCode::ClassTemplate,
 					.kind = "class_template",
-					.class_name = name,
-					.name = name,
-					.member_signature = name,
+					.class_name = qualified_name,
+					.name = local_name,
+					.member_signature = qualified_name,
 					.reason = "class template is not supported by link replacement fake generation",
 					.suggested_action = "exclude it or provide a hand-authored mock",
 					.source_range = ToSourceRange(source_manager_, declaration->getSourceRange()),
@@ -342,11 +343,12 @@ namespace mockfakegen
 					return true;
 				}
 
-				const auto name = declaration->getNameAsString();
-				if (name.empty())
+				const auto local_name = declaration->getNameAsString();
+				if (local_name.empty())
 				{
 					return true;
 				}
+				const auto qualified_name = declaration->getQualifiedNameAsString();
 
 				const auto is_partial =
 					llvm::isa<clang::ClassTemplatePartialSpecializationDecl>(declaration);
@@ -354,9 +356,9 @@ namespace mockfakegen
 					.reason_code = UnsupportedReasonCode::ClassTemplateSpecialization,
 					.kind = is_partial ? "class_template_partial_specialization"
 									   : "class_template_specialization",
-					.class_name = name,
-					.name = name,
-					.member_signature = name,
+					.class_name = qualified_name,
+					.name = local_name,
+					.member_signature = qualified_name,
 					.reason = is_partial
 						? "partial class template specialization is not supported"
 						: "explicit class template specialization is not supported",
