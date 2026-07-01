@@ -117,6 +117,7 @@ namespace mockfakegen
 		std::string qualified_owner_name;
 		std::string return_type_spelling;
 		std::string gmock_return_type_spelling;
+		std::string definition_declarator_spelling = {};
 		std::vector<ParameterModel> parameters;
 		std::string signature_for_report;
 		bool is_static = false;

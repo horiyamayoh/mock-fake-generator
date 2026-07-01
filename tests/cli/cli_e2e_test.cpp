@@ -716,6 +716,65 @@ namespace
 			   "fake source should not emit unqualified public nested template argument");
 	}
 
+	void CompileValidationAcceptsDeclaratorAwareReturnTypes(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "return-declarator-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "return-declarator-build";
+		const auto output_dir = temp_root / "return-declarator-generated";
+		WriteText(include_dir / "ReturnDeclarators.h",
+				  "#pragma once\n"
+				  "struct Target;\n"
+				  "class ReturnDeclarators {\n"
+				  "public:\n"
+				  "  int (&Values())[3];\n"
+				  "  int (Target::*Callback())(double);\n"
+				  "};\n");
+		const auto source = source_dir / "ReturnDeclarators.cpp";
+		WriteText(source, "#include \"ReturnDeclarators.h\"\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o return_declarators.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "return_declarator_validation");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(result.exit_code == 0, "declarator-aware return generation should compile");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "return declarator run should execute compile validation");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "return declarator validation should not produce validation errors");
+		const auto fake_source = ReadText(output_dir / "FakeReturnDeclarators.cpp");
+		Expect(Contains(fake_source, "int (&ReturnDeclarators::Values())[3]"),
+			   "fake source should emit array reference return declarator");
+		Expect(Contains(fake_source, "int (Target::*ReturnDeclarators::Callback())(double)"),
+			   "fake source should emit member function pointer return declarator");
+		Expect(!Contains(fake_source, "int (&)[3] ReturnDeclarators::Values()"),
+			   "fake source should not emit invalid array reference prefix return");
+		Expect(!Contains(fake_source, "int (Target::*)(double) ReturnDeclarators::Callback()"),
+			   "fake source should not emit invalid member pointer prefix return");
+	}
+
 	void CompileValidationAcceptsDeclaratorAwareTypes(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "complex-types-product";
@@ -2104,6 +2163,7 @@ int main()
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);
 	CompileValidationUsesCompileDatabaseCompiler(temp_root);
 	CompileValidationAcceptsPublicNestedTemplateAndAliasTypes(temp_root);
+	CompileValidationAcceptsDeclaratorAwareReturnTypes(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
 	GeneratedNamesAvoidProductScopeCollisions(temp_root);

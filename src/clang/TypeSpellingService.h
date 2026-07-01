@@ -34,6 +34,7 @@ namespace mockfakegen
 		[[nodiscard]] ParameterModel SpellParameter(const clang::ParmVarDecl& parameter,
 													std::size_t parameter_index) const;
 
+		[[nodiscard]] static bool NeedsDeclaratorAwareSpelling(clang::QualType type);
 		[[nodiscard]] static bool NeedsGMockParens(std::string_view spelling);
 		[[nodiscard]] static std::string WrapForGMockIfNeeded(std::string spelling);
 

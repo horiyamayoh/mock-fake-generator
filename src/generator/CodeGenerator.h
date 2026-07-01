@@ -25,6 +25,7 @@ namespace mockfakegen
 	{
 		std::string return_type;
 		std::string gmock_return_type = {};
+		std::string definition_declarator = {};
 		std::string name;
 		std::vector<SimpleParameterModel> parameters;
 		bool is_const = false;

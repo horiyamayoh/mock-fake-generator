@@ -39,25 +39,6 @@ namespace mockfakegen
 			return !type->isReferenceType() && !type->isPointerType() && !type.isConstQualified();
 		}
 
-		[[nodiscard]] bool NeedsDeclaratorAwareSpelling(clang::QualType type)
-		{
-			if (type.isNull())
-			{
-				return false;
-			}
-			if (type->isArrayType() || type->isFunctionPointerType() ||
-				type->isFunctionReferenceType() || type->isMemberPointerType())
-			{
-				return true;
-			}
-			if (type->isReferenceType() || type->isPointerType())
-			{
-				const auto pointee = type->getPointeeType();
-				return !pointee.isNull() && (pointee->isArrayType() || pointee->isFunctionType());
-			}
-			return false;
-		}
-
 		[[nodiscard]] std::string JoinTypeAndName(std::string_view type, std::string_view name)
 		{
 			if (name.empty())
@@ -326,6 +307,25 @@ namespace mockfakegen
 	TypeSpellingService::TypeSpellingService(const clang::ASTContext& ast_context)
 		: ast_context_(ast_context)
 	{
+	}
+
+	bool TypeSpellingService::NeedsDeclaratorAwareSpelling(clang::QualType type)
+	{
+		if (type.isNull())
+		{
+			return false;
+		}
+		if (type->isArrayType() || type->isFunctionPointerType() ||
+			type->isFunctionReferenceType() || type->isMemberPointerType())
+		{
+			return true;
+		}
+		if (type->isReferenceType() || type->isPointerType())
+		{
+			const auto pointee = type->getPointeeType();
+			return !pointee.isNull() && (pointee->isArrayType() || pointee->isFunctionType());
+		}
+		return false;
 	}
 
 	TypeSpelling TypeSpellingService::SpellType(clang::QualType type) const

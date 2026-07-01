@@ -479,6 +479,32 @@ namespace
 		Expect(!runtime.source_class.has_value(), "runtime should not have source class metadata");
 	}
 
+	void GeneratesDeclaratorAwareReturnFakeDefinitions()
+	{
+		auto model = HogeModel();
+		model.methods = {
+			mockfakegen::SimpleMethodModel{
+				.return_type = "int (&)[3]",
+				.gmock_return_type = "int (&)[3]",
+				.definition_declarator = "int (&Hoge::Values())[3]",
+				.name = "Values",
+				.parameters = {},
+			},
+		};
+
+		const auto files = mockfakegen::GenerateMinimalMockFake(model);
+		const auto& mock = FindFile(files, "MockHoge.h");
+		Expect(Contains(mock.content, "MOCK_METHOD(int (&)[3], Values, (), ());"),
+			   "mock should keep declarator-aware return type");
+		const auto& fake = FindFile(files, "FakeHoge.cpp");
+		Expect(Contains(fake.content, "int (&Hoge::Values())[3]"),
+			   "fake should use declarator-aware return definition");
+		Expect(Contains(fake.content, "return ::mockfake::MissingMockReturn<int (&)[3]>"),
+			   "fake should keep return type spelling for missing mock fallback");
+		Expect(!Contains(fake.content, "int (&)[3] Hoge::Values()"),
+			   "fake should not emit invalid prefix return definition");
+	}
+
 	void GeneratedOutputDoesNotContainKetTokens()
 	{
 		const auto files = mockfakegen::GenerateMinimalMockFake(HogeModel());
@@ -1052,6 +1078,7 @@ namespace
 int main()
 {
 	GeneratesMinimalHogeFiles();
+	GeneratesDeclaratorAwareReturnFakeDefinitions();
 	GeneratedOutputDoesNotContainKetTokens();
 	GeneratesManifestJson();
 	ResolvesQualifiedFilenameCollisions();

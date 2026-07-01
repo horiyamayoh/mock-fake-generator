@@ -145,6 +145,33 @@ namespace mockfakegen
 				exception_spec == clang::EST_NoexceptTrue || exception_spec == clang::EST_NoThrow;
 		}
 
+		[[nodiscard]] std::string DefinitionMethodQualifiers(const clang::CXXMethodDecl& method)
+		{
+			std::string text;
+			if (method.isConst())
+			{
+				text += " const";
+			}
+
+			switch (method.getRefQualifier())
+			{
+				case clang::RQ_None:
+					break;
+				case clang::RQ_LValue:
+					text += method.isConst() ? "&" : " &";
+					break;
+				case clang::RQ_RValue:
+					text += method.isConst() ? "&&" : " &&";
+					break;
+			}
+
+			if (IsNoexcept(method))
+			{
+				text += " noexcept";
+			}
+			return text;
+		}
+
 		[[nodiscard]] bool HasConditionalNoexcept(const clang::CXXMethodDecl& method)
 		{
 			const auto exception_spec = method.getExceptionSpecType();
@@ -332,6 +359,36 @@ namespace mockfakegen
 			}
 			signature += ')';
 			return signature;
+		}
+
+		[[nodiscard]] std::string
+		JoinParameterDeclarations(const std::vector<ParameterModel>& parameters)
+		{
+			std::string text;
+			for (std::size_t index = 0U; index < parameters.size(); ++index)
+			{
+				if (index != 0U)
+				{
+					text += ", ";
+				}
+				text += parameters[index].declaration_spelling;
+			}
+			return text;
+		}
+
+		[[nodiscard]] std::string
+		DefinitionDeclaratorName(const ClassModel& class_model,
+								 const clang::CXXMethodDecl& method,
+								 const std::vector<ParameterModel>& parameters)
+		{
+			std::string name = class_model.name;
+			name += "::";
+			name += method.getNameAsString();
+			name += '(';
+			name += JoinParameterDeclarations(parameters);
+			name += ')';
+			name += DefinitionMethodQualifiers(method);
+			return name;
 		}
 
 		class ClassExtractorVisitor final : public clang::RecursiveASTVisitor<ClassExtractorVisitor>
@@ -1861,11 +1918,18 @@ namespace mockfakegen
 
 				const auto return_type = type_spelling_.SpellType(method.getReturnType());
 				const auto raw_return_type = method.getReturnType();
+				const auto definition_declarator =
+					TypeSpellingService::NeedsDeclaratorAwareSpelling(raw_return_type)
+					? type_spelling_.SpellDeclaration(
+						  raw_return_type,
+						  DefinitionDeclaratorName(class_model, method, parameters))
+					: std::string();
 				return MethodModel{
 					.name = method.getNameAsString(),
 					.qualified_owner_name = class_model.qualified_name,
 					.return_type_spelling = return_type.spelling,
 					.gmock_return_type_spelling = return_type.gmock_spelling,
+					.definition_declarator_spelling = definition_declarator,
 					.parameters = parameters,
 					.signature_for_report = SignatureForReport(class_model, method, parameters),
 					.is_static = method.isStatic(),

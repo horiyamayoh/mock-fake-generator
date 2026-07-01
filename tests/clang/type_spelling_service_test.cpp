@@ -315,6 +315,34 @@ namespace
 		Expect(HasTopLevelUnsupportedKind(result, "nested_class"),
 			   "nested class definition should be reported unsupported");
 	}
+
+	void SpellsDeclaratorAwareReturnDefinitions()
+	{
+		TempTree tree;
+		tree.Write("include/ReturnDeclarators.h",
+				   "#pragma once\n"
+				   "struct Target;\n"
+				   "class ReturnDeclarators {\n"
+				   "public:\n"
+				   "  int (&Values())[3];\n"
+				   "  int (Target::*Callback())(double);\n"
+				   "};\n");
+
+		const auto class_model = ExtractOnlyClass(tree, "include/ReturnDeclarators.h");
+		const auto& values = FindMethod(class_model, "Values");
+		Expect(values.return_type_spelling == "int (&)[3]",
+			   "array reference return type should be spelled");
+		Expect(values.definition_declarator_spelling == "int (&ReturnDeclarators::Values())[3]",
+			   "array reference return fake definition should place the function declarator "
+			   "inside the return declarator");
+		const auto& callback = FindMethod(class_model, "Callback");
+		Expect(callback.return_type_spelling == "int (Target::*)(double)",
+			   "member function pointer return type should be spelled");
+		Expect(callback.definition_declarator_spelling ==
+				   "int (Target::*ReturnDeclarators::Callback())(double)",
+			   "member function pointer return fake definition should place the function "
+			   "declarator inside the return declarator");
+	}
 } // namespace
 
 int main()
@@ -325,5 +353,6 @@ int main()
 	WrapDecisionIgnoresCommasInsideParentheses();
 	SpellsFunctionPointerAndReferenceParameterDeclarators();
 	QualifiesPublicNestedTypesAndRejectsPrivateNestedTypes();
+	SpellsDeclaratorAwareReturnDefinitions();
 	return 0;
 }

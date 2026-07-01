@@ -1167,6 +1167,27 @@ namespace mockfakegen
 			return text;
 		}
 
+		[[nodiscard]] std::string
+		FakeMethodDefinitionDeclaration(const SimpleClassModel& class_model,
+										const SimpleMethodModel& method,
+										std::string_view parameter_declarations)
+		{
+			if (!method.definition_declarator.empty())
+			{
+				return method.definition_declarator;
+			}
+			std::string declaration = method.return_type;
+			declaration += ' ';
+			declaration += class_model.name;
+			declaration += "::";
+			declaration += method.name;
+			declaration += '(';
+			declaration += parameter_declarations;
+			declaration += ')';
+			declaration += MethodQualifiers(method);
+			return declaration;
+		}
+
 		[[nodiscard]] std::string GMockMethodSpecs(const SimpleMethodModel& method)
 		{
 			std::vector<std::string> specs;
@@ -1437,13 +1458,13 @@ namespace mockfakegen
 					MockCallExpression(method, parameter_names, mock_lookup_name, mock_class_name);
 				const auto signature = DiagnosticSignature(class_model, method);
 				const auto is_void_return = method.return_type == "void";
+				const auto definition_declaration =
+					FakeMethodDefinitionDeclaration(class_model, method, parameter_declarations);
 
 				const auto mock_lookup_declarator =
 					class_model.registry_mode == RegistryMode::SharedOwner ? "auto" : "auto*";
 
-				out << indent << method.return_type << ' ' << class_model.name
-					<< "::" << method.name << '(' << parameter_declarations << ')'
-					<< MethodQualifiers(method) << "\n"
+				out << indent << definition_declaration << "\n"
 					<< indent << "{\n"
 					<< body_indent << "if (" << mock_lookup_declarator << " " << mock_lookup_name
 					<< " = ::mockfake::CurrentMock<" << mock_class_name << ">())\n"
@@ -1526,6 +1547,7 @@ namespace mockfakegen
 				SimpleMethodModel simple_method{
 					.return_type = method.return_type_spelling,
 					.gmock_return_type = method.gmock_return_type_spelling,
+					.definition_declarator = method.definition_declarator_spelling,
 					.name = method.name,
 					.parameters = {},
 					.is_const = method.is_const,
