@@ -1293,6 +1293,75 @@ namespace
 			   "manifest should record synthetic fallback parse mode");
 	}
 
+	void PathMapRescuesContainerCompileDatabase(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "path-map-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "path-map-build";
+		const auto output_dir = temp_root / "path-map-generated";
+		WriteText(include_dir / "PathMapped.h",
+				  "#pragma once\n"
+				  "#ifndef FROM_CONTAINER_DB\n"
+				  "#error expected mapped compile database define\n"
+				  "#endif\n"
+				  "#include \"PathMappedDependency.h\"\n"
+				  "class PathMapped {\n"
+				  "public:\n"
+				  "  bool Run(PathMappedDependency dependency);\n"
+				  "};\n");
+		WriteText(include_dir / "PathMappedDependency.h",
+				  "#pragma once\nstruct PathMappedDependency { int value; };\n");
+		const auto source = source_dir / "PathMapped.cpp";
+		WriteText(source, "#include \"PathMapped.h\"\n");
+		const auto container_source = std::filesystem::path("/workspace/src/PathMapped.cpp");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) +
+			" -std=c++23 -I/workspace/include -DFROM_CONTAINER_DB -c " +
+			ShellQuote(container_source.string()) + " -o mapped.o";
+		WriteSingleCompileCommand(build_dir, "/workspace", container_source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--path-map",
+				   "/workspace=" + product_root.string(),
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "path_map_container_db");
+
+		Expect(result.exit_code == 0, "path map should rescue container compile database");
+		const auto stdout_text = ReadText(result.stdout_path);
+		const auto stderr_text = ReadText(result.stderr_path);
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+			   "path-mapped compile database should reach compile validation");
+		Expect(!Contains(stderr_text, "translation unit could not be read"),
+			   "path map should prevent container source read failure");
+		Expect(!Contains(stderr_text, "error [validation]"),
+			   "path-mapped validation should succeed");
+		Expect(std::filesystem::exists(output_dir / "MockPathMapped.h"),
+			   "path map should publish mock header");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"parse_mode\": \"real-tu\""),
+			   "manifest should record real TU parsing through path map");
+		Expect(Contains(manifest, (product_root / "include").generic_string()),
+			   "manifest validation commands should use host-mapped include path");
+		Expect(!Contains(manifest, "/workspace/"),
+			   "manifest validation commands should not retain container paths");
+	}
+
 	void RegistryModeAffectsRuntime(const std::filesystem::path& temp_root,
 									const std::filesystem::path& product_dir,
 									const std::filesystem::path& build_dir)
@@ -1666,6 +1735,7 @@ int main()
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
 	MissingCompileDatabaseDiagnosticIsPrintedOnce(temp_root);
 	CliCompilerArgsRescueMissingCompileDatabase(temp_root);
+	PathMapRescuesContainerCompileDatabase(temp_root);
 	RegistryModeAffectsRuntime(temp_root, product_dir, build_dir);
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);

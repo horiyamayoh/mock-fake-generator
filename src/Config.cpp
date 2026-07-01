@@ -38,6 +38,7 @@ namespace mockfakegen
 		constexpr std::string_view kIncludeDirOption = "--include-dir";
 		constexpr std::string_view kDefineOption = "--define";
 		constexpr std::string_view kExtraArgOption = "--extra-arg";
+		constexpr std::string_view kPathMapOption = "--path-map";
 		constexpr std::string_view kDryRunOption = "--dry-run";
 		constexpr std::string_view kOverwriteOption = "--overwrite";
 		constexpr std::string_view kStrictOption = "--strict";
@@ -91,7 +92,7 @@ namespace mockfakegen
 		[[nodiscard]] bool IsRepeatableOption(std::string_view option) noexcept
 		{
 			return option == kExcludeOption || option == kIncludeDirOption ||
-				option == kDefineOption || option == kExtraArgOption;
+				option == kDefineOption || option == kExtraArgOption || option == kPathMapOption;
 		}
 
 		[[nodiscard]] bool IsDeferredValueOption(std::string_view option) noexcept
@@ -111,8 +112,8 @@ namespace mockfakegen
 				option == kMockNamespaceModeOption || option == kCollisionPolicyOption ||
 				option == kFakeSpecialMembersOption || option == kFakeStaticDataOption ||
 				option == kInterfaceMockOption || option == kIncludeDirOption ||
-				option == kDefineOption || option == kExtraArgOption || option == kDryRunOption ||
-				option == kOverwriteOption || option == kStrictOption ||
+				option == kDefineOption || option == kExtraArgOption || option == kPathMapOption ||
+				option == kDryRunOption || option == kOverwriteOption || option == kStrictOption ||
 				option == kBestEffortOption || option == kEmitAllMocksOption ||
 				option == kEmitManifestOption || option == kEmitCMakeFragmentOption ||
 				option == kFormatStyleOption || option == kValidateOption ||
@@ -237,6 +238,45 @@ namespace mockfakegen
 			}
 
 			return normalized;
+		}
+
+		[[nodiscard]] std::optional<PathMapEntry>
+		ParsePathMapValue(std::vector<ConfigError>& errors, std::string_view value)
+		{
+			const auto separator = value.find('=');
+			if (separator == std::string_view::npos || separator == 0U ||
+				separator + 1U == value.size())
+			{
+				AddError(errors,
+						 ConfigErrorCode::InvalidOptionValue,
+						 kPathMapOption,
+						 "--path-map must be FROM=TO.");
+				return std::nullopt;
+			}
+
+			auto from =
+				std::filesystem::path(std::string(value.substr(0U, separator))).lexically_normal();
+			if (!from.is_absolute())
+			{
+				AddError(errors,
+						 ConfigErrorCode::InvalidOptionValue,
+						 kPathMapOption,
+						 "--path-map FROM must be an absolute path.");
+				return std::nullopt;
+			}
+			if (from.has_relative_path() && from.filename().empty())
+			{
+				from = from.parent_path();
+			}
+
+			const auto to =
+				NormalizePathValue(errors, kPathMapOption, value.substr(separator + 1U));
+			if (!to.has_value())
+			{
+				return std::nullopt;
+			}
+
+			return PathMapEntry{.from = std::move(from), .to = *to};
 		}
 
 		[[nodiscard]] bool IsSameOrUnder(const std::filesystem::path& path,
@@ -688,6 +728,14 @@ namespace mockfakegen
 				}
 				config.extra_args.push_back(*value);
 			}
+			else if (option == kPathMapOption)
+			{
+				const auto path_map = ParsePathMapValue(result.errors, *value);
+				if (path_map.has_value())
+				{
+					config.path_maps.push_back(*path_map);
+				}
+			}
 			else if (option == kJobsOption)
 			{
 				const auto parsed_jobs = support::ParsePositiveInt(*value);
@@ -927,6 +975,7 @@ namespace mockfakegen
 			"  --include-dir <path>    Repeatable extra include directory for parse/validation.\n"
 			"  --define <macro>        Repeatable preprocessor definition for parse/validation.\n"
 			"  --extra-arg <arg>       Repeatable extra compiler argument for parse/validation.\n"
+			"  --path-map <from=to>    Repeatable compile_commands.json path prefix mapping.\n"
 			"  --dry-run               Resolve config without writing generated files.\n"
 			"  --overwrite             Allow replacing existing generated files.\n"
 			"  --strict                Fail when unsupported input is encountered.\n"

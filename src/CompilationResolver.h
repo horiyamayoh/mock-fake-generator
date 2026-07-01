@@ -58,6 +58,7 @@ namespace mockfakegen
 		bool interface_mock = false;
 		std::vector<std::filesystem::path> extra_include_dirs = {};
 		std::vector<std::string> extra_args = {};
+		std::vector<PathMapEntry> path_maps = {};
 	};
 
 	struct CompilationResolveResult

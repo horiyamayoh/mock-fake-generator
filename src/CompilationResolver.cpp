@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -89,21 +90,119 @@ namespace mockfakegen
 			return normalized;
 		}
 
-		[[nodiscard]] std::filesystem::path
-		CommandDirectory(const clang::tooling::CompileCommand& command)
+		[[nodiscard]] std::filesystem::path LexicallyAbsolute(const std::filesystem::path& path)
 		{
-			return AbsoluteNormalized(std::filesystem::path(command.Directory));
+			std::error_code absolute_error;
+			auto absolute =
+				path.is_absolute() ? path : std::filesystem::absolute(path, absolute_error);
+			if (absolute_error)
+			{
+				absolute = path;
+			}
+			auto normalized = absolute.lexically_normal();
+			if (normalized.has_relative_path() && normalized.filename().empty())
+			{
+				normalized = normalized.parent_path();
+			}
+			return normalized;
+		}
+
+		[[nodiscard]] bool IsSameOrUnderPath(const std::filesystem::path& path,
+											 const std::filesystem::path& directory)
+		{
+			if (directory.empty())
+			{
+				return false;
+			}
+
+			auto path_iterator = path.begin();
+			const auto path_end = path.end();
+			for (auto directory_iterator = directory.begin(); directory_iterator != directory.end();
+				 ++directory_iterator)
+			{
+				if (path_iterator == path_end || *path_iterator != *directory_iterator)
+				{
+					return false;
+				}
+				++path_iterator;
+			}
+			return true;
+		}
+
+		[[nodiscard]] std::size_t PathComponentCount(const std::filesystem::path& path)
+		{
+			return static_cast<std::size_t>(std::distance(path.begin(), path.end()));
+		}
+
+		[[nodiscard]] std::filesystem::path
+		RelativeSuffixAfterPrefix(const std::filesystem::path& path,
+								  const std::filesystem::path& prefix)
+		{
+			auto path_iterator = path.begin();
+			for (auto prefix_iterator = prefix.begin(); prefix_iterator != prefix.end();
+				 ++prefix_iterator)
+			{
+				++path_iterator;
+			}
+
+			std::filesystem::path suffix;
+			for (; path_iterator != path.end(); ++path_iterator)
+			{
+				suffix /= *path_iterator;
+			}
+			return suffix;
+		}
+
+		[[nodiscard]] std::filesystem::path
+		ApplyPathMaps(const std::filesystem::path& path, const std::vector<PathMapEntry>& path_maps)
+		{
+			const auto candidate = LexicallyAbsolute(path);
+			const PathMapEntry* best_match = nullptr;
+			std::filesystem::path best_from;
+			std::size_t best_component_count = 0U;
+			for (const auto& path_map : path_maps)
+			{
+				const auto from = LexicallyAbsolute(path_map.from);
+				if (!IsSameOrUnderPath(candidate, from))
+				{
+					continue;
+				}
+
+				const auto component_count = PathComponentCount(from);
+				if (best_match == nullptr || component_count > best_component_count)
+				{
+					best_match = &path_map;
+					best_from = from;
+					best_component_count = component_count;
+				}
+			}
+
+			if (best_match == nullptr)
+			{
+				return AbsoluteNormalized(candidate);
+			}
+
+			const auto suffix = RelativeSuffixAfterPrefix(candidate, best_from);
+			return AbsoluteNormalized(best_match->to / suffix);
+		}
+
+		[[nodiscard]] std::filesystem::path
+		CommandDirectory(const clang::tooling::CompileCommand& command,
+						 const std::vector<PathMapEntry>& path_maps)
+		{
+			return ApplyPathMaps(std::filesystem::path(command.Directory), path_maps);
 		}
 
 		[[nodiscard]] std::filesystem::path
 		CommandRelativePath(const clang::tooling::CompileCommand& command,
-							const std::filesystem::path& path)
+							const std::filesystem::path& path,
+							const std::vector<PathMapEntry>& path_maps)
 		{
 			if (path.is_absolute())
 			{
-				return AbsoluteNormalized(path);
+				return ApplyPathMaps(path, path_maps);
 			}
-			return AbsoluteNormalized(CommandDirectory(command) / path);
+			return AbsoluteNormalized(CommandDirectory(command, path_maps) / path);
 		}
 
 		[[nodiscard]] std::string JoinCommand(const std::filesystem::path& directory,
@@ -214,7 +313,8 @@ namespace mockfakegen
 		}
 
 		[[nodiscard]] bool IsSourcePathArgument(const std::string& argument,
-												const clang::tooling::CompileCommand& command)
+												const clang::tooling::CompileCommand& command,
+												const std::vector<PathMapEntry>& path_maps)
 		{
 			if (argument == command.Filename)
 			{
@@ -229,9 +329,9 @@ namespace mockfakegen
 			}
 
 			const auto absolute_argument = argument_path.is_absolute()
-				? AbsoluteNormalized(argument_path)
-				: CommandRelativePath(command, argument_path);
-			return absolute_argument == CommandRelativePath(command, command.Filename);
+				? ApplyPathMaps(argument_path, path_maps)
+				: CommandRelativePath(command, argument_path, path_maps);
+			return absolute_argument == CommandRelativePath(command, command.Filename, path_maps);
 		}
 
 		[[nodiscard]] bool HasStdArg(const std::vector<std::string>& args)
@@ -255,13 +355,24 @@ namespace mockfakegen
 
 		[[nodiscard]] std::string
 		ResolveCommandPathArgument(const clang::tooling::CompileCommand& command,
-								   const std::string& value)
+								   const std::string& value,
+								   const std::vector<PathMapEntry>& path_maps,
+								   bool resolve_relative_paths)
 		{
 			if (!IsRelativePathLike(value))
 			{
+				const auto value_path = std::filesystem::path(value);
+				if (value_path.is_absolute())
+				{
+					return ApplyPathMaps(value_path, path_maps).generic_string();
+				}
 				return value;
 			}
-			return CommandRelativePath(command, value).generic_string();
+			if (!resolve_relative_paths)
+			{
+				return value;
+			}
+			return CommandRelativePath(command, value, path_maps).generic_string();
 		}
 
 		[[nodiscard]] bool IsSeparatePathOption(const std::string& arg)
@@ -274,7 +385,9 @@ namespace mockfakegen
 
 		[[nodiscard]] std::optional<std::string>
 		RewriteJoinedPathOption(const clang::tooling::CompileCommand& command,
-								const std::string& arg)
+								const std::string& arg,
+								const std::vector<PathMapEntry>& path_maps,
+								bool resolve_relative_paths)
 		{
 			const auto rewrite_after_prefix =
 				[&](std::string_view prefix) -> std::optional<std::string>
@@ -284,7 +397,8 @@ namespace mockfakegen
 					return std::nullopt;
 				}
 				const auto value = arg.substr(prefix.size());
-				return std::string(prefix) + ResolveCommandPathArgument(command, value);
+				return std::string(prefix) +
+					ResolveCommandPathArgument(command, value, path_maps, resolve_relative_paths);
 			};
 
 			if (auto rewritten = rewrite_after_prefix("-I"); rewritten.has_value())
@@ -308,7 +422,8 @@ namespace mockfakegen
 					return std::nullopt;
 				}
 				const auto value = arg.substr(prefix.size());
-				return std::string(prefix) + ResolveCommandPathArgument(command, value);
+				return std::string(prefix) +
+					ResolveCommandPathArgument(command, value, path_maps, resolve_relative_paths);
 			};
 			if (auto rewritten = rewrite_after_equals("--sysroot="); rewritten.has_value())
 			{
@@ -334,13 +449,14 @@ namespace mockfakegen
 
 		[[nodiscard]] std::vector<std::string>
 		SanitizeCompileCommandArgs(const clang::tooling::CompileCommand& command,
-								   bool resolve_path_arguments)
+								   bool resolve_path_arguments,
+								   const std::vector<PathMapEntry>& path_maps)
 		{
 			std::vector<std::string> args;
 			for (std::size_t index = 1U; index < command.CommandLine.size(); ++index)
 			{
 				const auto& arg = command.CommandLine[index];
-				if (arg == "-c" || IsSourcePathArgument(arg, command))
+				if (arg == "-c" || IsSourcePathArgument(arg, command, path_maps))
 				{
 					continue;
 				}
@@ -366,19 +482,20 @@ namespace mockfakegen
 				{
 					args.push_back(arg);
 					++index;
-					args.push_back(resolve_path_arguments ? ResolveCommandPathArgument(
-																command, command.CommandLine[index])
-														  : command.CommandLine[index]);
+					args.push_back(
+						resolve_path_arguments
+							? ResolveCommandPathArgument(
+								  command, command.CommandLine[index], path_maps, true)
+							: ResolveCommandPathArgument(
+								  command, command.CommandLine[index], path_maps, false));
 					continue;
 				}
-				if (resolve_path_arguments)
+				if (auto rewritten =
+						RewriteJoinedPathOption(command, arg, path_maps, resolve_path_arguments);
+					rewritten.has_value())
 				{
-					if (auto rewritten = RewriteJoinedPathOption(command, arg);
-						rewritten.has_value())
-					{
-						args.push_back(std::move(*rewritten));
-						continue;
-					}
+					args.push_back(std::move(*rewritten));
+					continue;
 				}
 				args.push_back(arg);
 			}
@@ -407,10 +524,10 @@ namespace mockfakegen
 							 const CompilationResolverOptions& options)
 		{
 			ParsedTranslationUnit result;
-			result.source_path = CommandRelativePath(command, command.Filename);
-			result.command_directory = CommandDirectory(command);
-			result.tool_args = SanitizeCompileCommandArgs(command, false);
-			result.compile_args = SanitizeCompileCommandArgs(command, true);
+			result.source_path = CommandRelativePath(command, command.Filename, options.path_maps);
+			result.command_directory = CommandDirectory(command, options.path_maps);
+			result.tool_args = SanitizeCompileCommandArgs(command, false, options.path_maps);
+			result.compile_args = SanitizeCompileCommandArgs(command, true, options.path_maps);
 			AppendExtraCompilerArgs(result.tool_args, options);
 			AppendExtraCompilerArgs(result.compile_args, options);
 			const auto executable = command.CommandLine.empty()
@@ -714,13 +831,15 @@ namespace mockfakegen
 			}
 
 			auto commands = database->getAllCompileCommands();
-			std::stable_sort(commands.begin(),
-							 commands.end(),
-							 [](const auto& lhs, const auto& rhs)
-							 {
-								 return CommandRelativePath(lhs, lhs.Filename).generic_string() <
-									 CommandRelativePath(rhs, rhs.Filename).generic_string();
-							 });
+			std::stable_sort(
+				commands.begin(),
+				commands.end(),
+				[&options](const auto& lhs, const auto& rhs)
+				{
+					return CommandRelativePath(lhs, lhs.Filename, options.path_maps)
+							   .generic_string() <
+						CommandRelativePath(rhs, rhs.Filename, options.path_maps).generic_string();
+				});
 			return commands;
 		}
 
@@ -756,7 +875,7 @@ namespace mockfakegen
 			for (const auto& command : commands)
 			{
 				const auto source_parent =
-					CommandRelativePath(command, command.Filename).parent_path();
+					CommandRelativePath(command, command.Filename, options.path_maps).parent_path();
 				std::size_t score = 0U;
 				auto header_iterator = header_parent.begin();
 				auto source_iterator = source_parent.begin();
@@ -772,7 +891,7 @@ namespace mockfakegen
 				if (!best_args.has_value() || score > best_score)
 				{
 					best_score = score;
-					best_args = SanitizeCompileCommandArgs(command, true);
+					best_args = SanitizeCompileCommandArgs(command, true, options.path_maps);
 				}
 			}
 

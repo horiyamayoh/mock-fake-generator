@@ -115,6 +115,7 @@ The CLI accepts both `--option value` and `--option=value` for value options.
 | `--include-dir <path>` | supported, repeatable | none | Add an include directory to synthetic fallback parsing and generated compile/link validation. |
 | `--define <macro>` | supported, repeatable | none | Add a preprocessor definition to synthetic fallback parsing and generated compile/link validation. Values may be written as `NAME` or `NAME=value`; a leading `-D` is also accepted. |
 | `--extra-arg <arg>` | supported, repeatable | none | Add an extra compiler argument to parsing and generated compile/link validation. Separate-form option-looking values are accepted, for example `--extra-arg --target=x86_64-linux-gnu`. |
+| `--path-map <from=to>` | supported, repeatable | none | Remap absolute path prefixes from `compile_commands.json`, for example `--path-map /workspace=$PWD` for container-generated databases. |
 | `--dry-run` | supported | off | Resolve and plan writes without changing files. |
 | `--overwrite` | supported | off | Allow replacing existing generated files. |
 | `--strict` | supported | off | Return failure for unsupported items and link-readiness warnings. |
@@ -132,6 +133,15 @@ The CLI accepts both `--option value` and `--option=value` for value options.
 Boolean values must be `true` or `false`. `--strict` and `--best-effort` are mutually
 exclusive. Deferred options fail with a `deferred_option` diagnostic instead of being
 silently ignored.
+
+For container-generated compile databases, use `--path-map FROM=TO` to translate
+compile-command paths back to the host checkout. The mapping is applied to compile
+command `directory`, `file`, path-like include/sysroot/forced-include arguments, and
+the validation arguments inherited from the compile database:
+
+```sh
+mockfakegen ... --path-map /workspace="$PWD"
+```
 
 ## Generated Files
 

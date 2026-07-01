@@ -738,6 +738,7 @@ namespace mockfakegen
 			.interface_mock = config.interface_mock,
 			.extra_include_dirs = config.include_dirs,
 			.extra_args = ConfigCompilerArgs(config),
+			.path_maps = config.path_maps,
 		});
 		AppendRunDiagnostics(run_diagnostics, resolve_result.diagnostics);
 		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);

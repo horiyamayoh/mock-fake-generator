@@ -62,6 +62,12 @@ namespace mockfakegen
 		std::string message;
 	};
 
+	struct PathMapEntry
+	{
+		std::filesystem::path from;
+		std::filesystem::path to;
+	};
+
 	struct Config
 	{
 		std::filesystem::path input_root;
@@ -91,6 +97,7 @@ namespace mockfakegen
 		std::vector<std::filesystem::path> include_dirs;
 		std::vector<std::string> defines;
 		std::vector<std::string> extra_args;
+		std::vector<PathMapEntry> path_maps;
 		FormatStyleKind format_style = FormatStyleKind::File;
 		ValidationMode validate = ValidationMode::Compile;
 		std::chrono::milliseconds validation_timeout = std::chrono::seconds(30);

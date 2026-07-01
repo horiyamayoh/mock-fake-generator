@@ -457,6 +457,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--include-dir <path>` | repeatable value | none | implemented | CompilationResolver / Validator | synthetic fallback parse と generated compile/link validation に追加 |
 | `--define <macro>` | repeatable value | none | implemented | CompilationResolver / Validator | `-D...` として synthetic fallback parse と generated compile/link validation に追加 |
 | `--extra-arg <arg>` | repeatable value | none | implemented | CompilationResolver / Validator | synthetic fallback parse と generated compile/link validation に追加。`--target=...` など option-looking value も separate form で受理 |
+| `--path-map <from=to>` | repeatable value | none | implemented | CompilationResolver | container 生成 compile DB の absolute path prefix を host path に変換 |
 | `--dry-run` | presence flag | off | implemented | OutputWriter / Runner | 値付きは invalid |
 | `--overwrite` | presence flag | off | implemented | OutputWriter | 値付きは invalid |
 | `--strict` | presence flag | off | implemented | PolicyEngine / Runner | `--best-effort` との同時指定は conflict |

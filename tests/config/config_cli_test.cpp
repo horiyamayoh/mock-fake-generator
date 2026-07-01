@@ -144,6 +144,7 @@ namespace
 		Expect(result.config->include_dirs.empty(), "include dirs should default empty");
 		Expect(result.config->defines.empty(), "defines should default empty");
 		Expect(result.config->extra_args.empty(), "extra args should default empty");
+		Expect(result.config->path_maps.empty(), "path maps should default empty");
 		Expect(result.config->format_style == mockfakegen::FormatStyleKind::File,
 			   "format style should default to file");
 		Expect(result.config->validate == mockfakegen::ValidationMode::Compile,
@@ -278,6 +279,8 @@ namespace
 		args.push_back("-Wno-unknown-warning-option");
 		args.push_back("--extra-arg");
 		args.push_back("--target=x86_64-linux-gnu");
+		args.push_back("--path-map");
+		args.push_back("/workspace=container-host");
 
 		const auto result = mockfakegen::ParseConfig(args);
 
@@ -296,6 +299,11 @@ namespace
 		Expect(result.config->defines == expected_defines, "defines should preserve order");
 		Expect(result.config->extra_args == expected_extra_args,
 			   "extra args should accept option-looking separate values");
+		Expect(result.config->path_maps.size() == 1U, "path map should parse");
+		Expect(result.config->path_maps[0].from == std::filesystem::path("/workspace"),
+			   "path map source should preserve container prefix");
+		Expect(result.config->path_maps[0].to == ExpectedPath("container-host"),
+			   "path map destination should normalize host path");
 	}
 
 	void RejectsInvalidHeaderFilterRegex()
@@ -341,6 +349,7 @@ namespace
 			"--include-dir",
 			"--define",
 			"--extra-arg",
+			"--path-map",
 			"--dry-run",
 			"--overwrite",
 			"--strict",

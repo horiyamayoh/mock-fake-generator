@@ -601,6 +601,59 @@ namespace
 			   "method extraction should be identical across cwd changes");
 	}
 
+	void MapsContainerCompileCommandPaths()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "product";
+		tree.Write("product/include/MappedService.h",
+				   "#pragma once\n"
+				   "#ifndef FROM_CONTAINER_DB\n"
+				   "#error expected mapped compile database define\n"
+				   "#endif\n"
+				   "#include \"MappedDependency.h\"\n"
+				   "class MappedService { public: bool Run(MappedDependency dependency); };\n");
+		tree.Write("product/include/MappedDependency.h",
+				   "#pragma once\nstruct MappedDependency { int value; };\n");
+		tree.Write("product/src/mapped.cpp", "#include \"MappedService.h\"\n");
+		WriteCompileCommandsAt(tree,
+							   "build",
+							   {{
+								   .directory = "/workspace",
+								   .source = "/workspace/src/mapped.cpp",
+								   .args =
+									   {
+										   "c++",
+										   "-std=c++23",
+										   "-I/workspace/include",
+										   "-DFROM_CONTAINER_DB",
+										   "-c",
+										   "/workspace/src/mapped.cpp",
+									   },
+							   }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = project_root,
+			.build_path = tree.root() / "build",
+			.headers = {HeaderAt(project_root, "include/MappedService.h")},
+			.path_maps = {{.from = "/workspace", .to = project_root}},
+		});
+
+		Expect(result.ok(), "mapped container compile database should parse successfully");
+		Expect(result.project.headers[0].parsed_by_real_tu,
+			   "mapped container compile command should parse real TU");
+		Expect(result.project.classes.size() == 1U,
+			   "mapped container fixture should extract class");
+		Expect(result.project.classes[0].qualified_name == "MappedService",
+			   "mapped container fixture should extract target class");
+		Expect(result.parse_attempts[0].translation_unit == project_root / "src/mapped.cpp",
+			   "parse attempt should record host-mapped translation unit");
+		Expect(HasCompileArg(result.validation_args,
+							 "-I" + (project_root / "include").generic_string()),
+			   "validation args should rewrite relative include path against mapped directory");
+		Expect(!HasCompileArg(result.validation_args, "-I/workspace/include"),
+			   "validation args should not retain container include path");
+	}
+
 	void RecordsRealTuParseFailuresAsAttempts()
 	{
 		TempTree tree;
@@ -728,6 +781,7 @@ int main()
 	SyntheticFallbackUsesExtraCompilerArgs();
 	FallsBackToSyntheticTuWhenRealTuDoesNotIncludeHeader();
 	ParsesOutOfTreeCompileDatabaseWithCommandDirectoryRelativePaths();
+	MapsContainerCompileCommandPaths();
 	RecordsRealTuParseFailuresAsAttempts();
 	ReportsConflictingCompileConfigs();
 	return 0;
