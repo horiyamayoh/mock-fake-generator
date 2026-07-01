@@ -423,6 +423,22 @@ namespace mockfakegen
 			return arguments;
 		}
 
+		[[nodiscard]] bool LooksLikeMissingGMockInclude(std::string_view stderr_summary)
+		{
+			return stderr_summary.find("fatal error: 'gmock/gmock.h' file not found") !=
+				std::string_view::npos ||
+				stderr_summary.find("fatal error: <gmock/gmock.h> file not found") !=
+				std::string_view::npos ||
+				stderr_summary.find("fatal error: gmock/gmock.h: No such file or directory") !=
+				std::string_view::npos ||
+				stderr_summary.find(
+					"fatal error C1083: Cannot open include file: 'gmock/gmock.h'") !=
+				std::string_view::npos ||
+				stderr_summary.find(
+					"fatal error C1083: Cannot open include file: \"gmock/gmock.h\"") !=
+				std::string_view::npos;
+		}
+
 		[[nodiscard]] std::string FailureMessage(const ProcessResult& process,
 												 std::string_view stderr_summary)
 		{
@@ -430,7 +446,7 @@ namespace mockfakegen
 			{
 				return "generated output compile validation timed out.";
 			}
-			if (stderr_summary.find("gmock/gmock.h") != std::string_view::npos)
+			if (LooksLikeMissingGMockInclude(stderr_summary))
 			{
 				return "gMock include path is missing or invalid; compiler could not include "
 					   "<gmock/gmock.h>.";

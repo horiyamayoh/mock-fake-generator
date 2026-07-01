@@ -401,6 +401,31 @@ namespace
 		Expect(Contains(result.diagnostics[0].stderr_summary, "gmock/gmock.h"),
 			   "missing gMock diagnostic should keep compiler stderr");
 	}
+
+	void MentioningGMockHeaderDoesNotImplyMissingIncludePath()
+	{
+		TempTree tree;
+		tree.Write("compiler.sh",
+				   "#!/bin/sh\n"
+				   "printf '%s\\n' 'In file included from /usr/include/gmock/gmock.h:10:' >&2\n"
+				   "printf '%s\\n' 'generated/MockBroken.h:4:1: error: invalid mock method' >&2\n"
+				   "exit 1\n");
+		std::filesystem::permissions(tree.root() / "compiler.sh",
+									 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::add);
+		auto options = CompileOptions();
+		options.compiler = tree.root() / "compiler.sh";
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(!result.ok(), "wrapper compiler failure should fail validation");
+		Expect(!result.diagnostics.empty(), "wrapper compiler failure should produce diagnostic");
+		Expect(result.diagnostics[0].message == "generated output compile validation failed.",
+			   "gMock include mention without include-not-found should stay generic");
+		Expect(Contains(result.diagnostics[0].stderr_summary, "gmock/gmock.h"),
+			   "diagnostic should keep the original stderr mention");
+	}
 } // namespace
 
 int main()
@@ -415,5 +440,6 @@ int main()
 	CompileValidationTimesOut();
 	KeepsFailedArtifactsWhenRequested();
 	MissingGMockIncludePathIsClear();
+	MentioningGMockHeaderDoesNotImplyMissingIncludePath();
 	return 0;
 }
