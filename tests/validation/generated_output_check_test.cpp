@@ -115,11 +115,39 @@ namespace
 			   "diagnostic should identify angle include token");
 	}
 
+	void UnknownKetPrefixedQuotedIncludeFails()
+	{
+		TempTree tree;
+		tree.Write("MockHoge.h", "#include \"ket_service.h\"\n");
+
+		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens({tree.root()});
+
+		Expect(!result.ok(), "unknown quoted ket_ include should fail");
+		Expect(result.diagnostics.size() == 1U,
+			   "unknown quoted ket_ include should produce one diagnostic");
+		Expect(result.diagnostics[0].token == "#include \"ket_service.h\"",
+			   "diagnostic should identify unknown quoted ket_ include token");
+	}
+
+	void UnknownKetPrefixedAngleIncludeFails()
+	{
+		TempTree tree;
+		tree.Write("MockHoge.h", "#include <ket_service.h>\n");
+
+		const auto result = mockfakegen::CheckGeneratedOutputForKetTokens({tree.root()});
+
+		Expect(!result.ok(), "unknown angle ket_ include should fail");
+		Expect(result.diagnostics.size() == 1U,
+			   "unknown angle ket_ include should produce one diagnostic");
+		Expect(result.diagnostics[0].token == "#include <ket_service.h>",
+			   "diagnostic should identify unknown angle ket_ include token");
+	}
+
 	void SimilarNonKetTokensPass()
 	{
 		TempTree tree;
 		tree.Write("MockPocket.h",
-				   "#include \"ket_service.h\"\n"
+				   "#include \"not_ket_service.h\"\n"
 				   "namespace pocket { inline constexpr int value = 1; }\n"
 				   "auto x = pocket::value;\n");
 
@@ -249,6 +277,8 @@ int main()
 	KetNamespaceFails();
 	QuotedKetIncludeFails();
 	AngleKetIncludeFails();
+	UnknownKetPrefixedQuotedIncludeFails();
+	UnknownKetPrefixedAngleIncludeFails();
 	SimilarNonKetTokensPass();
 	InMemoryGeneratedFilesAreChecked();
 	EmptyDirectoryFails();
