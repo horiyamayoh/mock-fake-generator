@@ -76,6 +76,20 @@ namespace mockfakegen
 			return severity == DiagnosticSeverity::Error;
 		}
 
+		[[nodiscard]] bool CanWriteConfigErrorArtifacts(const ConfigParseResult& result)
+		{
+			if (!result.config.has_value())
+			{
+				return false;
+			}
+			return std::none_of(result.errors.begin(),
+								result.errors.end(),
+								[](const auto& error)
+								{
+									return error.option == "--output-dir";
+								});
+		}
+
 		[[nodiscard]] bool IsPublishableGeneratedKind(GeneratedFileKind kind) noexcept
 		{
 			switch (kind)
@@ -834,7 +848,7 @@ namespace mockfakegen
 			PrintRunDiagnostics(err, diagnostics);
 			err << '\n' << BuildUsage(result.program_name);
 
-			if (result.config.has_value())
+			if (CanWriteConfigErrorArtifacts(result))
 			{
 				const std::vector<ClassModel> no_classes;
 				const auto diagnostic_files =

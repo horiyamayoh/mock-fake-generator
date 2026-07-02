@@ -908,6 +908,33 @@ namespace mockfakegen
 			}
 		}
 
+		if (input_root.has_value() && output_dir.has_value())
+		{
+			if (*input_root == *output_dir)
+			{
+				AddError(result.errors,
+						 ConfigErrorCode::InvalidOptionValue,
+						 kOutputDirOption,
+						 "--output-dir must not be the same directory as --input-root.");
+			}
+			else
+			{
+				const auto physical_input_root =
+					ResolvePhysicalPath(result.errors, kInputRootOption, *input_root);
+				const auto physical_output_dir =
+					ResolvePhysicalPath(result.errors, kOutputDirOption, *output_dir);
+				if (physical_input_root.has_value() && physical_output_dir.has_value() &&
+					*physical_input_root == *physical_output_dir)
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kOutputDirOption,
+							 "--output-dir must not resolve to the same directory as "
+							 "--input-root.");
+				}
+			}
+		}
+
 		if (input_root.has_value())
 		{
 			config.input_root = *input_root;

@@ -69,6 +69,15 @@ namespace
 		return buffer.str();
 	}
 
+	void WriteText(const std::filesystem::path& path, std::string_view content)
+	{
+		std::filesystem::create_directories(path.parent_path());
+		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		stream << content;
+		stream.close();
+		Expect(stream.good(), "file should be writable");
+	}
+
 	[[nodiscard]] std::filesystem::path ExpectedPath(const char* value)
 	{
 		std::error_code error;
@@ -742,6 +751,39 @@ namespace
 			   "path relationship diagnostic should be deterministic");
 	}
 
+	void ReportsOutputDirSameAsInputRoot()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "project";
+		const auto input_root = project_root / "include";
+		const auto build_path = project_root / "build";
+		std::filesystem::create_directories(input_root);
+		std::filesystem::create_directories(build_path);
+		const std::vector<std::string> args{
+			"mockfakegen",
+			"--input-root",
+			input_root.string(),
+			"--output-dir",
+			input_root.string(),
+			"--build-path",
+			build_path.string(),
+			"--project-root",
+			project_root.string(),
+		};
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "output-dir equal to input-root should fail");
+		Expect(result.errors.size() == 1U, "same input/output path should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "same input/output path should use invalid option value code");
+		Expect(result.errors[0].option == "--output-dir",
+			   "same input/output path should identify output-dir");
+		Expect(result.errors[0].message ==
+				   "--output-dir must not be the same directory as --input-root.",
+			   "same input/output path diagnostic should be deterministic");
+	}
+
 	void ReportsSymlinkedInputRootEscapingProjectRoot()
 	{
 		TempTree tree;
@@ -840,6 +882,60 @@ namespace
 			   "manifest should record config failure");
 		Expect(!Contains(manifest, "\"component\": \"scanner\""),
 			   "manifest should not include scanner diagnostics after config failure");
+	}
+
+	void RunCliRejectsOutputDirSameAsInputRootBeforeScanning()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "project";
+		const auto input_root = project_root / "include";
+		const auto build_path = project_root / "build";
+		std::filesystem::create_directories(input_root);
+		std::filesystem::create_directories(build_path);
+		WriteText(input_root / "Product.h",
+				  "#pragma once\n"
+				  "class Product { public: int Run(); };\n");
+
+		const std::vector<std::string> args{
+			"mockfakegen",
+			"--input-root",
+			input_root.string(),
+			"--output-dir",
+			input_root.string(),
+			"--build-path",
+			build_path.string(),
+			"--project-root",
+			project_root.string(),
+			"--validate",
+			"none",
+			"--format-style",
+			"none",
+			"--overwrite",
+		};
+		std::vector<const char*> argv;
+		argv.reserve(args.size());
+		for (const auto& arg : args)
+		{
+			argv.push_back(arg.c_str());
+		}
+		std::ostringstream out;
+		std::ostringstream err;
+
+		const auto exit_code =
+			mockfakegen::RunCli(static_cast<int>(argv.size()), argv.data(), out, err);
+
+		Expect(exit_code == 2, "same input/output path should fail at config phase");
+		Expect(out.str().empty(), "same input/output path should not write stdout summary");
+		Expect(Contains(err.str(), "--output-dir must not be the same directory as --input-root."),
+			   "same input/output path error should be printed");
+		Expect(std::filesystem::exists(input_root / "Product.h"),
+			   "product header should be preserved");
+		Expect(!std::filesystem::exists(input_root / "AllMocks.h"),
+			   "same input/output path should not write generated headers into input tree");
+		Expect(!std::filesystem::exists(input_root / "manifest.json"),
+			   "same input/output path should not write manifest into input tree");
+		Expect(!std::filesystem::exists(input_root / "generation_report.md"),
+			   "same input/output path should not write report into input tree");
 	}
 
 	void HelpDoesNotRequirePaths()
@@ -981,8 +1077,10 @@ int main()
 	ReportsDeferredDesignOptions();
 	ReportsDeferredWholeOption();
 	ReportsInputRootOutsideProjectRoot();
+	ReportsOutputDirSameAsInputRoot();
 	ReportsSymlinkedInputRootEscapingProjectRoot();
 	RunCliRejectsSymlinkedInputRootEscapeBeforeScanning();
+	RunCliRejectsOutputDirSameAsInputRootBeforeScanning();
 	HelpDoesNotRequirePaths();
 	RunCliHelpWithErrorsPrintsErrorsAndUsage();
 	RunCliConfigErrorsEmitDiagnosticArtifacts();
