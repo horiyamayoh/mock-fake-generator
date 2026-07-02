@@ -442,8 +442,8 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--std <value>` | value | `c++23` | `c++23` only | Clang parse / validation | 他値は invalid |
 | `--config <path>` | path | none | deferred | future config loader | 使用時は `DeferredOption` |
 | `--header-extension <ext>` | value | `.h` | `.h` only | HeaderScanner | 他値は invalid |
-| `--header-filter <regex>` | value | none | deferred | HeaderScanner | 使用時は `DeferredOption` |
-| `--exclude <glob>` | repeatable value | none | deferred | HeaderScanner | 使用時は `DeferredOption` |
+| `--header-filter <regex>` | value | none | implemented | HeaderScanner | regex として invalid な値は invalid |
+| `--exclude <glob>` | repeatable value | none | implemented | HeaderScanner | 空値 invalid。project-relative glob として扱う |
 | `--class-filter <regex>` | value | none | deferred | ClassExtractor | 使用時は `DeferredOption` |
 | `--access <policy>` | value | `public` | `public` implemented, `protected` / `private` deferred | ClassExtractor / PolicyEngine | unknown value invalid。deferred value は `DeferredOption` |
 | `--include-struct <bool>` | bool value | `false` | `false` implemented, `true` deferred | ClassExtractor | `true` は `DeferredOption` |
