@@ -50,7 +50,7 @@
         }
       },
       "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::BrokenInterface",
+      "member": "negative::BrokenInterface::BrokenInterface(int)",
       "message": "interface mock mode only supports public defaulted constructors",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -76,7 +76,7 @@
         }
       },
       "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::~BrokenInterface",
+      "member": "negative::BrokenInterface::~BrokenInterface()",
       "message": "interface destructor must be virtual",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -102,7 +102,7 @@
         }
       },
       "class": "negative::BrokenInterface",
-      "member": "negative::BrokenInterface::ProtectedPure",
+      "member": "negative::BrokenInterface::ProtectedPure()",
       "message": "only public interface methods are generated",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",

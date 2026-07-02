@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -16,7 +17,16 @@
 #include "diagnostics/RunDiagnostic.h"
 #include "generator/CodeGenerator.h"
 #include "model/GeneratedFile.h"
+#include "validation/GeneratedCompileValidator.h"
 #include "validation/GenerationPolicy.h"
+
+#ifndef MOCKFAKEGEN_CXX_COMPILER
+#define MOCKFAKEGEN_CXX_COMPILER "c++"
+#endif
+
+#ifndef MOCKFAKEGEN_GMOCK_INCLUDE_DIRS
+#define MOCKFAKEGEN_GMOCK_INCLUDE_DIRS ""
+#endif
 
 namespace
 {
@@ -68,6 +78,59 @@ namespace
 
 		const auto expected = ReadText(path);
 		mockfakegen_fixture::ExpectGoldenTextEqual(actual, expected, path);
+	}
+
+	[[nodiscard]] std::vector<std::filesystem::path> SplitPathList(std::string_view text)
+	{
+		std::vector<std::filesystem::path> paths;
+		std::size_t offset = 0U;
+		while (offset <= text.size())
+		{
+			const auto separator = text.find('|', offset);
+			const auto part = text.substr(offset, separator - offset);
+			if (!part.empty())
+			{
+				paths.emplace_back(part);
+			}
+			if (separator == std::string_view::npos)
+			{
+				break;
+			}
+			offset = separator + 1U;
+		}
+		return paths;
+	}
+
+	void ExpectSyntaxValidationPasses(std::span<const mockfakegen::GeneratedFile> generated,
+									  const std::filesystem::path& product_dir)
+	{
+		auto include_dirs = SplitPathList(MOCKFAKEGEN_GMOCK_INCLUDE_DIRS);
+		include_dirs.push_back(product_dir);
+
+		const auto validation = mockfakegen::ValidateGeneratedOutputCompile(
+			mockfakegen::GeneratedCompileValidationOptions{
+				.mode = mockfakegen::ValidationMode::Syntax,
+				.compiler = std::filesystem::path(MOCKFAKEGEN_CXX_COMPILER),
+				.include_dirs = include_dirs,
+				.link_files = {},
+				.extra_args = {"-D_Nonnull="},
+				.source_args = {},
+				.command_timeout = std::chrono::seconds(30),
+				.keep_failed_artifacts = true,
+				.artifact_dir = {},
+			},
+			generated);
+
+		if (!validation.ok())
+		{
+			for (const auto& diagnostic : validation.diagnostics)
+			{
+				std::cerr << diagnostic.source_path.generic_string() << ": " << diagnostic.message
+						  << '\n'
+						  << diagnostic.stderr_summary << '\n';
+			}
+		}
+		Expect(validation.ok(), "unsupported diagnostic generated files should pass syntax");
 	}
 
 	[[nodiscard]] mockfakegen::ClassExtractionResult
@@ -264,7 +327,7 @@ namespace
 
 		Expect(extraction.classes.size() == 3U,
 			   "link replacement negative fixture should extract three concrete classes");
-		Expect(UnsupportedItemCount(extraction) == 32U,
+		Expect(UnsupportedItemCount(extraction) == 33U,
 			   "link replacement negative fixture should lock unsupported item count");
 		for (const auto kind : {
 				 "class_template",
@@ -341,6 +404,7 @@ namespace
 			   "not-link-ready special-member fake should still be generated for diagnostics");
 		Expect(HasGeneratedFile(generated, "FakeUnsafeStaticData.cpp"),
 			   "not-link-ready static-data fake should still be generated for diagnostics");
+		ExpectSyntaxValidationPasses(generated, product_dir);
 
 		const auto& cmake_fragment = FindGeneratedFile(generated, "CMakeLists.fragment.cmake");
 		Expect(!Contains(cmake_fragment.content, "FakeUnsupportedSurface.cpp"),
@@ -349,7 +413,10 @@ namespace
 			   "not-link-ready special fake should be excluded from CMake source list");
 		Expect(!Contains(cmake_fragment.content, "FakeUnsafeStaticData.cpp"),
 			   "not-link-ready static-data fake should be excluded from CMake source list");
-		ExpectGolden(generated_dir / "CMakeLists.fragment.cmake", cmake_fragment.content);
+		for (const auto& file : generated)
+		{
+			ExpectGolden(generated_dir / file.relative_path, file.content);
+		}
 
 		const auto manifest = GenerateManifest(extraction);
 		const auto report = GenerateReport(extraction);

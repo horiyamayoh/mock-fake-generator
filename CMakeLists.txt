@@ -1274,6 +1274,8 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 		mockfakegen_unsupported_diagnostics_generation_test
 		PRIVATE
 			MOCKFAKEGEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+			MOCKFAKEGEN_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
+			MOCKFAKEGEN_GMOCK_INCLUDE_DIRS="${MOCKFAKEGEN_VALIDATION_GMOCK_INCLUDE_DIRS_TEXT}"
 	)
 	target_compile_features(mockfakegen_unsupported_diagnostics_generation_test PRIVATE cxx_std_23)
 	set_target_properties(

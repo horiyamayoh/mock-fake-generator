@@ -4,26 +4,26 @@
     "classes": 3,
     "link_ready_classes": 0,
     "not_link_ready_classes": 3,
-    "generated_methods": 7,
-    "unsupported_items": 32,
+    "generated_methods": 6,
+    "unsupported_items": 33,
     "registry_mode": "thread-local",
     "registry_mode_usage": "per-thread mock stack; use when product code calls fakes on the same thread as the scoped mock",
     "fallback_policy": "abort",
-    "diagnostics": 32,
+    "diagnostics": 33,
     "validation_commands": 0,
     "usable_fake_sources": [],
     "diagnostic_summary": {
-      "total": 32,
+      "total": 33,
       "info": 0,
-      "warnings": 32,
+      "warnings": 33,
       "errors": 0,
       "by_component": [
         {
           "component": "clang",
           "summary": {
-            "total": 32,
+            "total": 33,
             "info": 0,
-            "warnings": 32,
+            "warnings": 33,
             "errors": 0
           }
         }
@@ -138,6 +138,32 @@
     {
       "severity": "warning",
       "component": "clang",
+      "code": "unsupported_conditional_noexcept",
+      "kind": "conditional_noexcept",
+      "path": "Unsupported.h",
+      "source_range": {
+        "begin": {
+          "file": "Unsupported.h",
+          "line": 63,
+          "column": 3
+        },
+        "end": {
+          "file": "Unsupported.h",
+          "line": 63,
+          "column": 47
+        }
+      },
+      "class": "negative::UnsupportedSurface",
+      "member": "negative::UnsupportedSurface::Conditional() noexcept",
+      "message": "conditional noexcept is not supported",
+      "suggested_action": "exclude this member or provide a hand-authored mock",
+      "command": "",
+      "stderr_summary": "",
+      "validation_artifact_path": ""
+    },
+    {
+      "severity": "warning",
+      "component": "clang",
       "code": "unsupported_consteval_method",
       "kind": "consteval_method",
       "path": "Unsupported.h",
@@ -154,7 +180,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::ConstevalValue",
+      "member": "negative::UnsupportedSurface::ConstevalValue() const",
       "message": "consteval method is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -180,7 +206,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::ConstexprValue",
+      "member": "negative::UnsupportedSurface::ConstexprValue() const",
       "message": "constexpr method is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -206,7 +232,7 @@
         }
       },
       "class": "negative::UnsafeSpecial",
-      "member": "negative::UnsafeSpecial::UnsafeSpecial",
+      "member": "negative::UnsafeSpecial::UnsafeSpecial(int)",
       "message": "reference member 'ref_' cannot be safely default-initialized",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -232,7 +258,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::operator bool",
+      "member": "negative::UnsupportedSurface::operator bool() const",
       "message": "conversion operator is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -258,7 +284,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::operator<=>",
+      "member": "negative::UnsupportedSurface::operator<=>(const UnsupportedSurface&) const",
       "message": "defaulted method is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -284,7 +310,7 @@
         }
       },
       "class": "negative::UnsafeSpecial",
-      "member": "negative::UnsafeSpecial::~UnsafeSpecial",
+      "member": "negative::UnsafeSpecial::~UnsafeSpecial() noexcept(...)",
       "message": "destructor exception specification is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -310,7 +336,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::Constrained",
+      "member": "negative::UnsupportedSurface::Constrained<T>(T)",
       "message": "function template member is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -336,7 +362,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::Convert",
+      "member": "negative::UnsupportedSurface::Convert<T>(T)",
       "message": "function template member is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -362,7 +388,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::InlineBody",
+      "member": "negative::UnsupportedSurface::InlineBody()",
       "message": "inline method body is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -388,7 +414,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::OutOfClassInline",
+      "member": "negative::UnsupportedSurface::OutOfClassInline()",
       "message": "inline method body is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -414,7 +440,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::FromMacro",
+      "member": "negative::UnsupportedSurface::FromMacro()",
       "message": "macro-origin method declaration is not supported because source spelling may be unstable",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -466,7 +492,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::PrivateMethod",
+      "member": "negative::UnsupportedSurface::PrivateMethod()",
       "message": "only public methods are generated",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -492,7 +518,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::ProtectedMethod",
+      "member": "negative::UnsupportedSurface::ProtectedMethod()",
       "message": "only public methods are generated",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -518,7 +544,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::operator+=",
+      "member": "negative::UnsupportedSurface::operator+=(int)",
       "message": "overloaded operator is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -544,7 +570,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::HiddenParam",
+      "member": "negative::UnsupportedSurface::HiddenParam(PrivateToken)",
       "message": "private nested type 'negative::UnsupportedSurface::PrivateToken' is not accessible from generated code",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -570,7 +596,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::HiddenReturn",
+      "member": "negative::UnsupportedSurface::HiddenReturn()",
       "message": "private nested type 'negative::UnsupportedSurface::PrivateToken' is not accessible from generated code",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -596,7 +622,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::Abstract",
+      "member": "negative::UnsupportedSurface::Abstract()",
       "message": "pure virtual method requires interface mock mode and is not faked in normal link replacement mode",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -778,7 +804,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::NonNull",
+      "member": "negative::UnsupportedSurface::NonNull()",
       "message": "attributed type in method signature is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -804,7 +830,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::AutoValue",
+      "member": "negative::UnsupportedSurface::AutoValue()",
       "message": "deduced auto return type is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -830,7 +856,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::Deduced",
+      "member": "negative::UnsupportedSurface::Deduced()",
       "message": "decltype(auto) return type is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -856,7 +882,7 @@
         }
       },
       "class": "negative::UnsupportedSurface",
-      "member": "negative::UnsupportedSurface::Volatile",
+      "member": "negative::UnsupportedSurface::Volatile() volatile",
       "message": "volatile method is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -915,17 +941,17 @@
       "source_header": "Unsupported.h",
       "parse_mode": "synthetic-tu",
       "generation_mode": "link-replacement",
-      "generated_methods": 5,
-      "unsupported_methods": 19,
-      "unsupported_items": 19,
+      "generated_methods": 4,
+      "unsupported_methods": 20,
+      "unsupported_items": 20,
       "link_ready": false,
       "link_readiness_reasons": [
-        "unsupported items remain: function_template, inline_body, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, volatile_method, macro_origin, private_nested_type, non_public_method"
+        "unsupported items remain: function_template, inline_body, auto_return, decltype_auto_return, constexpr_method, consteval_method, attributed_type, conversion_operator, defaulted_method, overloaded_operator, pure_virtual_method, conditional_noexcept, volatile_method, macro_origin, private_nested_type, non_public_method"
       ],
       "diagnostic_summary": {
-        "total": 19,
+        "total": 20,
         "info": 0,
-        "warnings": 19,
+        "warnings": 20,
         "errors": 0
       }
     }

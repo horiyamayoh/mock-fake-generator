@@ -30,9 +30,9 @@ Usable fake sources for build-system integration:
 
 | Severity | Component | Code | Kind | Path | Class | Member | Message | Suggested action | Command | Stderr summary | Validation artifact |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| warning | clang | unsupported_interface_construct | interface_construct | Interface.h | negative::BrokenInterface | negative::BrokenInterface::BrokenInterface | interface mock mode only supports public defaulted constructors | exclude this member or provide a hand-authored mock |  |  |  |
-| warning | clang | unsupported_interface_construct | interface_construct | Interface.h | negative::BrokenInterface | negative::BrokenInterface::~BrokenInterface | interface destructor must be virtual | exclude this member or provide a hand-authored mock |  |  |  |
-| warning | clang | unsupported_non_public_method | non_public_method | Interface.h | negative::BrokenInterface | negative::BrokenInterface::ProtectedPure | only public interface methods are generated | exclude this member or provide a hand-authored mock |  |  |  |
+| warning | clang | unsupported_interface_construct | interface_construct | Interface.h | negative::BrokenInterface | negative::BrokenInterface::BrokenInterface(int) | interface mock mode only supports public defaulted constructors | exclude this member or provide a hand-authored mock |  |  |  |
+| warning | clang | unsupported_interface_construct | interface_construct | Interface.h | negative::BrokenInterface | negative::BrokenInterface::~BrokenInterface() | interface destructor must be virtual | exclude this member or provide a hand-authored mock |  |  |  |
+| warning | clang | unsupported_non_public_method | non_public_method | Interface.h | negative::BrokenInterface | negative::BrokenInterface::ProtectedPure() | only public interface methods are generated | exclude this member or provide a hand-authored mock |  |  |  |
 
 ## Validation Commands
 
@@ -42,6 +42,6 @@ No validation commands recorded.
 
 | Header | Class | Member | Reason | Suggested action |
 |---|---|---|---|---|
-| Interface.h | negative::BrokenInterface | negative::BrokenInterface::BrokenInterface | interface mock mode only supports public defaulted constructors | exclude this member or provide a hand-authored mock |
-| Interface.h | negative::BrokenInterface | negative::BrokenInterface::ProtectedPure | only public interface methods are generated | exclude this member or provide a hand-authored mock |
-| Interface.h | negative::BrokenInterface | negative::BrokenInterface::~BrokenInterface | interface destructor must be virtual | exclude this member or provide a hand-authored mock |
+| Interface.h | negative::BrokenInterface | negative::BrokenInterface::BrokenInterface(int) | interface mock mode only supports public defaulted constructors | exclude this member or provide a hand-authored mock |
+| Interface.h | negative::BrokenInterface | negative::BrokenInterface::ProtectedPure() | only public interface methods are generated | exclude this member or provide a hand-authored mock |
+| Interface.h | negative::BrokenInterface | negative::BrokenInterface::~BrokenInterface() | interface destructor must be virtual | exclude this member or provide a hand-authored mock |
