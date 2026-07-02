@@ -55,6 +55,7 @@ namespace mockfakegen
 			CompilationResolverDiagnosticCode::CompileDatabaseLoadFailure;
 		std::filesystem::path header_path;
 		std::filesystem::path translation_unit;
+		SourceRange source_range;
 		std::string message;
 		std::string command;
 		std::string stderr_summary;

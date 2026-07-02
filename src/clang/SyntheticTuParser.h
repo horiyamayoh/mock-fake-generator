@@ -7,6 +7,8 @@
 
 #include <clang/Frontend/ASTUnit.h>
 
+#include "model/ProjectModel.h"
+
 namespace mockfakegen
 {
 	enum class ClangDiagnosticSeverity
@@ -19,6 +21,7 @@ namespace mockfakegen
 	struct ClangParseDiagnostic
 	{
 		ClangDiagnosticSeverity severity = ClangDiagnosticSeverity::Error;
+		SourceRange source_range;
 		std::string message;
 	};
 

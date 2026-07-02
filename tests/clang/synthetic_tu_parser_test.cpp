@@ -134,6 +134,12 @@ namespace
 		Expect(result.diagnostics[0].severity == mockfakegen::ClangDiagnosticSeverity::Error,
 			   "parse failure should report error severity");
 		Expect(!result.diagnostics[0].message.empty(), "parse diagnostic should include message");
+		Expect(result.diagnostics[0].source_range.begin.file.filename() == "Broken.h",
+			   "parse diagnostic should retain source file");
+		Expect(result.diagnostics[0].source_range.begin.line == 2U,
+			   "parse diagnostic should retain source line");
+		Expect(result.diagnostics[0].source_range.begin.column != 0U,
+			   "parse diagnostic should retain source column");
 		Expect(result.header.parsed_by_synthetic_tu,
 			   "failed parse should still record synthetic parse mode");
 	}

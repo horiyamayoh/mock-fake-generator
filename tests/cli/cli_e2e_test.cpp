@@ -1716,14 +1716,23 @@ namespace
 		Expect(Contains(stderr_text, "synthetic TU parse failed"),
 			   "isolated parse failure should be printed");
 		Expect(Contains(stderr_text, "Bad.h"), "isolated parse failure should name the bad header");
+		Expect(Contains(stderr_text, "Bad.h:"),
+			   "isolated parse failure stderr should include line and column");
 		const auto manifest = ReadText(output_dir / "manifest.json");
 		const auto report = ReadText(output_dir / "generation_report.md");
 		Expect(Contains(manifest, "\"code\": \"synthetic_tu_parse_failure\""),
 			   "manifest should retain isolated parse failure diagnostic");
 		Expect(Contains(manifest, "Bad.h"), "manifest should name failed header");
+		Expect(Contains(manifest, "\"file\": \"" + (include_dir / "Bad.h").generic_string() + "\""),
+			   "manifest should retain parse diagnostic file");
+		Expect(Contains(manifest, "\"line\": 5"), "manifest should retain parse diagnostic line");
+		Expect(Contains(manifest, "\"column\": 1"),
+			   "manifest should retain parse diagnostic column");
 		Expect(Contains(report, "| Good |"), "report should include successful class row");
 		Expect(Contains(report, "synthetic_tu_parse_failure"),
 			   "report should retain isolated parse failure diagnostic");
+		Expect(Contains(report, "Bad.h:"),
+			   "report should include parse diagnostic line and column");
 	}
 
 	void MissingCompileDatabaseDiagnosticIsPrintedOnce(const std::filesystem::path& temp_root)

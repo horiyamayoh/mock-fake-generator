@@ -953,7 +953,8 @@ namespace
 		TempTree tree;
 		tree.Write("include/Broken.h",
 				   "#pragma once\n"
-				   "class Broken { public: int Value(\n");
+				   "#error broken header\n"
+				   "class Broken { public: int Value(); };\n");
 		tree.Write("src/broken.cpp", "#include \"Broken.h\"\n");
 
 		const auto source = tree.root() / "src/broken.cpp";
@@ -985,6 +986,12 @@ namespace
 			   "real TU parse failure diagnostic should include command");
 		Expect(!real_diagnostic->stderr_summary.empty(),
 			   "real TU parse failure diagnostic should include clang diagnostics");
+		Expect(real_diagnostic->source_range.begin.file.filename() == "Broken.h",
+			   "real TU parse failure should retain clang diagnostic file");
+		Expect(real_diagnostic->source_range.begin.line == 2U,
+			   "real TU parse failure should retain clang diagnostic line");
+		Expect(real_diagnostic->source_range.begin.column != 0U,
+			   "real TU parse failure should retain clang diagnostic column");
 		Expect(result.parse_attempts.size() == 2U,
 			   "real failure and synthetic fallback attempts should both be reportable");
 		Expect(result.parse_attempts[0].mode == mockfakegen::HeaderParseMode::RealTu,
@@ -992,6 +999,9 @@ namespace
 		Expect(!result.parse_attempts[0].success, "real TU failed attempt should record failure");
 		Expect(!result.parse_attempts[0].diagnostics.empty(),
 			   "real TU failed attempt should retain clang diagnostics");
+		Expect(result.parse_attempts[0].diagnostics[0].source_range.begin.file.filename() ==
+				   "Broken.h",
+			   "real TU failed attempt should retain clang diagnostic file");
 		Expect(result.parse_attempts[0].translation_unit ==
 				   std::filesystem::weakly_canonical(source),
 			   "real TU failed attempt should keep source path");
@@ -1001,6 +1011,9 @@ namespace
 			   "synthetic fallback attempt should still be recorded after real failure");
 		Expect(!result.parse_attempts[1].success,
 			   "synthetic fallback should also record failure for broken header");
+		Expect(result.parse_attempts[1].diagnostics[0].source_range.begin.file.filename() ==
+				   "Broken.h",
+			   "synthetic fallback attempt should retain clang diagnostic file");
 	}
 
 	void ReportsConflictingCompileConfigs()

@@ -1,11 +1,11 @@
 #include "clang/SyntheticTuParser.h"
 
-#include <algorithm>
 #include <string>
 #include <system_error>
 
-#include <clang/Frontend/TextDiagnosticBuffer.h>
 #include <clang/Tooling/Tooling.h>
+
+#include "clang/ClangDiagnosticCollector.h"
 
 namespace mockfakegen
 {
@@ -43,30 +43,6 @@ namespace mockfakegen
 
 			return header_path.filename().generic_string();
 		}
-
-		void AppendDiagnostics(std::vector<ClangParseDiagnostic>& diagnostics,
-							   ClangDiagnosticSeverity severity,
-							   clang::TextDiagnosticBuffer::const_iterator begin,
-							   clang::TextDiagnosticBuffer::const_iterator end)
-		{
-			for (auto iterator = begin; iterator != end; ++iterator)
-			{
-				diagnostics.push_back(ClangParseDiagnostic{
-					.severity = severity,
-					.message = iterator->second,
-				});
-			}
-		}
-
-		[[nodiscard]] bool HasErrorDiagnostic(const std::vector<ClangParseDiagnostic>& diagnostics)
-		{
-			return std::any_of(diagnostics.begin(),
-							   diagnostics.end(),
-							   [](const auto& diagnostic)
-							   {
-								   return diagnostic.severity == ClangDiagnosticSeverity::Error;
-							   });
-		}
 	} // namespace
 
 	std::string BuildSyntheticTuCode(std::string include_spelling)
@@ -99,7 +75,7 @@ namespace mockfakegen
 			: options.compile_args;
 		result.synthetic_code = BuildSyntheticTuCode(include_spelling);
 
-		clang::TextDiagnosticBuffer diagnostic_buffer;
+		ClangDiagnosticCollector diagnostic_collector;
 		result.ast = clang::tooling::buildASTFromCodeWithArgs(
 			result.synthetic_code,
 			result.compile_args,
@@ -108,22 +84,10 @@ namespace mockfakegen
 			std::make_shared<clang::PCHContainerOperations>(),
 			clang::tooling::getClangStripDependencyFileAdjuster(),
 			clang::tooling::FileContentMappings(),
-			&diagnostic_buffer);
+			&diagnostic_collector);
+		result.diagnostics = diagnostic_collector.diagnostics();
 
-		AppendDiagnostics(result.diagnostics,
-						  ClangDiagnosticSeverity::Error,
-						  diagnostic_buffer.err_begin(),
-						  diagnostic_buffer.err_end());
-		AppendDiagnostics(result.diagnostics,
-						  ClangDiagnosticSeverity::Warning,
-						  diagnostic_buffer.warn_begin(),
-						  diagnostic_buffer.warn_end());
-		AppendDiagnostics(result.diagnostics,
-						  ClangDiagnosticSeverity::Note,
-						  diagnostic_buffer.note_begin(),
-						  diagnostic_buffer.note_end());
-
-		result.success = result.ast != nullptr && !HasErrorDiagnostic(result.diagnostics);
+		result.success = result.ast != nullptr && !HasClangErrorDiagnostic(result.diagnostics);
 		return result;
 	}
 } // namespace mockfakegen

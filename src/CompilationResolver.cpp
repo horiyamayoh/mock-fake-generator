@@ -15,12 +15,12 @@
 #include <utility>
 
 #include <clang/Frontend/ASTUnit.h>
-#include <clang/Frontend/TextDiagnosticBuffer.h>
 #include <clang/Tooling/CompilationDatabase.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/TargetParser/Host.h>
 
+#include "clang/ClangDiagnosticCollector.h"
 #include "clang/ClassExtractor.h"
 
 namespace mockfakegen
@@ -281,60 +281,12 @@ namespace mockfakegen
 			return command;
 		}
 
-		void AppendDiagnostics(std::vector<ClangParseDiagnostic>& diagnostics,
-							   ClangDiagnosticSeverity severity,
-							   clang::TextDiagnosticBuffer::const_iterator begin,
-							   clang::TextDiagnosticBuffer::const_iterator end)
+		[[nodiscard]] SourceRange FileSourceRange(std::filesystem::path path)
 		{
-			for (auto iterator = begin; iterator != end; ++iterator)
-			{
-				diagnostics.push_back(ClangParseDiagnostic{
-					.severity = severity,
-					.message = iterator->second,
-				});
-			}
-		}
-
-		[[nodiscard]] bool HasErrorDiagnostic(const std::vector<ClangParseDiagnostic>& diagnostics)
-		{
-			return std::any_of(diagnostics.begin(),
-							   diagnostics.end(),
-							   [](const auto& diagnostic)
-							   {
-								   return diagnostic.severity == ClangDiagnosticSeverity::Error;
-							   });
-		}
-
-		[[nodiscard]] std::string ToString(ClangDiagnosticSeverity severity)
-		{
-			switch (severity)
-			{
-				case ClangDiagnosticSeverity::Error:
-					return "error";
-				case ClangDiagnosticSeverity::Warning:
-					return "warning";
-				case ClangDiagnosticSeverity::Note:
-					return "note";
-			}
-
-			return "unknown";
-		}
-
-		[[nodiscard]] std::string
-		ClangDiagnosticsSummary(const std::vector<ClangParseDiagnostic>& diagnostics)
-		{
-			std::string summary;
-			for (const auto& diagnostic : diagnostics)
-			{
-				if (!summary.empty())
-				{
-					summary += '\n';
-				}
-				summary += ToString(diagnostic.severity);
-				summary += ": ";
-				summary += diagnostic.message;
-			}
-			return summary;
+			SourceRange range;
+			range.begin.file = std::move(path);
+			range.end.file = range.begin.file;
+			return range;
 		}
 
 		void AddResolverDiagnostic(std::vector<CompilationResolverDiagnostic>& diagnostics,
@@ -344,13 +296,15 @@ namespace mockfakegen
 								   std::filesystem::path translation_unit,
 								   std::string message,
 								   std::string command = {},
-								   std::string stderr_summary = {})
+								   std::string stderr_summary = {},
+								   SourceRange source_range = {})
 		{
 			diagnostics.push_back(CompilationResolverDiagnostic{
 				.severity = severity,
 				.code = code,
 				.header_path = std::move(header_path),
 				.translation_unit = std::move(translation_unit),
+				.source_range = std::move(source_range),
 				.message = std::move(message),
 				.command = std::move(command),
 				.stderr_summary = std::move(stderr_summary),
@@ -1210,6 +1164,7 @@ namespace mockfakegen
 				result.read_failure = true;
 				result.diagnostics.push_back(ClangParseDiagnostic{
 					.severity = ClangDiagnosticSeverity::Error,
+					.source_range = FileSourceRange(result.source_path),
 					.message = "translation unit could not be read",
 				});
 				return result;
@@ -1222,7 +1177,7 @@ namespace mockfakegen
 				command_line.end(), result.tool_args.begin(), result.tool_args.end());
 			command_line.push_back(result.source_path.generic_string());
 
-			clang::TextDiagnosticBuffer diagnostic_buffer;
+			ClangDiagnosticCollector diagnostic_collector;
 			const SingleCompileCommandDatabase database(
 				clang::tooling::CompileCommand(result.command_directory.string(),
 											   result.source_path.generic_string(),
@@ -1232,7 +1187,7 @@ namespace mockfakegen
 				database,
 				std::vector<std::string>{result.source_path.generic_string()},
 				std::make_shared<clang::PCHContainerOperations>());
-			tool.setDiagnosticConsumer(&diagnostic_buffer);
+			tool.setDiagnosticConsumer(&diagnostic_collector);
 			tool.setPrintErrorMessage(false);
 
 			std::vector<std::unique_ptr<clang::ASTUnit>> asts;
@@ -1242,22 +1197,12 @@ namespace mockfakegen
 				result.ast = std::move(asts.front());
 			}
 
-			AppendDiagnostics(result.diagnostics,
-							  ClangDiagnosticSeverity::Error,
-							  diagnostic_buffer.err_begin(),
-							  diagnostic_buffer.err_end());
-			AppendDiagnostics(result.diagnostics,
-							  ClangDiagnosticSeverity::Warning,
-							  diagnostic_buffer.warn_begin(),
-							  diagnostic_buffer.warn_end());
-			AppendDiagnostics(result.diagnostics,
-							  ClangDiagnosticSeverity::Note,
-							  diagnostic_buffer.note_begin(),
-							  diagnostic_buffer.note_end());
+			result.diagnostics = diagnostic_collector.diagnostics();
 			if (exit_code != 0 && result.diagnostics.empty())
 			{
 				result.diagnostics.push_back(ClangParseDiagnostic{
 					.severity = ClangDiagnosticSeverity::Error,
+					.source_range = FileSourceRange(result.source_path),
 					.message = "ClangTool failed without a diagnostic",
 				});
 			}
@@ -1267,7 +1212,7 @@ namespace mockfakegen
 
 		[[nodiscard]] bool ParseSucceeded(const ParsedTranslationUnit& parsed)
 		{
-			return parsed.ast != nullptr && !HasErrorDiagnostic(parsed.diagnostics);
+			return parsed.ast != nullptr && !HasClangErrorDiagnostic(parsed.diagnostics);
 		}
 
 		[[nodiscard]] std::filesystem::path HeaderKey(const HeaderModel& header)
@@ -1725,7 +1670,8 @@ namespace mockfakegen
 									  "real translation unit parse failed: " +
 										  parsed.source_path.generic_string(),
 									  parsed.parse_command,
-									  ClangDiagnosticsSummary(parsed.diagnostics));
+									  ClangDiagnosticsSummary(parsed.diagnostics),
+									  PrimaryClangDiagnosticSourceRange(parsed.diagnostics));
 				continue;
 			}
 			AppendUniqueValidationArgs(result.validation_args, parsed.compile_args);
@@ -1804,7 +1750,8 @@ namespace mockfakegen
 									  "synthetic TU parse failed: " +
 										  synthetic_header.absolute_path.generic_string(),
 									  synthetic_command,
-									  ClangDiagnosticsSummary(synthetic.diagnostics));
+									  ClangDiagnosticsSummary(synthetic.diagnostics),
+									  PrimaryClangDiagnosticSourceRange(synthetic.diagnostics));
 				continue;
 			}
 			AppendUniqueValidationArgs(result.validation_args, synthetic.compile_args);

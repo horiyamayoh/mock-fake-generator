@@ -349,7 +349,12 @@ namespace mockfakegen
 			result.kind = "compilation_resolver";
 			result.path = diagnostic.header_path.empty() ? diagnostic.translation_unit
 														 : diagnostic.header_path;
-			result.source_range.begin.file = diagnostic.header_path;
+			result.source_range = diagnostic.source_range;
+			if (result.source_range.begin.file.empty())
+			{
+				result.source_range.begin.file = result.path;
+				result.source_range.end.file = result.path;
+			}
 			result.message = diagnostic.message;
 			result.suggested_action = "inspect compile_commands.json or the synthetic TU fallback";
 			result.command = diagnostic.command.empty()
@@ -624,8 +629,11 @@ namespace mockfakegen
 			for (const auto& diagnostic : SortedRunDiagnostics(diagnostics))
 			{
 				err << ToString(diagnostic.severity) << " [" << diagnostic.component << "]";
-				const auto path =
-					diagnostic.path.empty() ? diagnostic.source_range.begin.file : diagnostic.path;
+				const auto path = !diagnostic.source_range.begin.file.empty() &&
+						diagnostic.source_range.begin.line != 0U
+					? diagnostic.source_range.begin.file
+					: diagnostic.path.empty() ? diagnostic.source_range.begin.file
+											  : diagnostic.path;
 				if (!path.empty())
 				{
 					err << " " << path.generic_string();
@@ -758,7 +766,14 @@ namespace mockfakegen
 			Diagnostic result;
 			result.severity = diagnostic.severity;
 			result.code = DiagnosticCode::ParseError;
-			result.source_range.begin.file = diagnostic.header_path;
+			result.source_range = diagnostic.source_range;
+			if (result.source_range.begin.file.empty())
+			{
+				const auto path = diagnostic.header_path.empty() ? diagnostic.translation_unit
+																 : diagnostic.header_path;
+				result.source_range.begin.file = path;
+				result.source_range.end.file = path;
+			}
 			result.message = diagnostic.message;
 			return result;
 		}

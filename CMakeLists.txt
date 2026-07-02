@@ -117,6 +117,7 @@ add_library(
 		src/diagnostics/RunDiagnostic.cpp
 		src/FormatStyle.cpp
 		src/ValidationMode.cpp
+		src/clang/ClangDiagnosticCollector.cpp
 		src/clang/ClassExtractor.cpp
 		src/clang/SyntheticTuParser.cpp
 		src/clang/TypeSpellingService.cpp

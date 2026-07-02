@@ -397,6 +397,25 @@ namespace
 		return diagnostic;
 	}
 
+	[[nodiscard]] mockfakegen::RunDiagnostic ParseFailureDiagnostic()
+	{
+		mockfakegen::RunDiagnostic diagnostic;
+		diagnostic.severity = mockfakegen::DiagnosticSeverity::Error;
+		diagnostic.component = "clang";
+		diagnostic.code = "synthetic_tu_parse_failure";
+		diagnostic.kind = "compilation_resolver";
+		diagnostic.path = "include/Bad.h";
+		diagnostic.source_range.begin.file = "include/Bad.h";
+		diagnostic.source_range.begin.line = 5U;
+		diagnostic.source_range.begin.column = 1U;
+		diagnostic.source_range.end = diagnostic.source_range.begin;
+		diagnostic.message = "synthetic TU parse failed: include/Bad.h";
+		diagnostic.suggested_action = "inspect compile_commands.json or the synthetic TU fallback";
+		diagnostic.command = "synthetic-tu #include \"include/Bad.h\"";
+		diagnostic.stderr_summary = "error: expected ';'";
+		return diagnostic;
+	}
+
 	[[nodiscard]] const mockfakegen::GeneratedFile&
 	FindFile(const std::vector<mockfakegen::GeneratedFile>& files, std::string_view path)
 	{
@@ -1133,6 +1152,42 @@ namespace
 		Expect(Contains(report_with_metadata.content, "stderr line \\| one line two"),
 			   "report should escape markdown pipes in stderr summaries");
 	}
+
+	void ReportsParseDiagnosticLocations()
+	{
+		const std::vector classes = {ReportAlphaModel()};
+		const auto manifest =
+			mockfakegen::GenerateManifestJson(classes,
+											  mockfakegen::GenerationReportMetadata{
+												  .diagnostics =
+													  {
+														  ParseFailureDiagnostic(),
+													  },
+												  .validation_commands = {},
+											  });
+		const auto report =
+			mockfakegen::GenerateGenerationReport(classes,
+												  mockfakegen::GenerationReportMetadata{
+													  .diagnostics =
+														  {
+															  ParseFailureDiagnostic(),
+														  },
+													  .validation_commands = {},
+												  });
+
+		Expect(Contains(manifest.content, "\"code\": \"synthetic_tu_parse_failure\""),
+			   "manifest should include parse diagnostic code");
+		Expect(Contains(manifest.content, "\"file\": \"include/Bad.h\""),
+			   "manifest should include parse diagnostic file");
+		Expect(Contains(manifest.content, "\"line\": 5"),
+			   "manifest should include parse diagnostic line");
+		Expect(Contains(manifest.content, "\"column\": 1"),
+			   "manifest should include parse diagnostic column");
+		Expect(Contains(report.content,
+						"| error | clang | synthetic_tu_parse_failure | compilation_resolver | "
+						"include/Bad.h:5:1 |"),
+			   "report should include parse diagnostic file, line, and column");
+	}
 } // namespace
 
 int main()
@@ -1159,5 +1214,6 @@ int main()
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
 	EscapesReportWriterText();
+	ReportsParseDiagnosticLocations();
 	return 0;
 }

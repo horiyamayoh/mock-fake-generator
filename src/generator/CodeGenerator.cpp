@@ -869,6 +869,25 @@ namespace mockfakegen
 			return diagnostic.source_range.begin.file;
 		}
 
+		[[nodiscard]] std::string DiagnosticReportPath(const RunDiagnostic& diagnostic)
+		{
+			if (diagnostic.kind == "compilation_resolver" &&
+				!diagnostic.source_range.begin.file.empty() &&
+				diagnostic.source_range.begin.line != 0U)
+			{
+				auto location = diagnostic.source_range.begin.file.generic_string();
+				location += ':';
+				location += std::to_string(diagnostic.source_range.begin.line);
+				if (diagnostic.source_range.begin.column != 0U)
+				{
+					location += ':';
+					location += std::to_string(diagnostic.source_range.begin.column);
+				}
+				return location;
+			}
+			return DiagnosticPath(diagnostic).generic_string();
+		}
+
 		void WriteJsonSourceRange(std::ostringstream& out, const SourceRange& range)
 		{
 			out << "{\n"
@@ -2027,7 +2046,7 @@ namespace mockfakegen
 				out << "| " << MarkdownCell(ToString(diagnostic.severity)) << " | "
 					<< MarkdownCell(diagnostic.component) << " | " << MarkdownCell(diagnostic.code)
 					<< " | " << MarkdownCell(diagnostic.kind) << " | "
-					<< MarkdownCell(DiagnosticPath(diagnostic).generic_string()) << " | "
+					<< MarkdownCell(DiagnosticReportPath(diagnostic)) << " | "
 					<< MarkdownCell(diagnostic.class_name) << " | "
 					<< MarkdownCell(diagnostic.member) << " | " << MarkdownCell(diagnostic.message)
 					<< " | " << MarkdownCell(diagnostic.suggested_action) << " | "
