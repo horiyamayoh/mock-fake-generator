@@ -682,6 +682,163 @@ namespace mockfakegen
 			return options.compiler;
 		}
 
+		[[nodiscard]] bool IsSeparateCompilePathOption(const std::string& arg)
+		{
+			return arg == "-I" || arg == "-iquote" || arg == "-isystem" || arg == "-idirafter" ||
+				arg == "-iframework" || arg == "-F" || arg == "-include" || arg == "-imacros" ||
+				arg == "-include-pch" || arg == "-ivfsoverlay" || arg == "-isysroot" ||
+				arg == "--sysroot" || arg == "-resource-dir";
+		}
+
+		[[nodiscard]] bool IsIncludeSearchPathOption(const std::string& arg)
+		{
+			return arg == "-I" || arg == "-iquote" || arg == "-isystem" || arg == "-idirafter" ||
+				arg == "-iframework" || arg == "-F";
+		}
+
+		[[nodiscard]] bool ContainsValidationArgPair(std::span<const std::string> args,
+													 const std::string& option,
+													 const std::string& value)
+		{
+			return std::adjacent_find(args.begin(),
+									  args.end(),
+									  [&option, &value](const auto& lhs, const auto& rhs)
+									  {
+										  return lhs == option && rhs == value;
+									  }) != args.end();
+		}
+
+		[[nodiscard]] bool ContainsValidationArg(std::span<const std::string> args,
+												 const std::string& arg)
+		{
+			return std::find(args.begin(), args.end(), arg) != args.end();
+		}
+
+		void AppendUniqueValidationArgPair(std::vector<std::string>& validation_args,
+										   const std::string& option,
+										   const std::string& value)
+		{
+			if (!ContainsValidationArgPair(validation_args, option, value))
+			{
+				validation_args.push_back(option);
+				validation_args.push_back(value);
+			}
+		}
+
+		void AppendUniqueValidationArg(std::vector<std::string>& validation_args,
+									   const std::string& arg)
+		{
+			if (!ContainsValidationArg(validation_args, arg))
+			{
+				validation_args.push_back(arg);
+			}
+		}
+
+		[[nodiscard]] bool
+		AllSourceArgSetsContainPair(std::span<const GeneratedSourceCompileArgs> source_arg_sets,
+									const std::string& option,
+									const std::string& value)
+		{
+			return std::all_of(source_arg_sets.begin(),
+							   source_arg_sets.end(),
+							   [&option, &value](const auto& source_args)
+							   {
+								   return ContainsValidationArgPair(
+									   source_args.args, option, value);
+							   });
+		}
+
+		[[nodiscard]] bool
+		AllSourceArgSetsContain(std::span<const GeneratedSourceCompileArgs> source_arg_sets,
+								const std::string& arg)
+		{
+			return std::all_of(source_arg_sets.begin(),
+							   source_arg_sets.end(),
+							   [&arg](const auto& source_args)
+							   {
+								   return ContainsValidationArg(source_args.args, arg);
+							   });
+		}
+
+		void AppendAllMocksIncludeSearchArgs(std::vector<std::string>& validation_args,
+											 std::span<const std::string> compile_args)
+		{
+			for (std::size_t index = 0U; index < compile_args.size(); ++index)
+			{
+				const auto& arg = compile_args[index];
+				if (IsIncludeSearchPathOption(arg) && index + 1U < compile_args.size())
+				{
+					AppendUniqueValidationArgPair(validation_args, arg, compile_args[index + 1U]);
+					++index;
+					continue;
+				}
+
+				if (IsSeparateCompilePathOption(arg) && index + 1U < compile_args.size())
+				{
+					++index;
+				}
+			}
+		}
+
+		[[nodiscard]] std::vector<std::string>
+		AllMocksValidationArgs(const GeneratedCompileValidationOptions& options)
+		{
+			auto args = options.extra_args;
+			if (options.source_args.empty())
+			{
+				return args;
+			}
+
+			for (const auto& source_args : options.source_args)
+			{
+				AppendAllMocksIncludeSearchArgs(args, source_args.args);
+			}
+
+			// AllMocks has no owning translation unit. Keep include search paths broad, but
+			// only carry non-search flags that are valid for every generated mock header.
+			const auto& first_arg_set = options.source_args.front().args;
+			for (std::size_t index = 0U; index < first_arg_set.size(); ++index)
+			{
+				const auto& arg = first_arg_set[index];
+				if (IsIncludeSearchPathOption(arg) && index + 1U < first_arg_set.size())
+				{
+					++index;
+					continue;
+				}
+
+				if (IsSeparateCompilePathOption(arg) && index + 1U < first_arg_set.size())
+				{
+					const auto& value = first_arg_set[index + 1U];
+					if (AllSourceArgSetsContainPair(options.source_args, arg, value))
+					{
+						AppendUniqueValidationArgPair(args, arg, value);
+					}
+					++index;
+					continue;
+				}
+
+				if (AllSourceArgSetsContain(options.source_args, arg))
+				{
+					AppendUniqueValidationArg(args, arg);
+				}
+			}
+
+			return args;
+		}
+
+		[[nodiscard]] std::filesystem::path
+		AllMocksValidationCompiler(const GeneratedCompileValidationOptions& options)
+		{
+			for (const auto& source_args : options.source_args)
+			{
+				if (!source_args.compiler.empty())
+				{
+					return source_args.compiler;
+				}
+			}
+			return options.compiler;
+		}
+
 		[[nodiscard]] std::vector<std::string>
 		BuildCompileCommandArguments(const GeneratedCompileValidationOptions& options,
 									 const std::filesystem::path& generated_root,
@@ -921,6 +1078,7 @@ namespace mockfakegen
 		}
 
 		TempTree tree(ValidationRoot(options));
+		result.artifact_root = tree.root;
 		if (!tree.ok())
 		{
 			AddDiagnostic(
@@ -1063,6 +1221,8 @@ namespace mockfakegen
 				continue;
 			}
 
+			const auto all_mocks_args = AllMocksValidationArgs(options);
+			const auto all_mocks_compiler = AllMocksValidationCompiler(options);
 			const auto smoke_source = AllMocksHeaderSmokeSourcePath(tree.root, file.relative_path);
 			if (!WriteText(smoke_source, BuildAllMocksHeaderSmokeSource(file)))
 			{
@@ -1082,8 +1242,8 @@ namespace mockfakegen
 							  smoke_source,
 							  object_path,
 							  artifact_path,
-							  ValidationArgsForFile(options, file),
-							  ValidationCompilerForFile(options, file));
+							  all_mocks_args,
+							  all_mocks_compiler);
 			if (options.mode != ValidationMode::Syntax)
 			{
 				object_paths.push_back(object_path);

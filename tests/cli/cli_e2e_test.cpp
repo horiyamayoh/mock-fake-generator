@@ -403,11 +403,21 @@ namespace
 		Expect(result.exit_code == 0, "CLI generation should succeed");
 		Expect(Contains(stdout_text, "mockfakegen: scanned 1 header(s)"),
 			   "CLI should report scanned headers");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "CLI should run compile validation");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "compile validation should not produce errors");
 		ExpectGeneratedCoreFiles(output_dir);
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(!Contains(manifest, "mockfakegen_compile_validation_"),
+			   "manifest should redact validation temp root");
+		Expect(!Contains(report, "mockfakegen_compile_validation_"),
+			   "report should redact validation temp root");
+		Expect(Contains(manifest, "<validation-artifacts>"),
+			   "manifest should use deterministic validation artifact placeholder");
+		Expect(Contains(report, "<validation-artifacts>"),
+			   "report should use deterministic validation artifact placeholder");
 		CompileLinkAndRunGeneratedSmoke(temp_root, product_dir, output_dir);
 	}
 
@@ -431,7 +441,7 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "syntax validation CLI generation should succeed");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "syntax validation should run validation commands");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "syntax validation should not produce validation errors");
@@ -487,7 +497,7 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "compile DB validation inheritance should succeed");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "compile DB validation should run compile commands");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "compile DB validation should not produce validation errors");
@@ -561,8 +571,8 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "per-TU validation args should not be globally unioned");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 4"),
-			   "per-TU validation should compile each mock header and each fake source");
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 5"),
+			   "per-TU validation should compile each mock header, AllMocks, and each fake source");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "per-TU validation should not produce false validation errors");
 		Expect(std::filesystem::exists(output_dir / "FakeA.cpp"), "A fake should be published");
@@ -738,7 +748,7 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "validation should use compile DB compiler");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "compile DB compiler validation should run compile commands");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "compile DB compiler validation should not produce validation errors");
@@ -806,7 +816,7 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "public nested template and alias types should compile");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "public nested type run should execute compile validation");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "public nested type validation should not produce validation errors");
@@ -870,7 +880,7 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "declarator-aware return generation should compile");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "return declarator run should execute compile validation");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "return declarator validation should not produce validation errors");
@@ -928,7 +938,7 @@ namespace
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
 		Expect(result.exit_code == 0, "declarator-aware complex type generation should compile");
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "complex type run should execute compile validation");
 		Expect(!Contains(stderr_text, "error [validation]"),
 			   "complex type validation should not produce validation errors");
@@ -1807,7 +1817,7 @@ namespace
 		Expect(result.exit_code == 0, "CLI compiler args should rescue missing compile database");
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "rescued CLI compiler args should reach compile validation");
 		Expect(!Contains(stderr_text, "synthetic TU parse failed"),
 			   "CLI compiler args should prevent synthetic parse failure");
@@ -1876,7 +1886,7 @@ namespace
 		Expect(result.exit_code == 0, "path map should rescue container compile database");
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
-		Expect(Contains(stdout_text, "mockfakegen: validation commands 2"),
+		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
 			   "path-mapped compile database should reach compile validation");
 		Expect(!Contains(stderr_text, "translation unit could not be read"),
 			   "path map should prevent container source read failure");
@@ -1986,7 +1996,7 @@ namespace
 		const auto manifest = ReadText(output_dir / "manifest.json");
 		Expect(Contains(manifest, "\"component\": \"validation\""),
 			   "validation diagnostic should appear in manifest");
-		Expect(Contains(manifest, "\"validation_commands\": 2"),
+		Expect(Contains(manifest, "\"validation_commands\": 3"),
 			   "manifest should include validation command count");
 		Expect(Contains(manifest, "gMock include path is missing"),
 			   "validation diagnostic message should appear in manifest");

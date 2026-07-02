@@ -53,6 +53,7 @@ namespace mockfakegen
 	{
 		std::vector<GeneratedCompileCommandResult> commands;
 		std::vector<GeneratedCompileDiagnostic> diagnostics;
+		std::filesystem::path artifact_root;
 		bool skipped = false;
 
 		[[nodiscard]] bool ok() const noexcept

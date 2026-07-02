@@ -521,16 +521,98 @@ namespace mockfakegen
 			return result;
 		}
 
+		[[nodiscard]] bool IsSameOrUnderPath(const std::filesystem::path& path,
+											 const std::filesystem::path& root)
+		{
+			if (root.empty())
+			{
+				return false;
+			}
+			const auto relative = path.lexically_relative(root);
+			if (relative.empty() || relative.has_root_path())
+			{
+				return false;
+			}
+			if (relative == ".")
+			{
+				return true;
+			}
+			return std::none_of(relative.begin(),
+								relative.end(),
+								[](const auto& component)
+								{
+									return component == "..";
+								});
+		}
+
+		[[nodiscard]] std::filesystem::path
+		RedactValidationPath(const std::filesystem::path& path,
+							 const std::filesystem::path& artifact_root)
+		{
+			constexpr std::string_view kPlaceholder = "<validation-artifacts>";
+			const auto normalized_root = artifact_root.lexically_normal();
+			const auto normalized_path = path.lexically_normal();
+			if (!IsSameOrUnderPath(normalized_path, normalized_root))
+			{
+				return path;
+			}
+			const auto relative = normalized_path.lexically_relative(normalized_root);
+			if (relative == ".")
+			{
+				return std::filesystem::path(kPlaceholder);
+			}
+			return std::filesystem::path(kPlaceholder) / relative;
+		}
+
+		void ReplaceAll(std::string& text, std::string_view from, std::string_view to)
+		{
+			if (from.empty())
+			{
+				return;
+			}
+
+			std::size_t offset = 0U;
+			while (offset <= text.size())
+			{
+				const auto position = text.find(from, offset);
+				if (position == std::string::npos)
+				{
+					break;
+				}
+				text.replace(position, from.size(), to);
+				offset = position + to.size();
+			}
+		}
+
+		[[nodiscard]] std::string
+		RedactValidationCommand(std::string command, const std::filesystem::path& artifact_root)
+		{
+			if (artifact_root.empty())
+			{
+				return command;
+			}
+			const auto normalized_root = artifact_root.lexically_normal();
+			const auto generic_root = normalized_root.generic_string();
+			ReplaceAll(command, generic_root, "<validation-artifacts>");
+			const auto native_root = normalized_root.string();
+			if (native_root != generic_root)
+			{
+				ReplaceAll(command, native_root, "<validation-artifacts>");
+			}
+			return command;
+		}
+
 		[[nodiscard]] std::vector<RunCommand>
-		ToRunCommands(std::span<const GeneratedCompileCommandResult> commands)
+		ToRunCommands(std::span<const GeneratedCompileCommandResult> commands,
+					  const std::filesystem::path& artifact_root)
 		{
 			std::vector<RunCommand> run_commands;
 			run_commands.reserve(commands.size());
 			for (const auto& command : commands)
 			{
 				run_commands.push_back(RunCommand{
-					.source_path = command.source_path,
-					.command = command.command,
+					.source_path = RedactValidationPath(command.source_path, artifact_root),
+					.command = RedactValidationCommand(command.command, artifact_root),
 					.exit_code = command.exit_code,
 				});
 			}
@@ -1021,7 +1103,8 @@ namespace mockfakegen
 
 		auto report_metadata = GenerationReportMetadata{
 			.diagnostics = run_diagnostics,
-			.validation_commands = ToRunCommands(validation_result.commands),
+			.validation_commands =
+				ToRunCommands(validation_result.commands, validation_result.artifact_root),
 			.unsupported_items = resolve_result.project.unsupported_items,
 			.registry_mode = config.registry_mode,
 			.fallback_policy = config.fallback_policy,
@@ -1057,7 +1140,8 @@ namespace mockfakegen
 				EvaluateFailurePolicy(config, GenerationFailureKind::WriteFailure);
 			auto final_report_metadata = GenerationReportMetadata{
 				.diagnostics = run_diagnostics,
-				.validation_commands = ToRunCommands(validation_result.commands),
+				.validation_commands =
+					ToRunCommands(validation_result.commands, validation_result.artifact_root),
 				.unsupported_items = resolve_result.project.unsupported_items,
 				.registry_mode = config.registry_mode,
 				.fallback_policy = config.fallback_policy,
