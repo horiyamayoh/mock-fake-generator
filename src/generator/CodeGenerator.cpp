@@ -2114,16 +2114,6 @@ namespace mockfakegen
 													   ProjectGenerationOptions options)
 	{
 		auto effective_class_models = ResolveGeneratedClassFilenames(class_models);
-		if (options.interface_mock)
-		{
-			for (auto& class_model : effective_class_models)
-			{
-				if (class_model.interface_mock || class_model.unsupported_items.empty())
-				{
-					class_model.interface_mock = true;
-				}
-			}
-		}
 
 		std::vector<GeneratedFile> files;
 		files.reserve((effective_class_models.size() * 2U) + 4U);

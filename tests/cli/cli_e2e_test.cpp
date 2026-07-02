@@ -1095,6 +1095,84 @@ namespace
 			   "manifest should explain final interface unsupported reason");
 	}
 
+	void
+	InterfaceMockOptionKeepsConcreteClassesLinkReplacement(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "mixed-interface-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "mixed-interface-build";
+		const auto output_dir = temp_root / "mixed-interface-generated";
+		WriteText(include_dir / "Mixed.h",
+				  "#pragma once\n"
+				  "class Concrete {\n"
+				  "public:\n"
+				  "  int Run();\n"
+				  "};\n"
+				  "class IService {\n"
+				  "public:\n"
+				  "  virtual ~IService() = default;\n"
+				  "  virtual int Serve() = 0;\n"
+				  "};\n");
+		const auto source = source_dir / "Concrete.cpp";
+		WriteText(source,
+				  "#include \"include/Mixed.h\"\n"
+				  "int Concrete::Run() { return 3; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(product_root.string()) + " -c " + ShellQuote(source.string()) +
+			" -o concrete.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+				   "--interface-mock",
+				   "true",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "mixed_interface_cli");
+		DumpCommandFailure("mixed interface CLI generation", result);
+
+		Expect(result.exit_code == 0, "mixed interface/concrete generation should succeed");
+		Expect(std::filesystem::exists(output_dir / "MockConcrete.h"),
+			   "concrete class should still emit mock header");
+		Expect(std::filesystem::exists(output_dir / "FakeConcrete.cpp"),
+			   "concrete class should still emit fake source");
+		Expect(std::filesystem::exists(output_dir / "MockIService.h"),
+			   "interface class should emit mock header");
+		Expect(!std::filesystem::exists(output_dir / "FakeIService.cpp"),
+			   "interface class should not emit fake source");
+		Expect(std::filesystem::exists(output_dir / "MockFakeRuntime.h"),
+			   "runtime should still be emitted for concrete fake");
+
+		const auto concrete_mock = ReadText(output_dir / "MockConcrete.h");
+		Expect(!Contains(concrete_mock, "class MockConcrete : public Concrete"),
+			   "concrete class should not be reclassified as interface mock");
+		Expect(Contains(concrete_mock, "MockFakeRuntime.h"),
+			   "concrete class should keep runtime include");
+		const auto interface_mock = ReadText(output_dir / "MockIService.h");
+		Expect(Contains(interface_mock, "class MockIService : public IService"),
+			   "interface class should remain inheritance mock");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"fake_source\": \"FakeConcrete.cpp\""),
+			   "manifest should record concrete fake source");
+		Expect(Contains(manifest, "\"fake_source\": \"\""),
+			   "manifest should record no fake for interface mock");
+	}
+
 	void GeneratedNamesAvoidProductScopeCollisions(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "generated-name-collision-product";
@@ -2500,6 +2578,7 @@ int main()
 	CompileValidationAcceptsDeclaratorAwareReturnTypes(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);
 	FinalInterfaceIsUnsupportedBeforeCompileValidation(temp_root);
+	InterfaceMockOptionKeepsConcreteClassesLinkReplacement(temp_root);
 	GeneratedNamesAvoidProductScopeCollisions(temp_root);
 	NestedGeneratedOutputIsNotReingested(temp_root);
 	QualifiedFilenameCollisionsAppearInCliArtifacts(temp_root);

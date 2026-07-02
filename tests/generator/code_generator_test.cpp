@@ -911,11 +911,9 @@ namespace
 			   "manifest should record concrete fake source");
 	}
 
-	void ProjectOptionSelectsInterfaceMockMode()
+	void ProjectOptionPreservesPerClassInterfaceDecision()
 	{
-		auto model = InterfaceModel();
-		model.interface_mock = false;
-		const std::vector classes = {model};
+		const std::vector classes = {ReportBetaModel(), InterfaceModel()};
 
 		const auto files =
 			mockfakegen::GenerateMockFakeProject(classes,
@@ -923,26 +921,34 @@ namespace
 													 .interface_mock = true,
 												 });
 
-		Expect(HasFile(files, "MockIStorage.h"),
-			   "project interface option should emit mock header");
+		Expect(HasFile(files, "MockBeta.h"),
+			   "project interface option should still emit concrete mock header");
+		Expect(HasFile(files, "FakeBeta.cpp"),
+			   "project interface option should preserve concrete fake source");
+		Expect(HasFile(files, "MockFakeRuntime.h"),
+			   "project interface option should preserve runtime for concrete fakes");
+		Expect(HasFile(files, "CMakeLists.fragment.cmake"),
+			   "project interface option should preserve fake-source CMake fragment");
+		Expect(HasFile(files, "MockIStorage.h"), "interface class should emit mock header");
 		Expect(!HasFile(files, "FakeIStorage.cpp"),
-			   "project interface option should suppress link replacement fake");
-		Expect(!HasFile(files, "MockFakeRuntime.h"),
-			   "project interface option should suppress runtime header");
-		Expect(!HasFile(files, "CMakeLists.fragment.cmake"),
-			   "project interface option should suppress fake-source CMake fragment");
+			   "interface class should suppress link replacement fake");
 
-		const auto& mock = FindFile(files, "MockIStorage.h");
-		Expect(Contains(mock.content, "class MockIStorage : public IStorage"),
-			   "project interface option should make mock inherit product interface");
-		Expect(!Contains(mock.content, "MockFakeRuntime.h"),
-			   "project interface option should keep mock header runtime-free");
+		const auto& concrete_mock = FindFile(files, "MockBeta.h");
+		Expect(!Contains(concrete_mock.content, "class MockBeta : public Beta"),
+			   "concrete mock should not be reclassified as interface inheritance mock");
+		Expect(Contains(concrete_mock.content, "MockFakeRuntime.h"),
+			   "concrete mock should keep link replacement runtime include");
+		const auto& interface_mock = FindFile(files, "MockIStorage.h");
+		Expect(Contains(interface_mock.content, "class MockIStorage : public IStorage"),
+			   "interface class should remain inheritance mock");
 
 		const auto& manifest = FindFile(files, "manifest.json");
 		Expect(Contains(manifest.content, "\"generation_mode\": \"interface-mock\""),
-			   "project interface option should be reflected in manifest");
-		Expect(Contains(manifest.content, "\"fake_source\": \"\""),
-			   "project interface option should clear manifest fake source");
+			   "manifest should record interface class mode");
+		Expect(Contains(manifest.content, "\"generation_mode\": \"link-replacement\""),
+			   "manifest should record concrete class mode");
+		Expect(Contains(manifest.content, "\"fake_source\": \"FakeBeta.cpp\""),
+			   "manifest should keep concrete fake source");
 	}
 
 	void ProjectOptionPreservesUnsupportedInterfaceDowngrade()
@@ -1287,7 +1293,7 @@ int main()
 	GeneratedProjectPreservesDeclarationOrderAfterProjectSort();
 	SeparatesMockAndFakeMethods();
 	GeneratesMixedInterfaceAndConcreteProject();
-	ProjectOptionSelectsInterfaceMockMode();
+	ProjectOptionPreservesPerClassInterfaceDecision();
 	ProjectOptionPreservesUnsupportedInterfaceDowngrade();
 	GeneratesSpecialMemberFakes();
 	GeneratesStaticDataDefinitions();
