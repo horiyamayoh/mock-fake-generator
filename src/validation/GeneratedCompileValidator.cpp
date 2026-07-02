@@ -398,14 +398,19 @@ namespace mockfakegen
 					}
 				}
 
-				if (!child_exited && timeout.count() > 0 &&
-					std::chrono::steady_clock::now() >= deadline)
+				const auto now = std::chrono::steady_clock::now();
+				if (timeout.count() > 0 && now >= deadline)
 				{
 					KillProcessGroup(child);
-					WaitForChild(child, status);
-					child_exited = true;
+					if (!child_exited)
+					{
+						WaitForChild(child, status);
+						child_exited = true;
+					}
+					pipe_open = false;
 					result.timed_out = true;
 					result.exit_code = 124;
+					break;
 				}
 
 				if (pipe_open)
@@ -415,7 +420,16 @@ namespace mockfakegen
 						.events = POLLIN | POLLHUP,
 						.revents = 0,
 					};
-					const int poll_timeout_ms = child_exited ? 0 : 50;
+					int poll_timeout_ms = 50;
+					if (timeout.count() > 0)
+					{
+						const auto remaining =
+							std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+						poll_timeout_ms =
+							static_cast<int>(std::clamp(remaining.count(),
+														decltype(remaining.count()){0},
+														decltype(remaining.count()){50}));
+					}
 					const auto poll_result = ::poll(&descriptor, 1U, poll_timeout_ms);
 					if (poll_result > 0 && (descriptor.revents & (POLLIN | POLLHUP)) != 0)
 					{

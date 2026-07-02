@@ -571,6 +571,44 @@ namespace
 			   "timeout should kill wrapper compiler descendants");
 	}
 
+	void CompileValidationTimesOutAfterChildExitWithInheritedPipe()
+	{
+		TempTree tree;
+		const auto leaked_marker = tree.root() / "leaked-grandchild-after-exit.txt";
+		tree.Write("leaky-compiler.sh",
+				   "#!/bin/sh\n"
+				   "(\n"
+				   "  sleep 1\n"
+				   "  echo leaked > " +
+					   ShellQuote(leaked_marker.string()) +
+					   "\n"
+					   ") &\n"
+					   "exit 0\n");
+		std::filesystem::permissions(tree.root() / "leaky-compiler.sh",
+									 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::add);
+		auto options = CompileOptions();
+		options.compiler = tree.root() / "leaky-compiler.sh";
+		options.command_timeout = std::chrono::milliseconds(100);
+
+		const auto start = std::chrono::steady_clock::now();
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+		const auto elapsed = std::chrono::steady_clock::now() - start;
+
+		Expect(!result.ok(), "inherited pipe after child exit should time out");
+		Expect(!result.diagnostics.empty(), "inherited pipe timeout should produce diagnostics");
+		Expect(result.commands[0].exit_code == 124,
+			   "inherited pipe timeout exit should be recorded");
+		Expect(elapsed < std::chrono::seconds(1),
+			   "inherited pipe timeout should not wait for the grandchild sleep");
+		Expect(Contains(result.diagnostics[0].message, "timed out"),
+			   "inherited pipe timeout diagnostic should be explicit");
+		std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+		Expect(!std::filesystem::exists(leaked_marker),
+			   "timeout should kill pipe-holding compiler descendants");
+	}
+
 	void KeepsFailedArtifactsWhenRequested()
 	{
 		TempTree tree;
@@ -747,6 +785,7 @@ int main()
 	AllMocksDoesNotHideBrokenMockHeader();
 	AllMocksHeaderIsCompileValidated();
 	CompileValidationTimesOut();
+	CompileValidationTimesOutAfterChildExitWithInheritedPipe();
 	KeepsFailedArtifactsWhenRequested();
 	InvalidArtifactDirectoryReportsDiagnostic();
 	UnsafeGeneratedPathsAreRejectedBeforeStaging();
