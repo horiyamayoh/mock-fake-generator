@@ -916,6 +916,11 @@ namespace mockfakegen
 		{
 			return result;
 		}
+		if (!result.ok())
+		{
+			MarkPublishEntriesFailed(result, plan);
+			return result;
+		}
 
 		const auto has_files_to_publish = std::any_of(plan.begin(),
 													  plan.end(),

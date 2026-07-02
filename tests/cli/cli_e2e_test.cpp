@@ -1260,8 +1260,8 @@ namespace
 			   "blocked class fake should not be published");
 		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
 			   "write failure should emit diagnostic report");
-		Expect(std::filesystem::exists(output_dir / "manifest.json"),
-			   "write failure should still emit diagnostic manifest when it is publishable");
+		Expect(!std::filesystem::exists(output_dir / "manifest.json"),
+			   "write failure should not emit manifest");
 		const auto blocked_report = ReadText(output_dir / "generation_report.md");
 		Expect(Contains(blocked_report, "writer"), "writer diagnostic should appear in report");
 		Expect(Contains(blocked_report, "output_conflict"),
@@ -1277,7 +1277,7 @@ namespace
 			   "overwrite should publish generated mock header");
 	}
 
-	void OutputConflictPublishesUnrelatedClasses(const std::filesystem::path& temp_root)
+	void OutputConflictSuppressesGeneratedPublish(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "partial-conflict-product";
 		const auto include_dir = product_root / "include";
@@ -1322,28 +1322,23 @@ namespace
 			   "conflicting class mock should be preserved");
 		Expect(!std::filesystem::exists(output_dir / "FakeGood.cpp"),
 			   "same-class fake should not be published after mock conflict");
-		Expect(std::filesystem::exists(output_dir / "MockOther.h"),
-			   "unrelated class mock should be published");
-		Expect(std::filesystem::exists(output_dir / "FakeOther.cpp"),
-			   "unrelated class fake should be published");
-		const auto manifest = ReadText(output_dir / "manifest.json");
-		Expect(Contains(manifest, "\"published_fake_sources\": 1"),
-			   "manifest should count only actually published fake sources");
-		Expect(Contains(manifest, "\"skipped_generated_files\": 1"),
-			   "manifest should count skipped conflicting files");
-		Expect(Contains(manifest, "\"failed_generated_files\": 1"),
-			   "manifest should count same-class files blocked by the conflict");
-		Expect(Contains(manifest, "\"status\": \"skipped_existing\""),
-			   "manifest should record skipped existing output status");
-		Expect(Contains(manifest, "\"status\": \"failed\""),
-			   "manifest should record same-class blocked output status");
+		Expect(!std::filesystem::exists(output_dir / "MockOther.h"),
+			   "unrelated class mock should not be published");
+		Expect(!std::filesystem::exists(output_dir / "FakeOther.cpp"),
+			   "unrelated class fake should not be published");
+		Expect(!std::filesystem::exists(output_dir / "CMakeLists.fragment.cmake"),
+			   "CMake fragment should not be published after write failure");
+		Expect(!std::filesystem::exists(output_dir / "manifest.json"),
+			   "write failure should not emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "write failure should emit diagnostic report");
 		const auto report = ReadText(output_dir / "generation_report.md");
 		Expect(Contains(report, "output_conflict"),
 			   "partial conflict report should include writer diagnostic");
 		Expect(Contains(report, "MockGood.h"),
 			   "partial conflict report should name conflicting file");
-		Expect(Contains(report, "- `FakeOther.cpp`"),
-			   "report should advertise the published unrelated fake source");
+		Expect(!Contains(report, "- `FakeOther.cpp`"),
+			   "report should not advertise unpublished unrelated fake source");
 		Expect(!Contains(report, "- `FakeGood.cpp`"),
 			   "report should not advertise the unpublished same-class fake source");
 	}
@@ -2284,7 +2279,7 @@ int main()
 	QualifiedFilenameCollisionsAppearInCliArtifacts(temp_root);
 	DryRunDoesNotPublishFiles(temp_root, product_dir, build_dir);
 	OverwriteControlsExistingFiles(temp_root, product_dir, build_dir);
-	OutputConflictPublishesUnrelatedClasses(temp_root);
+	OutputConflictSuppressesGeneratedPublish(temp_root);
 	EmitOptionsControlOptionalArtifacts(temp_root, product_dir, build_dir);
 	StrictModeFailsUnsupportedInput(temp_root);
 	TopLevelUnsupportedAppearsInManifest(temp_root);

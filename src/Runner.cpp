@@ -972,6 +972,8 @@ namespace mockfakegen
 
 		if (!write_result.ok() && !config.dry_run)
 		{
+			const auto write_failure_policy =
+				EvaluateFailurePolicy(config, GenerationFailureKind::WriteFailure);
 			auto final_report_metadata = GenerationReportMetadata{
 				.diagnostics = run_diagnostics,
 				.validation_commands = ToRunCommands(validation_result.commands),
@@ -983,12 +985,12 @@ namespace mockfakegen
 				BuildFilePublications(final_files, selected_files, &write_result);
 
 			std::vector<GeneratedFile> diagnostic_artifacts;
-			if (config.emit_manifest && policy_decision.emit_manifest)
+			if (config.emit_manifest && write_failure_policy.emit_manifest)
 			{
 				diagnostic_artifacts.push_back(
 					GenerateManifestJson(report_classes, final_report_metadata));
 			}
-			if (policy_decision.emit_report)
+			if (write_failure_policy.emit_report)
 			{
 				diagnostic_artifacts.push_back(
 					GenerateGenerationReport(report_classes, final_report_metadata));
