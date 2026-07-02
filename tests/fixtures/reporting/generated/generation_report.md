@@ -30,8 +30,8 @@ Usable fake sources for build-system integration:
 
 | Severity | Component | Code | Kind | Path | Class | Member | Message | Suggested action | Command | Stderr summary | Validation artifact |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| warning | clang | unsupported_function_template | function_template | Service.h | sample::Service | sample::Service::Convert | function template member is not supported | exclude this member or provide a hand-authored mock |  |  |  |
-| warning | clang | unsupported_overloaded_operator | overloaded_operator | Service.h | sample::Service | sample::Service::operator+= | overloaded operator is not supported | exclude this member or provide a hand-authored mock |  |  |  |
+| warning | clang | unsupported_function_template | function_template | Service.h | sample::Service | sample::Service::Convert<T>(T) | function template member is not supported | exclude this member or provide a hand-authored mock |  |  |  |
+| warning | clang | unsupported_overloaded_operator | overloaded_operator | Service.h | sample::Service | sample::Service::operator+=(int) | overloaded operator is not supported | exclude this member or provide a hand-authored mock |  |  |  |
 
 ## Validation Commands
 
@@ -41,5 +41,5 @@ No validation commands recorded.
 
 | Header | Class | Member | Reason | Suggested action |
 |---|---|---|---|---|
-| Service.h | sample::Service | sample::Service::Convert | function template member is not supported | exclude this member or provide a hand-authored mock |
-| Service.h | sample::Service | sample::Service::operator+= | overloaded operator is not supported | exclude this member or provide a hand-authored mock |
+| Service.h | sample::Service | sample::Service::Convert<T>(T) | function template member is not supported | exclude this member or provide a hand-authored mock |
+| Service.h | sample::Service | sample::Service::operator+=(int) | overloaded operator is not supported | exclude this member or provide a hand-authored mock |

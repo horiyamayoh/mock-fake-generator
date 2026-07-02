@@ -354,6 +354,82 @@ namespace mockfakegen
 			return declaration.getQualifiedNameAsString();
 		}
 
+		[[nodiscard]] std::string
+		TemplateParameterList(const clang::FunctionTemplateDecl& declaration)
+		{
+			const auto* parameters = declaration.getTemplateParameters();
+			if (parameters == nullptr || parameters->size() == 0U)
+			{
+				return {};
+			}
+
+			std::string text;
+			text += '<';
+			for (unsigned index = 0U; index < parameters->size(); ++index)
+			{
+				if (index != 0U)
+				{
+					text += ", ";
+				}
+				const auto* parameter = parameters->getParam(index);
+				auto name = parameter == nullptr ? std::string{} : parameter->getNameAsString();
+				if (name.empty())
+				{
+					name = "param" + std::to_string(index + 1U);
+				}
+				text += name;
+			}
+			text += '>';
+			return text;
+		}
+
+		[[nodiscard]] std::string
+		UnsupportedMethodNameForSignature(const clang::CXXMethodDecl& declaration)
+		{
+			auto name = UnsupportedMethodName(declaration);
+			if (const auto* function_template = declaration.getDescribedFunctionTemplate();
+				function_template != nullptr)
+			{
+				name += TemplateParameterList(*function_template);
+			}
+			return name;
+		}
+
+		[[nodiscard]] std::string ReportMethodQualifiers(const clang::CXXMethodDecl& method)
+		{
+			std::string text;
+			if (method.isConst())
+			{
+				text += " const";
+			}
+			if (method.isVolatile())
+			{
+				text += " volatile";
+			}
+
+			switch (method.getRefQualifier())
+			{
+				case clang::RQ_None:
+					break;
+				case clang::RQ_LValue:
+					text += " &";
+					break;
+				case clang::RQ_RValue:
+					text += " &&";
+					break;
+			}
+
+			if (IsNoexcept(method))
+			{
+				text += " noexcept";
+			}
+			else if (HasConditionalNoexcept(method))
+			{
+				text += " noexcept(...)";
+			}
+			return text;
+		}
+
 		[[nodiscard]] UnsupportedItem
 		MakeUnsupportedMethod(const clang::NamedDecl& declaration,
 							  const clang::SourceManager& source_manager,
@@ -2037,6 +2113,40 @@ namespace mockfakegen
 										"out-of-line interface destructor is not supported");
 			}
 
+			[[nodiscard]] std::string
+			UnsupportedSignatureForReport(const ClassModel& class_model,
+										  const clang::NamedDecl& declaration) const
+			{
+				const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(&declaration);
+				if (method == nullptr)
+				{
+					auto signature = class_model.qualified_name;
+					if (!signature.empty())
+					{
+						signature += "::";
+					}
+					signature += UnsupportedMethodName(declaration);
+					return signature;
+				}
+
+				const auto parameters = BuildParameters(*method);
+				std::string signature = class_model.qualified_name;
+				signature += "::";
+				signature += UnsupportedMethodNameForSignature(*method);
+				signature += '(';
+				for (std::size_t index = 0U; index < parameters.size(); ++index)
+				{
+					if (index != 0U)
+					{
+						signature += ", ";
+					}
+					signature += parameters[index].type_spelling;
+				}
+				signature += ')';
+				signature += ReportMethodQualifiers(*method);
+				return signature;
+			}
+
 			void RecordUnsupportedMethod(ClassModel& class_model,
 										 const clang::NamedDecl& declaration,
 										 UnsupportedReasonCode reason_code,
@@ -2049,6 +2159,7 @@ namespace mockfakegen
 												  class_model.qualified_name,
 												  std::move(kind),
 												  std::move(reason));
+				item.member_signature = UnsupportedSignatureForReport(class_model, declaration);
 				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
 				class_model.unsupported_items.push_back(std::move(item));
 			}

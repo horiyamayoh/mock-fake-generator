@@ -50,7 +50,7 @@
         }
       },
       "class": "sample::Service",
-      "member": "sample::Service::Convert",
+      "member": "sample::Service::Convert<T>(T)",
       "message": "function template member is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",
@@ -76,7 +76,7 @@
         }
       },
       "class": "sample::Service",
-      "member": "sample::Service::operator+=",
+      "member": "sample::Service::operator+=(int)",
       "message": "overloaded operator is not supported",
       "suggested_action": "exclude this member or provide a hand-authored mock",
       "command": "",

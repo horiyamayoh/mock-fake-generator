@@ -206,6 +206,20 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] bool HasUnsupportedSignature(const mockfakegen::ClassModel& class_model,
+											   std::string_view kind,
+											   std::string_view signature)
+	{
+		for (const auto& item : class_model.unsupported_items)
+		{
+			if (item.kind == kind && item.member_signature == signature)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	[[nodiscard]] bool HasTopLevelUnsupportedKind(const mockfakegen::ClassExtractionResult& result,
 												  std::string_view kind)
 	{
@@ -586,12 +600,14 @@ namespace
 				   "  operator bool() const;\n"
 				   "  UnsupportedMethods& operator=(const UnsupportedMethods& other);\n"
 				   "  UnsupportedMethods& operator+=(int delta);\n"
-				   "  template <class T> T Get();\n"
+				   "  template <class T> T Get(T value);\n"
 				   "  void Deleted() = delete;\n"
 				   "  void Inline() {}\n"
 				   "  constexpr int Value() const { return 0; }\n"
 				   "  void Conditional() noexcept(sizeof(int) == 4);\n"
-				   "  void Volatile() volatile;\n"
+				   "  void Volatile(int value) volatile;\n"
+				   "  void Volatile(double value) volatile;\n"
+				   "  void VolatileNoexcept() volatile noexcept;\n"
 				   "  bool Supported();\n"
 				   "};\n");
 
@@ -622,6 +638,26 @@ namespace
 			   "conditional noexcept should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "volatile_method"),
 			   "volatile method should be unsupported");
+		Expect(HasUnsupportedSignature(
+				   class_model, "function_template", "UnsupportedMethods::Get<T>(T)"),
+			   "function template signature should include template and parameter types");
+		Expect(HasUnsupportedSignature(
+				   class_model, "overloaded_operator", "UnsupportedMethods::operator+=(int)"),
+			   "operator signature should include parameter types");
+		Expect(HasUnsupportedSignature(class_model,
+									   "conditional_noexcept",
+									   "UnsupportedMethods::Conditional() noexcept"),
+			   "conditional noexcept signature should include noexcept marker");
+		Expect(HasUnsupportedSignature(
+				   class_model, "volatile_method", "UnsupportedMethods::Volatile(int) volatile"),
+			   "volatile int overload should include parameter and qualifier");
+		Expect(HasUnsupportedSignature(
+				   class_model, "volatile_method", "UnsupportedMethods::Volatile(double) volatile"),
+			   "volatile double overload should include parameter and qualifier");
+		Expect(HasUnsupportedSignature(class_model,
+									   "volatile_method",
+									   "UnsupportedMethods::VolatileNoexcept() volatile noexcept"),
+			   "volatile noexcept signature should include both qualifiers");
 		Expect(!result.diagnostics.empty(), "unsupported methods should emit diagnostics");
 		Expect(result.diagnostics[0].code == mockfakegen::DiagnosticCode::UnsupportedConstruct,
 			   "unsupported diagnostics should be distinct from parse diagnostics");
