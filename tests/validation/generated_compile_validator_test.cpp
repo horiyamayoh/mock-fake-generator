@@ -286,6 +286,27 @@ namespace
 		}
 	}
 
+	void CompileValidationNormalizesStandardArgs()
+	{
+		auto options = CompileOptions();
+		options.extra_args = {"-std", "c++20", "--std=c++17"};
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(result.ok(), "compile validation should ignore standard downgrades");
+		Expect(!result.commands.empty(), "compile validation should record commands");
+		for (const auto& command : result.commands)
+		{
+			Expect(Contains(command.command, "-std=c++23"),
+				   "validation command should include fixed C++23");
+			Expect(!Contains(command.command, "c++20"),
+				   "validation command should drop separate C++20 downgrade");
+			Expect(!Contains(command.command, "c++17"),
+				   "validation command should drop joined C++17 downgrade");
+		}
+	}
+
 	void CompileValidationSucceedsForSharedOwnerGeneratedOutput()
 	{
 		const auto result = mockfakegen::ValidateGeneratedOutputCompile(
@@ -678,6 +699,7 @@ namespace
 int main()
 {
 	CompileValidationSucceedsForGeneratedFixture();
+	CompileValidationNormalizesStandardArgs();
 	CompileValidationSucceedsForSharedOwnerGeneratedOutput();
 	LinkValidationBuildsSmokeExecutable();
 	LinkValidationReportsDuplicateProductImplementation();

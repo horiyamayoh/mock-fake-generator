@@ -307,6 +307,59 @@ namespace
 			   "parse attempt should expose parse command");
 	}
 
+	void NormalizesCompileDatabaseStandardToCxx23()
+	{
+		TempTree tree;
+		tree.Write("include/FixedStandard.h",
+				   "#pragma once\n"
+				   "#if __cplusplus <= 202002L\n"
+				   "#error expected C++23 mode\n"
+				   "#endif\n"
+				   "class FixedStandard { public: int Value(); };\n");
+		tree.Write("src/fixed_standard.cpp", "#include \"FixedStandard.h\"\n");
+
+		const auto source = tree.root() / "src/fixed_standard.cpp";
+		WriteCompileCommands(tree,
+							 {{
+								 .source = source,
+								 .args =
+									 {
+										 "c++",
+										 "-std",
+										 "c++20",
+										 "-I" + (tree.root() / "include").generic_string(),
+										 "-c",
+										 source.generic_string(),
+									 },
+							 }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/FixedStandard.h")},
+			.extra_args = {"--std=c++17"},
+		});
+
+		Expect(result.ok(), "C++23-fixed resolver should ignore compile DB std downgrade");
+		Expect(result.project.classes.size() == 1U, "C++23-fixed fixture should extract class");
+		Expect(result.parse_attempts.size() == 1U, "C++23-fixed parse should be attempted once");
+		const auto& args = result.parse_attempts[0].compile_args;
+		Expect(HasCompileArg(args, "-std=c++23"), "parse args should include fixed C++23");
+		Expect(CountCompileArg(args, "-std=c++23") == 1U, "parse args should include C++23 once");
+		Expect(!HasAdjacentCompileArg(args, "-std", "c++20"),
+			   "parse args should drop separate compile DB C++20");
+		Expect(!HasCompileArg(args, "--std=c++17"),
+			   "parse args should drop CLI extra standard downgrade");
+		Expect(HasCompileArg(result.validation_args, "-std=c++23"),
+			   "validation args should include fixed C++23");
+		Expect(!HasCompileArg(result.validation_args, "--std=c++17"),
+			   "validation args should drop extra standard downgrade");
+		Expect(result.parse_attempts[0].parse_command.find("c++20") == std::string::npos,
+			   "parse command should not keep compile DB C++20");
+		Expect(result.parse_attempts[0].parse_command.find("c++17") == std::string::npos,
+			   "parse command should not keep extra standard downgrade");
+	}
+
 	void PreservesSeparatePairedValidationArgs()
 	{
 		TempTree tree;
@@ -1000,6 +1053,7 @@ namespace
 int main()
 {
 	ParsesHeaderThroughRealTu();
+	NormalizesCompileDatabaseStandardToCxx23();
 	PreservesSeparatePairedValidationArgs();
 	FallsBackToSyntheticTuWithoutCompileDatabase();
 	SyntheticFallbackUsesExtraCompilerArgs();

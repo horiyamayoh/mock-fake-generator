@@ -606,14 +606,39 @@ namespace mockfakegen
 			return absolute_argument == CommandRelativePath(command, command.Filename, path_maps);
 		}
 
-		[[nodiscard]] bool HasStdArg(const std::vector<std::string>& args)
+		[[nodiscard]] bool IsSeparateStandardOption(std::string_view arg) noexcept
 		{
-			return std::any_of(args.begin(),
-							   args.end(),
-							   [](const auto& arg)
-							   {
-								   return arg == "-std" || arg.starts_with("-std=");
-							   });
+			return arg == "-std" || arg == "--std";
+		}
+
+		[[nodiscard]] bool IsJoinedStandardOption(std::string_view arg) noexcept
+		{
+			return arg.starts_with("-std=") || arg.starts_with("--std=");
+		}
+
+		void NormalizeCxx23StandardArgs(std::vector<std::string>& args)
+		{
+			std::vector<std::string> normalized;
+			normalized.reserve(args.size() + 1U);
+			for (std::size_t index = 0U; index < args.size(); ++index)
+			{
+				const auto& arg = args[index];
+				if (IsSeparateStandardOption(arg))
+				{
+					if (index + 1U < args.size())
+					{
+						++index;
+					}
+					continue;
+				}
+				if (IsJoinedStandardOption(arg))
+				{
+					continue;
+				}
+				normalized.push_back(arg);
+			}
+			normalized.push_back("-std=c++23");
+			args = std::move(normalized);
 		}
 
 		[[nodiscard]] bool IsRelativePathLike(const std::string& value)
@@ -1146,11 +1171,6 @@ namespace mockfakegen
 				args.push_back(arg);
 			}
 
-			if (!HasStdArg(args))
-			{
-				args.push_back("-std=c++23");
-			}
-
 			return args;
 		}
 
@@ -1176,6 +1196,8 @@ namespace mockfakegen
 			result.compile_args = SanitizeCompileCommandArgs(command, true, options.path_maps);
 			AppendExtraCompilerArgs(result.tool_args, options);
 			AppendExtraCompilerArgs(result.compile_args, options);
+			NormalizeCxx23StandardArgs(result.tool_args);
+			NormalizeCxx23StandardArgs(result.compile_args);
 			const auto executable = CommandCompilerPath(command, options.path_maps);
 			result.compiler = executable;
 			result.parse_command = JoinCommand(
@@ -1551,11 +1573,13 @@ namespace mockfakegen
 				auto args = *best_args;
 				AppendProjectRootInclude(args, project_root);
 				AppendExtraCompilerArgs(args, options);
+				NormalizeCxx23StandardArgs(args);
 				return args;
 			}
 
 			auto args = BuildSyntheticTuFallbackArgs(project_root);
 			AppendExtraCompilerArgs(args, options);
+			NormalizeCxx23StandardArgs(args);
 			return args;
 		}
 

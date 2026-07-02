@@ -540,14 +540,39 @@ namespace mockfakegen
 				   "}\n";
 		}
 
-		[[nodiscard]] bool HasStdArg(std::span<const std::string> args)
+		[[nodiscard]] bool IsSeparateStandardOption(std::string_view arg) noexcept
 		{
-			return std::any_of(args.begin(),
-							   args.end(),
-							   [](const auto& arg)
-							   {
-								   return arg == "-std" || arg.starts_with("-std=");
-							   });
+			return arg == "-std" || arg == "--std";
+		}
+
+		[[nodiscard]] bool IsJoinedStandardOption(std::string_view arg) noexcept
+		{
+			return arg.starts_with("-std=") || arg.starts_with("--std=");
+		}
+
+		void NormalizeCxx23StandardArgs(std::vector<std::string>& args)
+		{
+			std::vector<std::string> normalized;
+			normalized.reserve(args.size() + 1U);
+			for (std::size_t index = 0U; index < args.size(); ++index)
+			{
+				const auto& arg = args[index];
+				if (IsSeparateStandardOption(arg))
+				{
+					if (index + 1U < args.size())
+					{
+						++index;
+					}
+					continue;
+				}
+				if (IsJoinedStandardOption(arg))
+				{
+					continue;
+				}
+				normalized.push_back(arg);
+			}
+			normalized.push_back("-std=c++23");
+			args = std::move(normalized);
 		}
 
 		[[nodiscard]] std::vector<std::string>
@@ -558,10 +583,6 @@ namespace mockfakegen
 			std::vector<std::string> arguments;
 			arguments.push_back(options.compiler.empty() ? std::string("c++")
 														 : options.compiler.string());
-			if (!HasStdArg(extra_args))
-			{
-				arguments.push_back("-std=c++23");
-			}
 			arguments.push_back("-I");
 			arguments.push_back(generated_root.string());
 			for (const auto& include_dir : options.include_dirs)
@@ -573,6 +594,7 @@ namespace mockfakegen
 			{
 				arguments.push_back(extra_arg);
 			}
+			NormalizeCxx23StandardArgs(arguments);
 			return arguments;
 		}
 
