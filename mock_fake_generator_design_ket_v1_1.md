@@ -444,7 +444,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--header-extension <ext>` | repeatable value | `.h`, `.hpp`, `.hh`, `.hxx` | implemented | HeaderScanner | 指定時は default set を置き換える。`.h` / `.hpp` / `.hh` / `.hxx` 以外は invalid |
 | `--header-filter <regex>` | value | none | implemented | HeaderScanner | regex として invalid な値は invalid |
 | `--exclude <glob>` | repeatable value | none | implemented | HeaderScanner | 空値 invalid。project-relative glob として扱う |
-| `--class-filter <regex>` | value | none | deferred | ClassExtractor | 使用時は `DeferredOption` |
+| `--class-filter <regex>` | value | none | implemented | ClassExtractor | qualified / unqualified class name regex として invalid な値は invalid |
 | `--access <policy>` | value | `public` | `public` implemented, `protected` / `private` deferred | ClassExtractor / PolicyEngine | unknown value invalid。deferred value は `DeferredOption` |
 | `--include-struct <bool>` | bool value | `false` | `false` implemented, `true` deferred | ClassExtractor | `true` は `DeferredOption` |
 | `--registry-mode <mode>` | value | `thread-local` | `thread-local` / `global-mutex` / `shared-owner` implemented | runtime template | unknown value invalid |

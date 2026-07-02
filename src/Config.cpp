@@ -113,7 +113,7 @@ namespace mockfakegen
 
 		[[nodiscard]] bool IsDeferredValueOption(std::string_view option) noexcept
 		{
-			return option == kConfigOption || option == kClassFilterOption;
+			return option == kConfigOption;
 		}
 
 		[[nodiscard]] bool IsKnownOption(std::string_view option) noexcept
@@ -548,6 +548,21 @@ namespace mockfakegen
 							 ConfigErrorCode::InvalidOptionValue,
 							 kHeaderFilterOption,
 							 "invalid --header-filter regex: " + std::string(error.what()));
+				}
+			}
+			else if (option == kClassFilterOption)
+			{
+				try
+				{
+					(void)std::regex(*value);
+					config.class_filter = *value;
+				}
+				catch (const std::regex_error& error)
+				{
+					AddError(result.errors,
+							 ConfigErrorCode::InvalidOptionValue,
+							 kClassFilterOption,
+							 "invalid --class-filter regex: " + std::string(error.what()));
 				}
 			}
 			else if (option == kExcludeOption)
@@ -1015,7 +1030,7 @@ namespace mockfakegen
 			"  --header-extension <ext> Repeatable override: .h, .hpp, .hh, or .hxx.\n"
 			"  --header-filter <regex> Filter project-relative header paths.\n"
 			"  --exclude <glob>        Repeatable project-relative header exclusion.\n"
-			"  --class-filter <regex>  Deferred: class name filter.\n"
+			"  --class-filter <regex>  Filter classes by qualified or unqualified name.\n"
 			"  --access <policy>       public only; protected/private are deferred.\n"
 			"  --include-struct <bool> false only; true is deferred.\n"
 			"  --registry-mode <mode>  thread-local, global-mutex, or shared-owner.\n"

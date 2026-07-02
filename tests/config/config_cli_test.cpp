@@ -130,6 +130,7 @@ namespace
 		Expect(result.config->header_extensions == default_header_extensions,
 			   "header extensions should default to common C++ header extensions");
 		Expect(!result.config->header_filter.has_value(), "header filter should default unset");
+		Expect(!result.config->class_filter.has_value(), "class filter should default unset");
 		Expect(result.config->exclude_globs.empty(), "exclude globs should default empty");
 		Expect(result.config->access == mockfakegen::AccessPolicy::Public,
 			   "access should default to public");
@@ -293,6 +294,19 @@ namespace
 			   "header extension overrides should replace defaults and keep unique order");
 	}
 
+	void ParsesClassFilter()
+	{
+		auto args = ValidArgs();
+		args.push_back("--class-filter");
+		args.push_back("(^|::)(Foo|Bar)$");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "class filter should parse");
+		Expect(result.config->class_filter == "(^|::)(Foo|Bar)$",
+			   "class filter regex should be stored");
+	}
+
 	void ParsesCompilerRescueArgs()
 	{
 		auto args = ValidArgs();
@@ -363,6 +377,22 @@ namespace
 			   "invalid header extension should use invalid option code");
 		Expect(result.errors[0].option == "--header-extension",
 			   "invalid header extension should identify option");
+	}
+
+	void RejectsInvalidClassFilterRegex()
+	{
+		auto args = ValidArgs();
+		args.push_back("--class-filter");
+		args.push_back("[");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "invalid class filter regex should fail");
+		Expect(result.errors.size() == 1U, "invalid class filter should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "invalid class filter should use invalid option code");
+		Expect(result.errors[0].option == "--class-filter",
+			   "invalid class filter should identify option");
 	}
 
 	void UsageMentionsEveryPublicOption()
@@ -720,7 +750,6 @@ namespace
 			const char* value;
 		};
 		const std::vector<Case> cases = {
-			{"--class-filter", "Hoge"},
 			{"--include-struct", "true"},
 			{"--access", "private"},
 		};
@@ -1164,9 +1193,11 @@ int main()
 	ParsesValidationControls();
 	ParsesScannerFilters();
 	ParsesHeaderExtensionOverride();
+	ParsesClassFilter();
 	ParsesCompilerRescueArgs();
 	RejectsInvalidHeaderFilterRegex();
 	RejectsInvalidHeaderExtension();
+	RejectsInvalidClassFilterRegex();
 	UsageMentionsEveryPublicOption();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();

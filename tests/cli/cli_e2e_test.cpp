@@ -474,6 +474,76 @@ namespace
 			   "manifest should record .hpp source header");
 	}
 
+	void ClassFilterGeneratesOnlyMatchingClasses(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "class-filter-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "class-filter-build";
+		const auto output_dir = temp_root / "class-filter-generated";
+		WriteText(include_dir / "Services.h",
+				  "#pragma once\n"
+				  "class GoodService {\n"
+				  "public:\n"
+				  "  int Run();\n"
+				  "};\n"
+				  "class OtherService {\n"
+				  "public:\n"
+				  "  int Run();\n"
+				  "};\n");
+		const auto source = source_dir / "Services.cpp";
+		WriteText(source,
+				  "#include \"Services.h\"\n"
+				  "int GoodService::Run() { return 1; }\n"
+				  "int OtherService::Run() { return 2; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(include_dir.string()) + " -c " + ShellQuote(source.string()) +
+			" -o services.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+				   "--class-filter",
+				   "GoodService",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "class_filter_generation");
+		DumpCommandFailure("class filter generation", result);
+
+		Expect(result.exit_code == 0, "class-filtered generation should succeed");
+		Expect(std::filesystem::exists(output_dir / "MockGoodService.h"),
+			   "matching class should generate mock header");
+		Expect(std::filesystem::exists(output_dir / "FakeGoodService.cpp"),
+			   "matching class should generate fake source");
+		Expect(!std::filesystem::exists(output_dir / "MockOtherService.h"),
+			   "filtered class should not generate mock header");
+		Expect(!std::filesystem::exists(output_dir / "FakeOtherService.cpp"),
+			   "filtered class should not generate fake source");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"qualified_name\": \"GoodService\""),
+			   "manifest should include matching class");
+		Expect(!Contains(manifest, "\"qualified_name\": \"OtherService\""),
+			   "manifest should omit filtered class");
+		Expect(Contains(manifest, "\"code\": \"class_filter\""),
+			   "manifest should record class filter summary diagnostic");
+		Expect(Contains(manifest, "filtered out 1 class(es) by --class-filter"),
+			   "manifest should record filtered class count");
+	}
+
 	void SyntaxValidationRunsFromRealCli(const std::filesystem::path& temp_root,
 										 const std::filesystem::path& product_dir,
 										 const std::filesystem::path& build_dir)
@@ -2569,6 +2639,7 @@ int main()
 
 	GeneratesAndValidatesFromRealCli(temp_root, product_dir, build_dir);
 	GeneratesFromHppHeaderByDefault(temp_root);
+	ClassFilterGeneratesOnlyMatchingClasses(temp_root);
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);

@@ -169,7 +169,7 @@ into the same test target.
 | `--header-extension <ext>` | supported, repeatable | `.h`, `.hpp`, `.hh`, `.hxx` | Override the scanned header extensions. Each value must be one of `.h`, `.hpp`, `.hh`, or `.hxx`. |
 | `--header-filter <regex>` | supported | none | Include only project-relative header paths matching the regex. |
 | `--exclude <glob>` | supported, repeatable | none | Exclude project-relative paths. `*`, `?`, and `**` are supported. |
-| `--class-filter <regex>` | deferred | none | Recognized, but class filtering is not implemented yet. |
+| `--class-filter <regex>` | supported | none | Generate only classes whose qualified or unqualified name matches the regex. |
 | `--access <policy>` | public only | `public` | `public` is supported. `protected` and `private` are deferred. |
 | `--include-struct <bool>` | false only | `false` | `true` is recognized but deferred. |
 | `--registry-mode <mode>` | supported | `thread-local` | Runtime mock registry: `thread-local`, `global-mutex`, or `shared-owner`. |

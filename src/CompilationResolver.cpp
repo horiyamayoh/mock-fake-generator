@@ -1473,7 +1473,7 @@ namespace mockfakegen
 		[[nodiscard]] bool HasExtractedContent(const ClassExtractionResult& extraction)
 		{
 			return !extraction.classes.empty() || !extraction.unsupported_items.empty() ||
-				!extraction.diagnostics.empty();
+				!extraction.diagnostics.empty() || extraction.filtered_class_count != 0U;
 		}
 
 		void MergeExtraction(CompilationResolveResult& result,
@@ -1486,6 +1486,7 @@ namespace mockfakegen
 			{
 				result.project.diagnostics.push_back(std::move(diagnostic));
 			}
+			result.filtered_class_count += extraction.filtered_class_count;
 			MergeTopLevelUnsupportedItems(result.project, std::move(extraction.unsupported_items));
 
 			for (auto& class_model : extraction.classes)
@@ -1774,6 +1775,7 @@ namespace mockfakegen
 						.fake_special_members = options.fake_special_members,
 						.fake_static_data = options.fake_static_data,
 						.interface_mock = options.interface_mock,
+						.class_filter = options.class_filter,
 					});
 				if (!HasExtractedContent(extraction))
 				{
@@ -1850,6 +1852,7 @@ namespace mockfakegen
 					.fake_special_members = options.fake_special_members,
 					.fake_static_data = options.fake_static_data,
 					.interface_mock = options.interface_mock,
+					.class_filter = options.class_filter,
 				});
 			MergeExtraction(result, observations, synthetic_header, std::move(attempt), extraction);
 		}

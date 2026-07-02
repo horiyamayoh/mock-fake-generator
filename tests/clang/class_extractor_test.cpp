@@ -117,6 +117,37 @@ namespace
 			   "namespace parts should be extracted");
 	}
 
+	void ClassFilterMatchesQualifiedAndUnqualifiedNames()
+	{
+		TempTree tree;
+		tree.Write("include/app/Services.h",
+				   "#pragma once\n"
+				   "namespace app {\n"
+				   "class Alpha { public: int Run(); };\n"
+				   "class Beta { public: int Run(); };\n"
+				   "}\n"
+				   "class Gamma { public: int Run(); };\n");
+
+		const auto result = ParseAndExtract(tree,
+											"include/app/Services.h",
+											mockfakegen::ClassExtractionOptions{
+												.class_filter = "(app::Alpha|^Gamma$)",
+											});
+
+		Expect(result.classes.size() == 2U,
+			   "class filter should keep qualified and unqualified matches");
+		Expect(result.filtered_class_count == 1U, "class filter should count filtered-out classes");
+		bool kept_alpha = false;
+		bool kept_gamma = false;
+		for (const auto& class_model : result.classes)
+		{
+			kept_alpha = kept_alpha || class_model.qualified_name == "app::Alpha";
+			kept_gamma = kept_gamma || class_model.qualified_name == "Gamma";
+		}
+		Expect(kept_alpha, "qualified class filter should keep app::Alpha");
+		Expect(kept_gamma, "unqualified class filter should keep Gamma");
+	}
+
 	void RecordsTopLevelStructAsUnsupported()
 	{
 		TempTree tree;
@@ -1134,6 +1165,7 @@ int main()
 {
 	ExtractsGlobalClass();
 	ExtractsNamespacedClass();
+	ClassFilterMatchesQualifiedAndUnqualifiedNames();
 	AvoidsGeneratedNameCollisionsInProductScope();
 	RecordsTopLevelStructAsUnsupported();
 	IgnoresDefaultedSpecialMembersWithoutFakeSpecialMembers();

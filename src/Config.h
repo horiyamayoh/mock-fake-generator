@@ -77,6 +77,7 @@ namespace mockfakegen
 		std::string standard = "c++23";
 		std::vector<std::string> header_extensions = {".h", ".hpp", ".hh", ".hxx"};
 		std::optional<std::string> header_filter;
+		std::optional<std::string> class_filter;
 		std::vector<std::string> exclude_globs;
 		AccessPolicy access = AccessPolicy::Public;
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,6 +71,7 @@ namespace mockfakegen
 		bool fake_special_members = false;
 		bool fake_static_data = false;
 		bool interface_mock = false;
+		std::optional<std::string> class_filter = std::nullopt;
 		std::vector<std::filesystem::path> extra_include_dirs = {};
 		std::vector<std::string> extra_args = {};
 		std::vector<PathMapEntry> path_maps = {};
@@ -81,6 +84,7 @@ namespace mockfakegen
 		std::vector<std::string> validation_args;
 		std::vector<GeneratedSourceCompileArgs> validation_arg_sets;
 		std::vector<CompilationResolverDiagnostic> diagnostics;
+		std::size_t filtered_class_count = 0U;
 
 		[[nodiscard]] bool ok() const noexcept;
 	};

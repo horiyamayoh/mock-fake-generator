@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -640,6 +641,12 @@ namespace mockfakegen
 				const auto namespaces = NamespaceParts(declaration->getDeclContext());
 				const auto namespace_key = NamespaceKey(namespaces);
 				const auto name = declaration->getNameAsString();
+				const auto qualified_name = BuildQualifiedName(namespaces, name);
+				if (!MatchesClassFilter(name, qualified_name))
+				{
+					++result_.filtered_class_count;
+					return true;
+				}
 				const auto mock_name = FirstAvailableGeneratedName(declaration->getDeclContext(),
 																   DefaultMockName(name),
 																   "MockFake" + name,
@@ -656,7 +663,7 @@ namespace mockfakegen
 				const auto interface_mock = ShouldUseInterfaceMockMode(*declaration);
 				auto class_model = ClassModel{
 					.name = name,
-					.qualified_name = BuildQualifiedName(namespaces, name),
+					.qualified_name = qualified_name,
 					.namespaces = namespaces,
 					.mock_name = mock_name,
 					.scoped_mock_name = scoped_mock_name,
@@ -814,6 +821,18 @@ namespace mockfakegen
 					}
 				}
 				return false;
+			}
+
+			[[nodiscard]] bool MatchesClassFilter(std::string_view name,
+												  std::string_view qualified_name) const
+			{
+				if (!options_.class_filter.has_value())
+				{
+					return true;
+				}
+				const std::regex filter(*options_.class_filter);
+				return std::regex_search(std::string(name), filter) ||
+					std::regex_search(std::string(qualified_name), filter);
 			}
 
 			[[nodiscard]] bool IsLocationInTargetHeader(clang::SourceLocation location) const

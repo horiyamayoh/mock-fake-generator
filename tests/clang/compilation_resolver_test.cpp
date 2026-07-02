@@ -324,6 +324,49 @@ namespace
 			   "parse attempt should expose parse command");
 	}
 
+	void ClassFilterNarrowsResolvedClasses()
+	{
+		TempTree tree;
+		tree.Write("include/Services.h",
+				   "#pragma once\n"
+				   "class KeepService { public: int Run(); };\n"
+				   "class DropService { public: int Run(); };\n");
+		tree.Write("src/services.cpp",
+				   "#include \"Services.h\"\n"
+				   "int KeepService::Run() { return 1; }\n"
+				   "int DropService::Run() { return 2; }\n");
+
+		const auto source = tree.root() / "src/services.cpp";
+		WriteCompileCommands(tree,
+							 {{
+								 .source = source,
+								 .args =
+									 {
+										 "c++",
+										 "-std=c++23",
+										 "-I" + (tree.root() / "include").generic_string(),
+										 "-c",
+										 source.generic_string(),
+									 },
+							 }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/Services.h")},
+			.class_filter = "KeepService",
+		});
+
+		Expect(result.ok(), "class-filtered resolver should not report errors");
+		Expect(result.project.classes.size() == 1U, "class filter should keep one class");
+		Expect(result.project.classes[0].qualified_name == "KeepService",
+			   "class filter should keep matching class");
+		Expect(result.filtered_class_count == 1U,
+			   "resolver should report filtered-out class count");
+		Expect(result.parse_attempts.size() == 1U,
+			   "class filter should still record successful parse attempt");
+	}
+
 	void NormalizesCompileDatabaseStandardToCxx23()
 	{
 		TempTree tree;
@@ -1164,6 +1207,7 @@ namespace
 int main()
 {
 	ParsesHeaderThroughRealTu();
+	ClassFilterNarrowsResolvedClasses();
 	NormalizesCompileDatabaseStandardToCxx23();
 	PreservesSeparatePairedValidationArgs();
 	FallsBackToSyntheticTuWithoutCompileDatabase();

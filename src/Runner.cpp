@@ -514,6 +514,19 @@ namespace mockfakegen
 			out.insert(out.end(), diagnostics.begin(), diagnostics.end());
 		}
 
+		[[nodiscard]] RunDiagnostic ClassFilterDiagnostic(std::size_t filtered_class_count)
+		{
+			RunDiagnostic result;
+			result.severity = DiagnosticSeverity::Info;
+			result.component = "filter";
+			result.code = "class_filter";
+			result.kind = "class_filter";
+			result.message = "filtered out " + std::to_string(filtered_class_count) +
+				" class(es) by --class-filter.";
+			result.suggested_action = "adjust --class-filter to include additional classes";
+			return result;
+		}
+
 		[[nodiscard]] std::vector<RunDiagnostic>
 		ToRunDiagnostics(std::span<const ConfigError> diagnostics)
 		{
@@ -1041,12 +1054,17 @@ namespace mockfakegen
 			.fake_special_members = config.fake_special_members,
 			.fake_static_data = config.fake_static_data,
 			.interface_mock = config.interface_mock,
+			.class_filter = config.class_filter,
 			.extra_include_dirs = config.include_dirs,
 			.extra_args = ConfigCompilerArgs(config),
 			.path_maps = config.path_maps,
 		});
 		AppendRunDiagnostics(run_diagnostics, resolve_result.diagnostics);
 		AppendRunDiagnostics(run_diagnostics, resolve_result.project.diagnostics);
+		if (resolve_result.filtered_class_count != 0U)
+		{
+			run_diagnostics.push_back(ClassFilterDiagnostic(resolve_result.filtered_class_count));
+		}
 		print_new_run_diagnostics();
 
 		auto report_classes = ResolveGeneratedClassFilenames(resolve_result.project.classes);
