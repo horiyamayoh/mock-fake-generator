@@ -130,6 +130,12 @@ namespace
 			   "default-return runtime should include type traits");
 		Expect(Contains(file.content, "return R{};"),
 			   "default-return runtime should default construct values");
+		Expect(Contains(file.content, "std::is_reference_v<R>"),
+			   "default-return runtime should guard reference returns");
+		Expect(Contains(file.content, "std::is_default_constructible_v<R>"),
+			   "default-return runtime should guard non-default-constructible returns");
+		Expect(Contains(file.content, "detail::AbortMissingMock(function_name);"),
+			   "default-return runtime should abort unsupported return types");
 		Expect(!Contains(file.content, "[[noreturn]] R MissingMockReturn"),
 			   "default-return runtime should not mark fallback noreturn");
 	}

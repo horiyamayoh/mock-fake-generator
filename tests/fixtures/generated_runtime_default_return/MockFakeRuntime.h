@@ -100,14 +100,17 @@ namespace mockfake
 	template <typename R>
 	R MissingMockReturn(std::string_view function_name = {})
 	{
-		(void)function_name;
 		if constexpr (std::is_void_v<R>)
 		{
 			return;
 		}
-		else
+		else if constexpr (!std::is_reference_v<R> && std::is_default_constructible_v<R>)
 		{
 			return R{};
+		}
+		else
+		{
+			detail::AbortMissingMock(function_name);
 		}
 	}
 } // namespace mockfake
