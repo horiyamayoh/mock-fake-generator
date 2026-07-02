@@ -609,6 +609,43 @@ namespace
 			   "timeout should kill pipe-holding compiler descendants");
 	}
 
+	void CompileValidationCapsCapturedCompilerOutput()
+	{
+		TempTree tree;
+		tree.Write("noisy-compiler.sh",
+				   "#!/bin/sh\n"
+				   "i=0\n"
+				   "while [ \"$i\" -lt 2000 ]; do\n"
+				   "  echo diagnostic-line-$i >&2\n"
+				   "  i=$((i + 1))\n"
+				   "done\n"
+				   "exit 1\n");
+		std::filesystem::permissions(tree.root() / "noisy-compiler.sh",
+									 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::add);
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile("MockNoisy.h",
+										   "#pragma once\n"
+										   "struct MockNoisy {};\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+		};
+		auto options = CompileOptions();
+		options.compiler = tree.root() / "noisy-compiler.sh";
+
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(options, files);
+
+		Expect(!result.ok(), "noisy compiler should fail validation");
+		Expect(!result.diagnostics.empty(), "noisy compiler should produce diagnostics");
+		const auto& summary = result.diagnostics[0].stderr_summary;
+		Expect(summary.size() < 5000U, "compiler output summary should be bounded");
+		Expect(Contains(summary, "diagnostic-line-0"),
+			   "bounded output should keep the leading diagnostics");
+		Expect(Contains(summary, "... truncated ..."),
+			   "bounded output should mark truncated diagnostics");
+		Expect(!Contains(summary, "diagnostic-line-1999"),
+			   "bounded output should discard diagnostics beyond the capture limit");
+	}
+
 	void KeepsFailedArtifactsWhenRequested()
 	{
 		TempTree tree;
@@ -786,6 +823,7 @@ int main()
 	AllMocksHeaderIsCompileValidated();
 	CompileValidationTimesOut();
 	CompileValidationTimesOutAfterChildExitWithInheritedPipe();
+	CompileValidationCapsCapturedCompilerOutput();
 	KeepsFailedArtifactsWhenRequested();
 	InvalidArtifactDirectoryReportsDiagnostic();
 	UnsafeGeneratedPathsAreRejectedBeforeStaging();

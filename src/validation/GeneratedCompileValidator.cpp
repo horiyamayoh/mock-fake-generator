@@ -25,6 +25,8 @@ namespace mockfakegen
 	namespace
 	{
 		constexpr std::size_t kStderrSummaryLimit = 4000U;
+		constexpr std::size_t kProcessOutputCaptureLimit = kStderrSummaryLimit;
+		constexpr std::string_view kTruncatedOutputMarker = "\n... truncated ...";
 		constexpr std::string_view kReservedWriterStagingDirectoryName = ".mockfakegen-staging";
 
 		struct PathValidationResult
@@ -86,6 +88,7 @@ namespace mockfakegen
 			int exit_code = 1;
 			std::string output;
 			bool timed_out = false;
+			bool output_truncated = false;
 		};
 
 		[[nodiscard]] bool IsCxxValidationInput(GeneratedFileKind kind) noexcept
@@ -306,7 +309,7 @@ namespace mockfakegen
 			}
 		}
 
-		[[nodiscard]] bool ReadAvailableOutput(int fd, std::string& output)
+		[[nodiscard]] bool ReadAvailableOutput(int fd, std::string& output, bool& output_truncated)
 		{
 			std::array<char, 4096U> buffer{};
 			bool pipe_open = true;
@@ -315,7 +318,18 @@ namespace mockfakegen
 				const auto count = ::read(fd, buffer.data(), buffer.size());
 				if (count > 0)
 				{
-					output.append(buffer.data(), static_cast<std::size_t>(count));
+					const auto available = static_cast<std::size_t>(count);
+					if (output.size() < kProcessOutputCaptureLimit)
+					{
+						const auto remaining = kProcessOutputCaptureLimit - output.size();
+						const auto keep = std::min(remaining, available);
+						output.append(buffer.data(), keep);
+						output_truncated = output_truncated || keep < available;
+					}
+					else
+					{
+						output_truncated = true;
+					}
 					continue;
 				}
 				if (count == 0)
@@ -433,7 +447,8 @@ namespace mockfakegen
 					const auto poll_result = ::poll(&descriptor, 1U, poll_timeout_ms);
 					if (poll_result > 0 && (descriptor.revents & (POLLIN | POLLHUP)) != 0)
 					{
-						pipe_open = ReadAvailableOutput(pipe_fds[0], result.output);
+						pipe_open = ReadAvailableOutput(
+							pipe_fds[0], result.output, result.output_truncated);
 					}
 					else if (poll_result < 0 && errno != EINTR)
 					{
@@ -450,12 +465,16 @@ namespace mockfakegen
 			return result;
 		}
 
-		[[nodiscard]] std::string StderrSummary(std::string output)
+		[[nodiscard]] std::string StderrSummary(std::string output, bool output_truncated)
 		{
 			if (output.size() > kStderrSummaryLimit)
 			{
 				output.resize(kStderrSummaryLimit);
-				output += "\n... truncated ...";
+				output_truncated = true;
+			}
+			if (output_truncated)
+			{
+				output += kTruncatedOutputMarker;
 			}
 			return output;
 		}
@@ -959,7 +978,7 @@ namespace mockfakegen
 			});
 			if (process.exit_code != 0)
 			{
-				const auto summary = StderrSummary(process.output);
+				const auto summary = StderrSummary(process.output, process.output_truncated);
 				const auto stage = options.mode == ValidationMode::Syntax
 					? GeneratedCompileValidationStage::Syntax
 					: GeneratedCompileValidationStage::Compile;
@@ -1027,7 +1046,7 @@ namespace mockfakegen
 			});
 			if (process.exit_code != 0)
 			{
-				const auto summary = StderrSummary(process.output);
+				const auto summary = StderrSummary(process.output, process.output_truncated);
 				AddDiagnostic(result,
 							  GeneratedCompileValidationStage::Link,
 							  executable_path,
