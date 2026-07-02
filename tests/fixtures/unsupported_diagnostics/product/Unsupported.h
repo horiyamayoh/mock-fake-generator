@@ -45,7 +45,7 @@ namespace negative
 
 		void InlineBody() {}
 		void OutOfClassInline();
-		auto Trailing() -> int;
+		auto TrailingReturn() -> int;
 		auto AutoValue();
 		decltype(auto) Deduced();
 		constexpr int ConstexprValue() const;

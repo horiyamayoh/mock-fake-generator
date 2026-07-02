@@ -15,7 +15,7 @@ namespace negative
 		~MockUnsupportedSurface() = default;
 
 		MOCK_METHOD(bool, Supported, (int), ());
-		MOCK_METHOD(int, Trailing, (), ());
+		MOCK_METHOD(int, TrailingReturn, (), ());
 		MOCK_METHOD(int, Marked, (), ());
 		MOCK_METHOD(int, GnuMarked, (), ());
 	};

@@ -261,6 +261,26 @@ namespace
 						   });
 	}
 
+	[[nodiscard]] bool HasGeneratedMethod(const mockfakegen::ClassExtractionResult& extraction,
+										  std::string_view qualified_class,
+										  std::string_view method_name)
+	{
+		for (const auto& class_model : extraction.classes)
+		{
+			if (class_model.qualified_name != qualified_class)
+			{
+				continue;
+			}
+			return std::any_of(class_model.mock_methods.begin(),
+							   class_model.mock_methods.end(),
+							   [method_name](const auto& method)
+							   {
+								   return method.name == method_name;
+							   });
+		}
+		return false;
+	}
+
 	[[nodiscard]] std::size_t
 	UnsupportedItemCount(const mockfakegen::ClassExtractionResult& extraction)
 	{
@@ -370,6 +390,8 @@ namespace
 			   "defaulted comparison should be recorded");
 		Expect(HasUnsupportedMember(extraction, "function_template", "Constrained"),
 			   "constrained member template should be recorded");
+		Expect(HasGeneratedMethod(extraction, "negative::UnsupportedSurface", "TrailingReturn"),
+			   "trailing return type should be generated in the negative fixture");
 		Expect(HasUnsupportedMember(extraction, "non_public_method", "ProtectedMethod"),
 			   "protected method should be recorded");
 		Expect(HasUnsupportedMember(extraction, "non_public_method", "PrivateMethod"),

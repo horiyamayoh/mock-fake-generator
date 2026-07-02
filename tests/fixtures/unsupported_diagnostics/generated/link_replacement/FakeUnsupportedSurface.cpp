@@ -16,14 +16,14 @@ namespace negative
 		return ::mockfake::MissingMockReturn<bool>("negative::UnsupportedSurface::Supported(int)");
 	}
 
-	int UnsupportedSurface::Trailing()
+	int UnsupportedSurface::TrailingReturn()
 	{
 		if (auto* mockfake_current_mock = ::mockfake::CurrentMock<MockUnsupportedSurface>())
 		{
-			return mockfake_current_mock->Trailing();
+			return mockfake_current_mock->TrailingReturn();
 		}
 
-		return ::mockfake::MissingMockReturn<int>("negative::UnsupportedSurface::Trailing()");
+		return ::mockfake::MissingMockReturn<int>("negative::UnsupportedSurface::TrailingReturn()");
 	}
 
 	int UnsupportedSurface::Marked()

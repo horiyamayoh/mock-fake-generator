@@ -9,11 +9,11 @@ unsupported. Update this table with every support change.
 | Using alias return / enum class parameter | generated | `Supported::CountItems` golden and smoke |
 | Typedef return | generated | `Supported::Scale` golden and smoke |
 | Static member function returning enum class | generated | `Supported::DefaultMode` golden and smoke |
+| Trailing return type | generated | `Supported::Size` golden and smoke; `UnsupportedSurface::TrailingReturn` stays generated in the negative fixture |
 | Friend declaration | ignored, no diagnostic | `Supported` fixture asserts no unsupported items |
 | Anonymous namespace class | unsupported | `anonymous_namespace` assertion in `cxx23_matrix_generation_test` |
 | Attributes and platform attributes | unsupported | `unsupported_diagnostics` report/manifest golden |
 | Macro-origin declaration | unsupported | `unsupported_diagnostics` report/manifest golden |
-| Trailing return type | unsupported | `unsupported_diagnostics` report/manifest golden |
 | Plain `auto` return | unsupported | `auto_return` in `unsupported_diagnostics` report/manifest golden |
 | `decltype(auto)` return | unsupported | `unsupported_diagnostics` report/manifest golden |
 | Concepts / requires / constrained member template | unsupported as function template | `Constrained` in `unsupported_diagnostics` report/manifest golden |
