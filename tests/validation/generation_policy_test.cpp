@@ -445,7 +445,7 @@ namespace
 			"parse diagnostic should be distinct");
 	}
 
-	void IsolatedParseFailurePublishesSuccessfulClasses()
+	void IsolatedParseFailureSuppressesGeneratedOutput()
 	{
 		const std::vector classes = {ServiceClass(false)};
 		mockfakegen::Diagnostic parse_error;
@@ -465,12 +465,10 @@ namespace
 				.validation_diagnostics = validation_diagnostics,
 			});
 
-		Expect(decision.exit_code == 0,
-			   "best-effort isolated parse failure should keep successful output zero-exit");
-		Expect(decision.write_outputs,
-			   "isolated parse failure should not suppress successful generated output");
-		Expect(decision.publish_generated_files,
-			   "isolated parse failure should publish successful generated files");
+		Expect(decision.exit_code != 0, "best-effort isolated parse failure should fail");
+		Expect(!decision.write_outputs, "isolated parse failure should suppress generated output");
+		Expect(!decision.publish_generated_files,
+			   "isolated parse failure should not publish generated files");
 		Expect(decision.emit_manifest, "isolated parse failure should emit manifest");
 		Expect(decision.emit_report, "isolated parse failure should emit report");
 		Expect(decision.has_parse_failure, "isolated parse failure should be recorded");
@@ -479,7 +477,7 @@ namespace
 			"isolated parse diagnostic should be preserved");
 	}
 
-	void StrictIsolatedParseFailurePublishesButReturnsNonZero()
+	void StrictIsolatedParseFailureSuppressesGeneratedOutput()
 	{
 		const std::vector classes = {ServiceClass(false)};
 		mockfakegen::Diagnostic parse_error;
@@ -500,10 +498,10 @@ namespace
 			});
 
 		Expect(decision.exit_code != 0, "strict isolated parse failure should be non-zero");
-		Expect(decision.write_outputs,
-			   "strict isolated parse failure should keep successful generated output writable");
-		Expect(decision.publish_generated_files,
-			   "strict isolated parse failure should publish successful generated files");
+		Expect(!decision.write_outputs,
+			   "strict isolated parse failure should suppress generated output");
+		Expect(!decision.publish_generated_files,
+			   "strict isolated parse failure should not publish generated files");
 		Expect(decision.has_parse_failure, "strict isolated parse failure should be recorded");
 	}
 
@@ -792,8 +790,8 @@ int main()
 	TopLevelUnsupportedInfluencesPolicy();
 	LinkReadinessInfluencesPolicyDecision();
 	ParseFailureSuppressesOutput();
-	IsolatedParseFailurePublishesSuccessfulClasses();
-	StrictIsolatedParseFailurePublishesButReturnsNonZero();
+	IsolatedParseFailureSuppressesGeneratedOutput();
+	StrictIsolatedParseFailureSuppressesGeneratedOutput();
 	ValidationFailureIsNonZeroAndSuppressesPublish();
 	FailurePolicyMatrixCoversPublicationAndReports();
 	KetContaminationInputSuppressesPublish();

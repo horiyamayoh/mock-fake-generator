@@ -14,21 +14,6 @@ namespace mockfakegen
 				diagnostic.severity == DiagnosticSeverity::Error;
 		}
 
-		[[nodiscard]] bool IsGlobalParseFailure(const Diagnostic& diagnostic) noexcept
-		{
-			return IsParseFailure(diagnostic) && diagnostic.source_range.begin.file.empty();
-		}
-
-		[[nodiscard]] bool HasBlockingParseFailure(std::span<const Diagnostic> diagnostics,
-												   std::span<const ClassModel> classes)
-		{
-			if (classes.empty())
-			{
-				return std::any_of(diagnostics.begin(), diagnostics.end(), IsParseFailure);
-			}
-			return std::any_of(diagnostics.begin(), diagnostics.end(), IsGlobalParseFailure);
-		}
-
 		[[nodiscard]] std::size_t UnsupportedItemCount(std::span<const ClassModel> classes)
 		{
 			std::size_t count = 0U;
@@ -316,8 +301,6 @@ namespace mockfakegen
 		decision.emit_manifest = config.emit_manifest;
 		decision.has_parse_failure = std::any_of(
 			input.parse_diagnostics.begin(), input.parse_diagnostics.end(), IsParseFailure);
-		const auto has_blocking_parse_failure =
-			HasBlockingParseFailure(input.parse_diagnostics, input.classes);
 		decision.has_unsupported_items =
 			UnsupportedItemCount(input.classes, input.unsupported_items) != 0U;
 		decision.has_ket_contamination = !input.generated_output_token_diagnostics.empty();
@@ -353,14 +336,10 @@ namespace mockfakegen
 		decision.has_policy_failure = decision.has_ket_contamination ||
 			has_fallback_incompatibility || decision.has_link_readiness_failure;
 
-		if (has_blocking_parse_failure)
+		if (decision.has_parse_failure)
 		{
 			ApplyFailurePolicy(decision,
 							   EvaluateFailurePolicy(config, GenerationFailureKind::ParseFailure));
-		}
-		else if (decision.has_parse_failure && config.strict)
-		{
-			decision.exit_code = std::max(decision.exit_code, 1);
 		}
 		if (decision.has_unsupported_items)
 		{

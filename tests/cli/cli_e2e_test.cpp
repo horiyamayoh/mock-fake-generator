@@ -1658,7 +1658,7 @@ namespace
 			   "report should include clang diagnostic summary");
 	}
 
-	void IsolatedHeaderParseFailureKeepsSuccessfulOutput(const std::filesystem::path& temp_root)
+	void IsolatedHeaderParseFailureSuppressesGeneratedOutput(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "isolated-parse-failure-product";
 		const auto include_dir = product_root / "include";
@@ -1698,21 +1698,21 @@ namespace
 
 		const auto result = RunMockfakegen(temp_root, args, "isolated_parse_failure");
 		const auto stderr_text = ReadText(result.stderr_path);
-		Expect(result.exit_code == 0,
-			   "best-effort isolated header parse failure should keep successful output");
-		Expect(std::filesystem::exists(output_dir / "MockGood.h"),
-			   "successful header mock should be published");
-		Expect(std::filesystem::exists(output_dir / "FakeGood.cpp"),
-			   "successful header fake should be published");
+		Expect(result.exit_code == 1,
+			   "best-effort isolated header parse failure should fail the run");
+		Expect(!std::filesystem::exists(output_dir / "MockGood.h"),
+			   "parse failure should not publish successful header mock");
+		Expect(!std::filesystem::exists(output_dir / "FakeGood.cpp"),
+			   "parse failure should not publish successful header fake");
 		Expect(!std::filesystem::exists(output_dir / "MockBad.h"),
 			   "failed header should not publish a mock");
+		Expect(!std::filesystem::exists(output_dir / "CMakeLists.fragment.cmake"),
+			   "parse failure should not publish a CMake fragment");
 		Expect(Contains(stderr_text, "synthetic TU parse failed"),
 			   "isolated parse failure should be printed");
 		Expect(Contains(stderr_text, "Bad.h"), "isolated parse failure should name the bad header");
 		const auto manifest = ReadText(output_dir / "manifest.json");
 		const auto report = ReadText(output_dir / "generation_report.md");
-		Expect(Contains(manifest, "\"mock_header\": \"MockGood.h\""),
-			   "manifest should include successful generated class");
 		Expect(Contains(manifest, "\"code\": \"synthetic_tu_parse_failure\""),
 			   "manifest should retain isolated parse failure diagnostic");
 		Expect(Contains(manifest, "Bad.h"), "manifest should name failed header");
@@ -2290,7 +2290,7 @@ int main()
 	TopLevelUnsupportedAppearsInManifest(temp_root);
 	PrivateTypeUsesAppearUnsupportedInManifest(temp_root);
 	RealTuFailureSurvivesSyntheticFallbackInManifest(temp_root);
-	IsolatedHeaderParseFailureKeepsSuccessfulOutput(temp_root);
+	IsolatedHeaderParseFailureSuppressesGeneratedOutput(temp_root);
 	MissingCompileDatabaseDiagnosticIsPrintedOnce(temp_root);
 	CliCompilerArgsRescueMissingCompileDatabase(temp_root);
 	PathMapRescuesContainerCompileDatabase(temp_root);
