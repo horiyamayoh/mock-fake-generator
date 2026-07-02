@@ -915,6 +915,7 @@ namespace
 				   "public:\n"
 				   "  virtual ~IStorage() = default;\n"
 				   "  virtual bool Save(const char* key, int value) const noexcept = 0;\n"
+				   "  template <class T> T Get();\n"
 				   "};\n");
 
 		const auto result =
@@ -938,8 +939,8 @@ namespace
 		Expect(class_model.mock_methods[0].is_const, "interface const qualifier should be kept");
 		Expect(class_model.mock_methods[0].is_noexcept,
 			   "interface noexcept qualifier should be kept");
-		Expect(class_model.unsupported_items.empty(),
-			   "pure interface should not be reported unsupported");
+		Expect(HasUnsupportedKind(class_model, "function_template"),
+			   "interface member function template should be unsupported");
 	}
 
 	void InterfaceModeSupportsImplicitNonVirtualDestructor()

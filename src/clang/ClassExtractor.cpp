@@ -1423,6 +1423,22 @@ namespace mockfakegen
 
 				for (const auto* child : declaration.decls())
 				{
+					const auto* function_template =
+						llvm::dyn_cast<clang::FunctionTemplateDecl>(child);
+					if (function_template != nullptr)
+					{
+						const auto* templated = function_template->getTemplatedDecl();
+						if (templated != nullptr)
+						{
+							RecordUnsupportedMethod(class_model,
+													*templated,
+													UnsupportedReasonCode::FunctionTemplate,
+													"function_template",
+													"function template member is not supported");
+						}
+						continue;
+					}
+
 					const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(child);
 					if (method == nullptr || method->isImplicit())
 					{
