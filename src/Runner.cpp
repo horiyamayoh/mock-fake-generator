@@ -709,6 +709,72 @@ namespace mockfakegen
 			return selected;
 		}
 
+		[[nodiscard]] bool IsParentReference(const std::filesystem::path& component)
+		{
+			return component == "..";
+		}
+
+		[[nodiscard]] bool IsCurrentReference(const std::filesystem::path& component)
+		{
+			return component == ".";
+		}
+
+		[[nodiscard]] bool HasRootEscape(const std::filesystem::path& path)
+		{
+			return path.is_absolute() || path.has_root_path() || path.has_root_name() ||
+				path.has_root_directory();
+		}
+
+		[[nodiscard]] bool NormalizeGeneratedRelativePath(const std::filesystem::path& raw_path,
+														  std::filesystem::path& normalized_path)
+		{
+			if (raw_path.empty() || raw_path.generic_string().empty() || HasRootEscape(raw_path))
+			{
+				return false;
+			}
+
+			normalized_path = raw_path.lexically_normal();
+			if (normalized_path.empty() || IsCurrentReference(normalized_path) ||
+				normalized_path.filename().empty() || HasRootEscape(normalized_path))
+			{
+				return false;
+			}
+
+			return std::none_of(normalized_path.begin(), normalized_path.end(), IsParentReference);
+		}
+
+		void RemoveStaleSuppressedGeneratedFiles(const Config& config,
+												 std::span<const GeneratedFile> files,
+												 std::ostream& out)
+		{
+			if (config.dry_run || !config.overwrite)
+			{
+				return;
+			}
+
+			for (const auto& file : files)
+			{
+				if (!IsPublishableGeneratedKind(file.kind))
+				{
+					continue;
+				}
+
+				std::filesystem::path relative_path;
+				if (!NormalizeGeneratedRelativePath(file.relative_path, relative_path))
+				{
+					continue;
+				}
+
+				const auto output_path = (config.output_dir / relative_path).lexically_normal();
+				std::error_code remove_error;
+				const auto removed = std::filesystem::remove(output_path, remove_error);
+				if (removed && !remove_error)
+				{
+					out << "mockfakegen: removed stale " << output_path.generic_string() << '\n';
+				}
+			}
+		}
+
 		[[nodiscard]] std::vector<GeneratedFile>
 		AppendDiagnosticArtifacts(std::span<const GeneratedFile> files,
 								  std::span<const ClassModel> classes,
@@ -956,6 +1022,7 @@ namespace mockfakegen
 			final_files = AppendDiagnosticArtifacts(
 				format_result.files, report_classes, report_metadata, config.emit_manifest);
 			selected_files = FilesSelectedByPolicy(final_files, policy_decision);
+			RemoveStaleSuppressedGeneratedFiles(config, final_files, out);
 		}
 		auto write_result = WriteGeneratedFiles(
 			OutputWriterOptions{

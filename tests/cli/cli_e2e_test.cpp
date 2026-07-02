@@ -2080,6 +2080,87 @@ namespace
 			   "report usable source list should omit fallback-incompatible fake");
 	}
 
+	void PolicySuppressedRerunRemovesStaleGeneratedArtifacts(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "policy-suppressed-rerun-product";
+		const auto include_dir = product_root / "include";
+		const auto build_dir = temp_root / "policy-suppressed-rerun-build";
+		const auto output_dir = temp_root / "policy-suppressed-rerun-generated";
+		std::filesystem::create_directories(build_dir);
+		WriteText(include_dir / "Hoge.h",
+				  "#pragma once\n"
+				  "class Hoge {\n"
+				  "public:\n"
+				  "  int Run();\n"
+				  "};\n");
+
+		std::vector<std::string> first_args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(first_args,
+			   {
+				   "--validate",
+				   "none",
+				   "--format-style",
+				   "none",
+				   "--overwrite",
+			   });
+
+		const auto first = RunMockfakegen(temp_root, first_args, "policy_suppressed_initial");
+		Expect(first.exit_code == 0, "initial generation should succeed");
+		Expect(std::filesystem::exists(output_dir / "MockHoge.h"),
+			   "initial run should publish mock");
+		Expect(std::filesystem::exists(output_dir / "FakeHoge.cpp"),
+			   "initial run should publish fake");
+		Expect(std::filesystem::exists(output_dir / "AllMocks.h"),
+			   "initial run should publish AllMocks");
+		Expect(std::filesystem::exists(output_dir / "CMakeLists.fragment.cmake"),
+			   "initial run should publish CMake fragment");
+		Expect(std::filesystem::exists(output_dir / "MockFakeRuntime.h"),
+			   "initial run should publish runtime");
+
+		WriteText(include_dir / "Hoge.h",
+				  "#pragma once\n"
+				  "class Hoge {\n"
+				  "public:\n"
+				  "  int& Ref();\n"
+				  "};\n");
+		auto second_args = first_args;
+		Append(second_args, {"--fallback-policy", "default-return"});
+
+		const auto second = RunMockfakegen(temp_root, second_args, "policy_suppressed_rerun");
+		Expect(second.exit_code == 1, "policy-suppressed rerun should fail");
+		Expect(!std::filesystem::exists(output_dir / "MockHoge.h"),
+			   "policy-suppressed rerun should remove stale mock");
+		Expect(!std::filesystem::exists(output_dir / "FakeHoge.cpp"),
+			   "policy-suppressed rerun should remove stale fake");
+		Expect(!std::filesystem::exists(output_dir / "AllMocks.h"),
+			   "policy-suppressed rerun should remove stale AllMocks");
+		Expect(!std::filesystem::exists(output_dir / "CMakeLists.fragment.cmake"),
+			   "policy-suppressed rerun should remove stale CMake fragment");
+		Expect(!std::filesystem::exists(output_dir / "MockFakeRuntime.h"),
+			   "policy-suppressed rerun should remove stale runtime");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "policy-suppressed rerun should still emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "policy-suppressed rerun should still emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(manifest, "\"status\": \"suppressed_by_policy\""),
+			   "manifest should record policy-suppressed generated files");
+		Expect(Contains(report, "default-return fallback cannot return a reference"),
+			   "report should explain fallback incompatibility");
+		Expect(!Contains(report, "- `FakeHoge.cpp`"),
+			   "report should not advertise stale fake as usable");
+	}
+
 	void LinkValidationFailureAppearsAsLinkDiagnostic(const std::filesystem::path& temp_root,
 													  const std::filesystem::path& product_dir,
 													  const std::filesystem::path& build_dir)
@@ -2293,6 +2374,7 @@ int main()
 	ScannerFailureAppearsInManifest(temp_root, build_dir);
 	ValidationFailureAppearsInManifest(temp_root, product_dir, build_dir);
 	FallbackIncompatibleOutputIsNotReportedUsable(temp_root);
+	PolicySuppressedRerunRemovesStaleGeneratedArtifacts(temp_root);
 	LinkValidationFailureAppearsAsLinkDiagnostic(temp_root, product_dir, build_dir);
 	KetContaminatedGeneratedOutputFailsPolicy(temp_root);
 	InvalidValidationArtifactDirAppearsInManifest(temp_root, product_dir, build_dir);
