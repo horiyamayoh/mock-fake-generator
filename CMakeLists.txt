@@ -161,23 +161,21 @@ install(
 )
 
 if(MOCKFAKEGEN_ENABLE_FORMAT_TARGETS)
-	find_package(Python3 COMPONENTS Interpreter)
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-	if(Python3_Interpreter_FOUND)
-		add_custom_target(
-			format
-			COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/format.py" --fix
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMENT "Formatting mockfakegen sources"
-		)
+	add_custom_target(
+		format
+		COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/format.py" --fix
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+		COMMENT "Formatting mockfakegen sources"
+	)
 
-		add_custom_target(
-			check-format
-			COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/format.py" --check
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMENT "Checking mockfakegen source formatting"
-		)
-	endif()
+	add_custom_target(
+		check-format
+		COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/format.py" --check
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+		COMMENT "Checking mockfakegen source formatting"
+	)
 endif()
 
 if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
