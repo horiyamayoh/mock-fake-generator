@@ -2106,7 +2106,10 @@ namespace mockfakegen
 		{
 			for (auto& class_model : effective_class_models)
 			{
-				class_model.interface_mock = true;
+				if (class_model.interface_mock || class_model.unsupported_items.empty())
+				{
+					class_model.interface_mock = true;
+				}
 			}
 		}
 

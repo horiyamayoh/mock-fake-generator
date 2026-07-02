@@ -634,6 +634,30 @@ namespace mockfakegen
 				arg == "--sysroot" || arg == "-resource-dir";
 		}
 
+		[[nodiscard]] bool IsSeparateValidationPathOption(const std::string& arg)
+		{
+			return arg == "-I" || arg == "-iquote" || arg == "-isystem" || arg == "-idirafter" ||
+				arg == "-iframework" || arg == "-F" || arg == "-include" || arg == "-imacros" ||
+				arg == "-isysroot" || arg == "--sysroot" || arg == "-resource-dir";
+		}
+
+		[[nodiscard]] bool IsSeparateValidationValueOption(const std::string& arg)
+		{
+			return arg == "-D" || arg == "-U" || arg == "-target" || arg == "--target";
+		}
+
+		[[nodiscard]] bool IsJoinedValidationValueOption(const std::string& arg)
+		{
+			return (arg.starts_with("-D") && arg.size() > 2U) ||
+				(arg.starts_with("-U") && arg.size() > 2U) || arg.starts_with("-target=") ||
+				arg.starts_with("--target=") || arg.starts_with("-stdlib=");
+		}
+
+		[[nodiscard]] bool IsStandaloneValidationOption(const std::string& arg)
+		{
+			return arg == "-pthread";
+		}
+
 		[[nodiscard]] std::optional<std::string>
 		RewriteJoinedPathOption(const clang::tooling::CompileCommand& command,
 								const std::string& arg,
@@ -699,6 +723,21 @@ namespace mockfakegen
 				return rewritten;
 			}
 
+			return std::nullopt;
+		}
+
+		[[nodiscard]] std::optional<std::string>
+		RewriteJoinedValidationPathOption(const clang::tooling::CompileCommand& command,
+										  const std::string& arg,
+										  const std::vector<PathMapEntry>& path_maps)
+		{
+			if (auto rewritten = RewriteJoinedPathOption(command, arg, path_maps, true);
+				rewritten.has_value() &&
+				(rewritten->starts_with("-I") || rewritten->starts_with("-F") ||
+				 rewritten->starts_with("-isystem") || rewritten->starts_with("--sysroot=")))
+			{
+				return rewritten;
+			}
 			return std::nullopt;
 		}
 
@@ -810,7 +849,8 @@ namespace mockfakegen
 			for (std::size_t index = 1U; index < command.CommandLine.size(); ++index)
 			{
 				const auto& arg = command.CommandLine[index];
-				if (arg == "-o" || arg == "-MF" || arg == "-MT" || arg == "-MQ")
+				if (arg == "-o" || arg == "-MF" || arg == "-MT" || arg == "-MQ" || arg == "-MJ" ||
+					arg == "-serialize-diagnostics")
 				{
 					++index;
 					continue;
@@ -1073,9 +1113,9 @@ namespace mockfakegen
 		}
 
 		[[nodiscard]] std::vector<std::string>
-		SanitizeCompileCommandArgs(const clang::tooling::CompileCommand& command,
-								   bool resolve_path_arguments,
-								   const std::vector<PathMapEntry>& path_maps)
+		SanitizeParseCompileCommandArgs(const clang::tooling::CompileCommand& command,
+										bool resolve_path_arguments,
+										const std::vector<PathMapEntry>& path_maps)
 		{
 			std::vector<std::string> args;
 			for (std::size_t index = 1U; index < command.CommandLine.size(); ++index)
@@ -1085,7 +1125,8 @@ namespace mockfakegen
 				{
 					continue;
 				}
-				if (arg == "-o" || arg == "-MF" || arg == "-MT" || arg == "-MQ")
+				if (arg == "-o" || arg == "-MF" || arg == "-MT" || arg == "-MQ" || arg == "-MJ" ||
+					arg == "-serialize-diagnostics")
 				{
 					++index;
 					continue;
@@ -1128,6 +1169,51 @@ namespace mockfakegen
 			return args;
 		}
 
+		[[nodiscard]] std::vector<std::string>
+		SanitizeValidationCompileCommandArgs(const clang::tooling::CompileCommand& command,
+											 const std::vector<PathMapEntry>& path_maps)
+		{
+			std::vector<std::string> args;
+			for (std::size_t index = 1U; index < command.CommandLine.size(); ++index)
+			{
+				const auto& arg = command.CommandLine[index];
+				if (arg == "-c" || arg.starts_with('@') ||
+					IsSourcePathArgument(arg, command, path_maps))
+				{
+					continue;
+				}
+
+				if (IsSeparateValidationPathOption(arg) && index + 1U < command.CommandLine.size())
+				{
+					args.push_back(arg);
+					++index;
+					args.push_back(ResolveCommandPathArgument(
+						command, command.CommandLine[index], path_maps, true));
+					continue;
+				}
+				if (IsSeparateValidationValueOption(arg) && index + 1U < command.CommandLine.size())
+				{
+					args.push_back(arg);
+					++index;
+					args.push_back(command.CommandLine[index]);
+					continue;
+				}
+				if (auto rewritten = RewriteJoinedValidationPathOption(command, arg, path_maps);
+					rewritten.has_value())
+				{
+					args.push_back(std::move(*rewritten));
+					continue;
+				}
+				if (IsJoinedValidationValueOption(arg) || IsStandaloneValidationOption(arg))
+				{
+					args.push_back(arg);
+					continue;
+				}
+			}
+
+			return args;
+		}
+
 		void AppendExtraCompilerArgs(std::vector<std::string>& args,
 									 const CompilationResolverOptions& options)
 		{
@@ -1146,8 +1232,8 @@ namespace mockfakegen
 			ParsedTranslationUnit result;
 			result.source_path = CommandRelativePath(command, command.Filename, options.path_maps);
 			result.command_directory = CommandDirectory(command, options.path_maps);
-			result.tool_args = SanitizeCompileCommandArgs(command, false, options.path_maps);
-			result.compile_args = SanitizeCompileCommandArgs(command, true, options.path_maps);
+			result.tool_args = SanitizeParseCompileCommandArgs(command, false, options.path_maps);
+			result.compile_args = SanitizeValidationCompileCommandArgs(command, options.path_maps);
 			AppendExtraCompilerArgs(result.tool_args, options);
 			AppendExtraCompilerArgs(result.compile_args, options);
 			NormalizeCxx23StandardArgs(result.tool_args);
@@ -1421,7 +1507,7 @@ namespace mockfakegen
 					result.validation_arg_sets.push_back(GeneratedSourceCompileArgs{
 						.qualified_name = class_model.qualified_name,
 						.source_header = class_model.source_header.include_spelling,
-						.compiler = attempt.compiler,
+						.compiler = {},
 						.args = attempt.compile_args,
 					});
 					result.project.classes.push_back(std::move(class_model));
@@ -1545,7 +1631,7 @@ namespace mockfakegen
 				if (!best_args.has_value() || score > best_score)
 				{
 					best_score = score;
-					best_args = SanitizeCompileCommandArgs(command, true, options.path_maps);
+					best_args = SanitizeValidationCompileCommandArgs(command, options.path_maps);
 				}
 			}
 
@@ -1570,7 +1656,8 @@ namespace mockfakegen
 			for (std::size_t index = 0U; index < compile_args.size(); ++index)
 			{
 				const auto& arg = compile_args[index];
-				if (IsSeparatePathOption(arg) && index + 1U < compile_args.size())
+				if ((IsSeparatePathOption(arg) || IsSeparateValidationValueOption(arg)) &&
+					index + 1U < compile_args.size())
 				{
 					const auto& value = compile_args[index + 1U];
 					const auto exists =

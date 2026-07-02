@@ -318,6 +318,47 @@ namespace
 			   "mock header, AllMocks header, and fake source should compile");
 	}
 
+	void CompileValidationIgnoresSourceArgCompiler()
+	{
+		TempTree tree;
+		const auto marker = tree.root() / "compile-db-wrapper-ran.txt";
+		const auto compile_db_wrapper = tree.root() / "compile-db-wrapper.sh";
+		tree.Write("compile-db-wrapper.sh",
+				   "#!/bin/sh\n"
+				   "echo ran > " +
+					   ShellQuote(marker.string()) +
+					   "\n"
+					   "echo compile database compiler should not run >&2\n"
+					   "exit 97\n");
+		std::filesystem::permissions(compile_db_wrapper,
+									 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::add);
+		auto options = CompileOptions();
+		options.source_args = {
+			mockfakegen::GeneratedSourceCompileArgs{
+				.qualified_name = "Hoge",
+				.source_header = "Hoge.h",
+				.compiler = compile_db_wrapper,
+				.args = {},
+			},
+		};
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, SharedOwnerGeneratedFiles());
+
+		Expect(result.ok(), "source arg compiler should not override validation compiler");
+		Expect(!std::filesystem::exists(marker),
+			   "compile database compiler wrapper should not execute");
+		for (const auto& command : result.commands)
+		{
+			Expect(!Contains(command.command, compile_db_wrapper.generic_string()),
+				   "validation command should not contain source arg compiler");
+			Expect(
+				Contains(command.command, std::filesystem::path(MOCKFAKEGEN_CXX_COMPILER).string()),
+				"validation command should use explicit validation compiler");
+		}
+	}
+
 	void LinkValidationBuildsSmokeExecutable()
 	{
 		auto options = CompileOptions();
@@ -811,6 +852,7 @@ int main()
 	CompileValidationSucceedsForGeneratedFixture();
 	CompileValidationNormalizesStandardArgs();
 	CompileValidationSucceedsForSharedOwnerGeneratedOutput();
+	CompileValidationIgnoresSourceArgCompiler();
 	LinkValidationBuildsSmokeExecutable();
 	LinkValidationReportsDuplicateProductImplementation();
 	LinkValidationUsesUniqueObjectPathsForSameStemFakes();

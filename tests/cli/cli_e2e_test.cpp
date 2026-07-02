@@ -679,7 +679,7 @@ namespace
 			   "fixture aggregate mock header include should fail independently");
 	}
 
-	void CompileValidationUsesCompileDatabaseCompiler(const std::filesystem::path& temp_root)
+	void CompileValidationUsesExplicitValidationCompiler(const std::filesystem::path& temp_root)
 	{
 #if defined(__unix__)
 		const auto product_root = temp_root / "compile-db-compiler-product";
@@ -688,21 +688,30 @@ namespace
 		const auto build_dir = temp_root / "compile-db-compiler-build";
 		const auto output_dir = temp_root / "compile-db-compiler-generated";
 		const auto wrapper_dir = temp_root / "compile-db-compiler-wrappers";
-		const auto good_compiler = wrapper_dir / "compile-db-cxx.sh";
-		const auto bad_compiler = wrapper_dir / "default-cxx-should-not-run.sh";
-		WriteText(good_compiler,
-				  std::string("#!/bin/sh\nexec ") + ShellQuote(MOCKFAKEGEN_CXX_COMPILER) +
-					  " \"$@\"\n");
-		WriteText(bad_compiler,
+		const auto compile_db_compiler = wrapper_dir / "compile-db-cxx.sh";
+		const auto validation_compiler = wrapper_dir / "validation-cxx.sh";
+		const auto compile_db_marker = wrapper_dir / "compile-db-wrapper-ran.txt";
+		const auto validation_marker = wrapper_dir / "validation-wrapper-ran.txt";
+		WriteText(compile_db_compiler,
 				  "#!/bin/sh\n"
-				  "echo default validation compiler should not run >&2\n"
-				  "exit 97\n");
-		std::filesystem::permissions(good_compiler,
+				  "echo ran > " +
+					  ShellQuote(compile_db_marker.string()) +
+					  "\n"
+					  "echo compile database compiler should not run during validation >&2\n"
+					  "exit 97\n");
+		WriteText(validation_compiler,
+				  "#!/bin/sh\n"
+				  "echo ran > " +
+					  ShellQuote(validation_marker.string()) +
+					  "\n"
+					  "exec " +
+					  ShellQuote(MOCKFAKEGEN_CXX_COMPILER) + " \"$@\"\n");
+		std::filesystem::permissions(compile_db_compiler,
 									 std::filesystem::perms::owner_read |
 										 std::filesystem::perms::owner_write |
 										 std::filesystem::perms::owner_exec,
 									 std::filesystem::perm_options::replace);
-		std::filesystem::permissions(bad_compiler,
+		std::filesystem::permissions(validation_compiler,
 									 std::filesystem::perms::owner_read |
 										 std::filesystem::perms::owner_write |
 										 std::filesystem::perms::owner_exec,
@@ -718,9 +727,11 @@ namespace
 				  "};\n");
 		const auto source = source_dir / "CompilerCompat.cpp";
 		WriteText(source, "#include \"CompilerCompat.h\"\n");
-		const auto command = good_compiler.string() + " -std=c++23 -I " +
+		const auto mj_path = build_dir / "compile-fragment.json";
+		const auto command = compile_db_compiler.string() + " -std=c++23 -I " +
 			ShellQuote(include_dir.string()) + " -DCOMPAT_COMPILER_FLAG -c " +
-			ShellQuote(source.string()) + " -o compiler_compat.o";
+			ShellQuote(source.string()) + " -MJ " + ShellQuote(mj_path.string()) +
+			" -Wall -fdiagnostics-color=always -o compiler_compat.o";
 		WriteSingleCompileCommand(build_dir, product_root, source, command);
 
 		std::vector<std::string> args = {
@@ -741,26 +752,40 @@ namespace
 				   "none",
 			   });
 
-		setenv("MOCKFAKEGEN_CXX_COMPILER", bad_compiler.c_str(), 1);
+		setenv("MOCKFAKEGEN_CXX_COMPILER", validation_compiler.c_str(), 1);
 		const auto result = RunMockfakegen(temp_root, args, "compile_db_validation_compiler");
 		setenv("MOCKFAKEGEN_CXX_COMPILER", MOCKFAKEGEN_CXX_COMPILER, 1);
 
 		const auto stdout_text = ReadText(result.stdout_path);
 		const auto stderr_text = ReadText(result.stderr_path);
-		Expect(result.exit_code == 0, "validation should use compile DB compiler");
+		Expect(result.exit_code == 0, "validation should use explicit validation compiler");
 		Expect(Contains(stdout_text, "mockfakegen: validation commands 3"),
-			   "compile DB compiler validation should run compile commands");
+			   "explicit compiler validation should run compile commands");
 		Expect(!Contains(stderr_text, "error [validation]"),
-			   "compile DB compiler validation should not produce validation errors");
-		Expect(!Contains(stderr_text, "default validation compiler should not run"),
-			   "default validation compiler wrapper should not execute");
+			   "explicit compiler validation should not produce validation errors");
+		Expect(std::filesystem::exists(validation_marker),
+			   "explicit validation compiler wrapper should execute");
+		Expect(!std::filesystem::exists(compile_db_marker),
+			   "compile DB compiler wrapper should not execute");
+		Expect(!std::filesystem::exists(mj_path),
+			   "-MJ output path should not be produced by parsing or validation");
+		Expect(!Contains(stderr_text, "compile database compiler should not run during validation"),
+			   "compile DB compiler wrapper should not execute");
 		Expect(std::filesystem::exists(output_dir / "FakeCompilerCompat.cpp"),
-			   "compile DB compiler fake should be published");
+			   "explicit compiler fake should be published");
 		const auto manifest = ReadText(output_dir / "manifest.json");
-		Expect(Contains(manifest, good_compiler.generic_string()),
-			   "manifest validation commands should use compile DB compiler");
-		Expect(!Contains(manifest, bad_compiler.generic_string()),
-			   "manifest validation commands should not use default compiler");
+		const auto validation_commands =
+			SliceBetween(manifest, "  \"validation_commands\": [", "  \"classes\": [");
+		Expect(Contains(validation_commands, validation_compiler.generic_string()),
+			   "manifest validation commands should use explicit validation compiler");
+		Expect(!Contains(validation_commands, compile_db_compiler.generic_string()),
+			   "manifest validation commands should not use compile DB compiler");
+		Expect(!Contains(validation_commands, "-MJ"),
+			   "manifest validation commands should drop output-producing compile DB flags");
+		Expect(!Contains(validation_commands, "-Wall"),
+			   "manifest validation commands should drop non-allowlisted warning flags");
+		Expect(!Contains(validation_commands, "-fdiagnostics-color=always"),
+			   "manifest validation commands should drop non-allowlisted diagnostic flags");
 #else
 		(void)temp_root;
 #endif
@@ -2369,7 +2394,7 @@ int main()
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);
 	CompileValidationDoesNotAggregateMockHeadersWhenAllMocksDisabled(temp_root);
-	CompileValidationUsesCompileDatabaseCompiler(temp_root);
+	CompileValidationUsesExplicitValidationCompiler(temp_root);
 	CompileValidationAcceptsPublicNestedTemplateAndAliasTypes(temp_root);
 	CompileValidationAcceptsDeclaratorAwareReturnTypes(temp_root);
 	CompileValidationAcceptsDeclaratorAwareTypes(temp_root);

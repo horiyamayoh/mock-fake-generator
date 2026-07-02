@@ -382,6 +382,9 @@ namespace
 		TempTree tree;
 		tree.Write("include/Feature.h",
 				   "#pragma once\n"
+				   "#ifndef FEATURE_DEFINE\n"
+				   "#error expected validation allowlisted define\n"
+				   "#endif\n"
 				   "#include \"Dependency.h\"\n"
 				   "class Feature { public: int Value(Dependency dependency); };\n");
 		tree.Write("config/Dependency.h", "#pragma once\nstruct Dependency { int value; };\n");
@@ -403,6 +406,10 @@ namespace
 										 include_dir.generic_string(),
 										 "-I",
 										 config_dir.generic_string(),
+										 "-D",
+										 "FEATURE_DEFINE",
+										 "-Wall",
+										 "-fdiagnostics-color=always",
 										 "-c",
 										 source.generic_string(),
 									 },
@@ -420,8 +427,18 @@ namespace
 			   "validation args should preserve first separate -I pair");
 		Expect(HasAdjacentCompileArg(result.validation_args, "-I", config_dir.generic_string()),
 			   "validation args should preserve second separate -I pair");
+		Expect(HasAdjacentCompileArg(result.validation_args, "-D", "FEATURE_DEFINE"),
+			   "validation args should preserve separate -D pair");
+		Expect(!HasCompileArg(result.validation_args, "-Wall"),
+			   "validation args should drop non-allowlisted warning flags");
+		Expect(!HasCompileArg(result.validation_args, "-fdiagnostics-color=always"),
+			   "validation args should drop non-allowlisted diagnostic flags");
 		Expect(CountCompileArg(result.validation_args, "-I") == 2U,
 			   "validation args should keep both separate -I option tokens");
+		Expect(result.validation_arg_sets.size() == 1U,
+			   "validation args should be stored for the extracted class");
+		Expect(result.validation_arg_sets[0].compiler.empty(),
+			   "class validation args should not inherit the compile database compiler");
 	}
 
 	void FallsBackToSyntheticTuWithoutCompileDatabase()

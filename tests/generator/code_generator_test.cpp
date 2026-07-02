@@ -945,6 +945,52 @@ namespace
 			   "project interface option should clear manifest fake source");
 	}
 
+	void ProjectOptionPreservesUnsupportedInterfaceDowngrade()
+	{
+		auto model = InterfaceModel();
+		model.name = "IFace";
+		model.qualified_name = "IFace";
+		model.namespaces = {};
+		model.mock_name = "MockIFace";
+		model.mock_header_name = "MockIFace.h";
+		model.fake_source_name = "FakeIFace.cpp";
+		model.source_header = HeaderNamed("IFace.h");
+		model.interface_mock = false;
+		model.mock_methods.clear();
+		model.fake_methods.clear();
+		mockfakegen::UnsupportedItem unsupported;
+		unsupported.kind = "interface_construct";
+		unsupported.class_name = "IFace";
+		unsupported.name = "IFace";
+		unsupported.member_signature = "IFace::IFace";
+		unsupported.reason = "final interface class cannot be mocked";
+		model.unsupported_items = {unsupported};
+		const std::vector classes = {model};
+
+		const auto files =
+			mockfakegen::GenerateMockFakeProject(classes,
+												 mockfakegen::ProjectGenerationOptions{
+													 .interface_mock = true,
+												 });
+
+		Expect(HasFile(files, "MockIFace.h"),
+			   "unsupported final interface should still emit diagnostic mock header");
+		Expect(HasFile(files, "MockFakeRuntime.h"),
+			   "unsupported final interface should keep link-replacement runtime");
+		Expect(!HasFile(files, "FakeIFace.cpp"),
+			   "unsupported final interface without fake methods should not emit fake source");
+		const auto& mock = FindFile(files, "MockIFace.h");
+		Expect(!Contains(mock.content, "class MockIFace : public IFace"),
+			   "project option should not force invalid final-interface inheritance");
+		Expect(Contains(mock.content, "MockFakeRuntime.h"),
+			   "downgraded interface should use link-replacement mock shape");
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"generation_mode\": \"mock-only\""),
+			   "manifest should record downgraded generation mode");
+		Expect(Contains(manifest.content, "\"link_ready\": false"),
+			   "manifest should keep unsupported link readiness");
+	}
+
 	void GeneratesSpecialMemberFakes()
 	{
 		const std::vector classes = {SpecialMemberModel()};
@@ -1207,6 +1253,7 @@ int main()
 	SeparatesMockAndFakeMethods();
 	GeneratesMixedInterfaceAndConcreteProject();
 	ProjectOptionSelectsInterfaceMockMode();
+	ProjectOptionPreservesUnsupportedInterfaceDowngrade();
 	GeneratesSpecialMemberFakes();
 	GeneratesStaticDataDefinitions();
 	AvoidsMockLookupVariableParameterCollisions();

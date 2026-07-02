@@ -205,8 +205,8 @@ For container-generated or imported compile databases, use `--path-map FROM=TO` 
 translate producer paths to paths visible in the current execution environment. The mapping
 is applied to compile-command `directory`, `file`, compiler paths with directory
 components, path-like include/sysroot/resource-dir/toolchain/forced-include/module
-arguments, and the validation arguments inherited from the compile database. Mapping uses
-longest-prefix matching:
+arguments, and the allowlisted validation arguments inherited from the compile database.
+Mapping uses longest-prefix matching:
 
 ```sh
 mockfakegen ... --path-map /workspace="$PWD"
@@ -306,6 +306,19 @@ MOCKFAKEGEN_GMOCK_LINK_FILES=/path/to/libgmock_main.a\|/path/to/libgmock.a\|/pat
 `MOCKFAKEGEN_GMOCK_INCLUDE_DIRS` and `MOCKFAKEGEN_GMOCK_LINK_FILES` accept separated path
 lists using `|` or `:` separators. The current parser splits on both separators, so a path
 element containing a literal `|` or `:` cannot be represented in these variables.
+
+Generated validation always invokes `MOCKFAKEGEN_CXX_COMPILER`, or `c++` when it is unset.
+It does not execute the compiler path or compiler wrapper recorded in `compile_commands.json`.
+The compile database still supplies parsing context to Clang LibTooling, and generated
+validation reuses only allowlisted compile database arguments: include search paths
+(`-I`, `-iquote`, `-isystem`, `-idirafter`, `-iframework`, `-F`), forced include or macro
+inputs (`-include`, `-imacros`), defines and undefines, sysroot/resource-dir, target,
+`-stdlib=...`, and `-pthread`. Response files (`@file`), compiler plugin/code-loading
+routes such as `-Xclang -load` or `-fplugin=...`, dependency/output-producing flags such
+as `-o`, `-M*`, `-MJ`, serialized diagnostics, save-temps, and other unrecognized compile
+database flags are not propagated to generated validation. Explicit CLI/config
+`--extra-arg`, `--define`, and `--include-dir` values are treated as user-provided
+validation inputs.
 
 When `MOCKFAKEGEN_GMOCK_LINK_FILES` is non-empty, the validator appends exactly those link
 artifacts and does not synthesize a `main()`. Include a main provider such as

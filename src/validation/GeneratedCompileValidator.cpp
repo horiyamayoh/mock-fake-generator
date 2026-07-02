@@ -685,19 +685,7 @@ namespace mockfakegen
 		ValidationCompilerForFile(const GeneratedCompileValidationOptions& options,
 								  const GeneratedFile& file)
 		{
-			if (!file.source_class.has_value())
-			{
-				return options.compiler;
-			}
-			for (const auto& source_args : options.source_args)
-			{
-				if (source_args.qualified_name == file.source_class->qualified_name &&
-					source_args.source_header == file.source_class->source_header &&
-					!source_args.compiler.empty())
-				{
-					return source_args.compiler;
-				}
-			}
+			(void)file;
 			return options.compiler;
 		}
 
@@ -848,13 +836,6 @@ namespace mockfakegen
 		[[nodiscard]] std::filesystem::path
 		AllMocksValidationCompiler(const GeneratedCompileValidationOptions& options)
 		{
-			for (const auto& source_args : options.source_args)
-			{
-				if (!source_args.compiler.empty())
-				{
-					return source_args.compiler;
-				}
-			}
 			return options.compiler;
 		}
 
