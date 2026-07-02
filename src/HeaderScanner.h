@@ -45,6 +45,7 @@ namespace mockfakegen
 		std::filesystem::path input_root;
 		std::filesystem::path project_root;
 		std::filesystem::path output_dir;
+		std::vector<std::string> header_extensions = {".h", ".hpp", ".hh", ".hxx"};
 		std::optional<std::string> header_filter = std::nullopt;
 		std::vector<std::string> exclude_globs = {};
 	};

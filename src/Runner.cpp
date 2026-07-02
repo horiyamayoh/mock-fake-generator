@@ -991,6 +991,7 @@ namespace mockfakegen
 			.input_root = config.input_root,
 			.project_root = config.project_root,
 			.output_dir = config.output_dir,
+			.header_extensions = config.header_extensions,
 			.header_filter = config.header_filter,
 			.exclude_globs = config.exclude_globs,
 		});

@@ -75,7 +75,7 @@ namespace mockfakegen
 		std::filesystem::path build_path;
 		std::filesystem::path project_root;
 		std::string standard = "c++23";
-		std::string header_extension = ".h";
+		std::vector<std::string> header_extensions = {".h", ".hpp", ".hh", ".hxx"};
 		std::optional<std::string> header_filter;
 		std::vector<std::string> exclude_globs;
 		AccessPolicy access = AccessPolicy::Public;

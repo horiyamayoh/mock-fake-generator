@@ -156,7 +156,17 @@ namespace mockfakegen
 			return lhs.absolute_path.generic_string() < rhs.absolute_path.generic_string();
 		}
 
+		[[nodiscard]] bool
+		HasAllowedHeaderExtension(const std::filesystem::path& path,
+								  const std::vector<std::string>& header_extensions)
+		{
+			const auto extension = path.extension().generic_string();
+			return std::find(header_extensions.begin(), header_extensions.end(), extension) !=
+				header_extensions.end();
+		}
+
 		[[nodiscard]] bool IsHeaderFile(const std::filesystem::directory_entry& entry,
+										const std::vector<std::string>& header_extensions,
 										std::error_code& error)
 		{
 			error.clear();
@@ -169,7 +179,7 @@ namespace mockfakegen
 				return false;
 			}
 
-			return entry.path().extension() == ".h";
+			return HasAllowedHeaderExtension(entry.path(), header_extensions);
 		}
 
 		[[nodiscard]] bool IsCommonBuildDirectoryName(std::string_view name)
@@ -587,7 +597,7 @@ namespace mockfakegen
 					else if (!IsSameOrUnder(entry_path, output_dir))
 					{
 						std::error_code header_error;
-						if (IsHeaderFile(entry, header_error))
+						if (IsHeaderFile(entry, options.header_extensions, header_error))
 						{
 							if (IsGeneratedHeaderFile(entry_path))
 							{

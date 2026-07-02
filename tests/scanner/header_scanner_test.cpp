@@ -122,12 +122,13 @@ namespace
 			   "project-relative path should be stored");
 	}
 
-	void IgnoresNonScopeHeaderExtensions()
+	void FindsCommonHeaderExtensionsByDefault()
 	{
 		TempTree tree;
 		tree.Write("include/A.h");
 		tree.Write("include/B.hpp");
 		tree.Write("include/C.hh");
+		tree.Write("include/D.hxx");
 		tree.Write("include/D.txt");
 
 		const auto result = mockfakegen::ScanHeaders({
@@ -138,8 +139,33 @@ namespace
 
 		Expect(result.ok(), "extension filtering should not produce diagnostics");
 		const auto includes = IncludeSpellings(result.headers);
-		const std::vector<std::string> expected{"include/A.h"};
-		Expect(includes == expected, "only .h files should be included in the initial policy");
+		const std::vector<std::string> expected{
+			"include/A.h",
+			"include/B.hpp",
+			"include/C.hh",
+			"include/D.hxx",
+		};
+		Expect(includes == expected, "common C++ header extensions should be included by default");
+	}
+
+	void HeaderExtensionOverrideNarrowsScan()
+	{
+		TempTree tree;
+		tree.Write("include/A.h");
+		tree.Write("include/B.hpp");
+		tree.Write("include/C.hh");
+
+		const auto result = mockfakegen::ScanHeaders({
+			.input_root = tree.root() / "include",
+			.project_root = tree.root(),
+			.output_dir = tree.root() / "generated",
+			.header_extensions = {".hpp"},
+		});
+
+		Expect(result.ok(), "extension override should not produce diagnostics");
+		const auto includes = IncludeSpellings(result.headers);
+		const std::vector<std::string> expected{"include/B.hpp"};
+		Expect(includes == expected, "extension override should scan only configured extensions");
 	}
 
 	void ExcludesOutputDirectory()
@@ -417,7 +443,8 @@ namespace
 int main()
 {
 	FindsNestedHeadersInDeterministicOrder();
-	IgnoresNonScopeHeaderExtensions();
+	FindsCommonHeaderExtensionsByDefault();
+	HeaderExtensionOverrideNarrowsScan();
 	ExcludesOutputDirectory();
 	ExcludesPriorGeneratedOutputAndGeneratedHeaders();
 	ExcludesBuiltInDirectories();

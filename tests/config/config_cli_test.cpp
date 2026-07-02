@@ -126,7 +126,9 @@ namespace
 		Expect(result.config->build_path == ExpectedPath("build"), "build path should be resolved");
 		Expect(result.config->project_root == ExpectedPath("."), "project root should be resolved");
 		Expect(result.config->standard == "c++23", "standard should default to c++23");
-		Expect(result.config->header_extension == ".h", "header extension should default to .h");
+		const std::vector<std::string> default_header_extensions{".h", ".hpp", ".hh", ".hxx"};
+		Expect(result.config->header_extensions == default_header_extensions,
+			   "header extensions should default to common C++ header extensions");
 		Expect(!result.config->header_filter.has_value(), "header filter should default unset");
 		Expect(result.config->exclude_globs.empty(), "exclude globs should default empty");
 		Expect(result.config->access == mockfakegen::AccessPolicy::Public,
@@ -275,6 +277,22 @@ namespace
 		Expect(result.config->exclude_globs == expected, "exclude globs should preserve order");
 	}
 
+	void ParsesHeaderExtensionOverride()
+	{
+		auto args = ValidArgs();
+		args.push_back("--header-extension");
+		args.push_back(".hpp");
+		args.push_back("--header-extension=.hh");
+		args.push_back("--header-extension=.hpp");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.ok(), "header extension overrides should parse");
+		const std::vector<std::string> expected{".hpp", ".hh"};
+		Expect(result.config->header_extensions == expected,
+			   "header extension overrides should replace defaults and keep unique order");
+	}
+
 	void ParsesCompilerRescueArgs()
 	{
 		auto args = ValidArgs();
@@ -329,6 +347,22 @@ namespace
 			   "invalid header filter should use invalid option code");
 		Expect(result.errors[0].option == "--header-filter",
 			   "invalid header filter should identify option");
+	}
+
+	void RejectsInvalidHeaderExtension()
+	{
+		auto args = ValidArgs();
+		args.push_back("--header-extension");
+		args.push_back(".txt");
+
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(!result.ok(), "invalid header extension should fail");
+		Expect(result.errors.size() == 1U, "invalid header extension should produce one error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "invalid header extension should use invalid option code");
+		Expect(result.errors[0].option == "--header-extension",
+			   "invalid header extension should identify option");
 	}
 
 	void UsageMentionsEveryPublicOption()
@@ -1129,8 +1163,10 @@ int main()
 	ParsesValidateLink();
 	ParsesValidationControls();
 	ParsesScannerFilters();
+	ParsesHeaderExtensionOverride();
 	ParsesCompilerRescueArgs();
 	RejectsInvalidHeaderFilterRegex();
+	RejectsInvalidHeaderExtension();
 	UsageMentionsEveryPublicOption();
 	ReportsMissingRequiredOptions();
 	ReportsInvalidJobs();

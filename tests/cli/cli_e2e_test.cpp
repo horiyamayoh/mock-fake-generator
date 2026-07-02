@@ -421,6 +421,59 @@ namespace
 		CompileLinkAndRunGeneratedSmoke(temp_root, product_dir, output_dir);
 	}
 
+	void GeneratesFromHppHeaderByDefault(const std::filesystem::path& temp_root)
+	{
+		const auto product_root = temp_root / "hpp-product";
+		const auto include_dir = product_root / "include";
+		const auto source_dir = product_root / "src";
+		const auto build_dir = temp_root / "hpp-build";
+		const auto output_dir = temp_root / "hpp-generated";
+		WriteText(include_dir / "Widget.hpp",
+				  "#pragma once\n"
+				  "class Widget {\n"
+				  "public:\n"
+				  "  int Run() const;\n"
+				  "};\n");
+		const auto source = source_dir / "Widget.cpp";
+		WriteText(source,
+				  "#include \"include/Widget.hpp\"\n"
+				  "int Widget::Run() const { return 7; }\n");
+		const auto command = std::string(MOCKFAKEGEN_CXX_COMPILER) + " -std=c++23 -I " +
+			ShellQuote(product_root.string()) + " -c " + ShellQuote(source.string()) +
+			" -o widget.o";
+		WriteSingleCompileCommand(build_dir, product_root, source, command);
+
+		std::vector<std::string> args = {
+			"--input-root",
+			include_dir.string(),
+			"--output-dir",
+			output_dir.string(),
+			"--build-path",
+			build_dir.string(),
+			"--project-root",
+			product_root.string(),
+		};
+		Append(args,
+			   {
+				   "--validate",
+				   "compile",
+				   "--format-style",
+				   "none",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "hpp_header_generation");
+		DumpCommandFailure("hpp header generation", result);
+
+		Expect(result.exit_code == 0, ".hpp header generation should succeed by default");
+		Expect(std::filesystem::exists(output_dir / "MockWidget.h"),
+			   ".hpp header should generate a mock header");
+		Expect(std::filesystem::exists(output_dir / "FakeWidget.cpp"),
+			   ".hpp header should generate a fake source");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"source_header\": \"include/Widget.hpp\""),
+			   "manifest should record .hpp source header");
+	}
+
 	void SyntaxValidationRunsFromRealCli(const std::filesystem::path& temp_root,
 										 const std::filesystem::path& product_dir,
 										 const std::filesystem::path& build_dir)
@@ -2437,6 +2490,7 @@ int main()
 	WriteCompileCommands(build_dir, product_dir);
 
 	GeneratesAndValidatesFromRealCli(temp_root, product_dir, build_dir);
+	GeneratesFromHppHeaderByDefault(temp_root);
 	SyntaxValidationRunsFromRealCli(temp_root, product_dir, build_dir);
 	CompileValidationInheritsCompileDatabaseArgs(temp_root);
 	CompileValidationKeepsPerTuArgsSeparate(temp_root);

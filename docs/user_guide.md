@@ -160,13 +160,13 @@ into the same test target.
 | Option | Status | Default | Meaning |
 |---|---|---|---|
 | `--help` | supported | off | Print usage and exit. |
-| `--input-root <path>` | required | none | Directory scanned recursively for `.h` files. |
+| `--input-root <path>` | required | none | Directory scanned recursively for C++ headers. |
 | `--output-dir <path>` | required | none | Directory where generated files, report, and manifest are written. |
 | `--build-path <path>` | required | none | Directory containing `compile_commands.json`. |
 | `--project-root <path>` | required | none | Base directory for project-relative paths and include spelling. |
 | `--std <value>` | supported | `c++23` | Must be `c++23`. |
 | `--config <path>` | deferred | none | Recognized, but external config files are not implemented yet. |
-| `--header-extension <ext>` | supported | `.h` | Must be `.h`. |
+| `--header-extension <ext>` | supported, repeatable | `.h`, `.hpp`, `.hh`, `.hxx` | Override the scanned header extensions. Each value must be one of `.h`, `.hpp`, `.hh`, or `.hxx`. |
 | `--header-filter <regex>` | supported | none | Include only project-relative header paths matching the regex. |
 | `--exclude <glob>` | supported, repeatable | none | Exclude project-relative paths. `*`, `?`, and `**` are supported. |
 | `--class-filter <regex>` | deferred | none | Recognized, but class filtering is not implemented yet. |

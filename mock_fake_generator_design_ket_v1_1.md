@@ -441,7 +441,7 @@ CLI の実装は `ket::cli` と `ket::parse` を使う。ここで定義する o
 | `--project-root <path>` | path | required | implemented | shared path policy | 空値 invalid |
 | `--std <value>` | value | `c++23` | `c++23` only | Clang parse / validation | 他値は invalid |
 | `--config <path>` | path | none | deferred | future config loader | 使用時は `DeferredOption` |
-| `--header-extension <ext>` | value | `.h` | `.h` only | HeaderScanner | 他値は invalid |
+| `--header-extension <ext>` | repeatable value | `.h`, `.hpp`, `.hh`, `.hxx` | implemented | HeaderScanner | 指定時は default set を置き換える。`.h` / `.hpp` / `.hh` / `.hxx` 以外は invalid |
 | `--header-filter <regex>` | value | none | implemented | HeaderScanner | regex として invalid な値は invalid |
 | `--exclude <glob>` | repeatable value | none | implemented | HeaderScanner | 空値 invalid。project-relative glob として扱う |
 | `--class-filter <regex>` | value | none | deferred | ClassExtractor | 使用時は `DeferredOption` |

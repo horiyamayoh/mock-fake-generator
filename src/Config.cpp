@@ -91,8 +91,24 @@ namespace mockfakegen
 
 		[[nodiscard]] bool IsRepeatableOption(std::string_view option) noexcept
 		{
-			return option == kExcludeOption || option == kIncludeDirOption ||
-				option == kDefineOption || option == kExtraArgOption || option == kPathMapOption;
+			return option == kHeaderExtensionOption || option == kExcludeOption ||
+				option == kIncludeDirOption || option == kDefineOption ||
+				option == kExtraArgOption || option == kPathMapOption;
+		}
+
+		[[nodiscard]] bool IsSupportedHeaderExtension(std::string_view extension) noexcept
+		{
+			return extension == ".h" || extension == ".hpp" || extension == ".hh" ||
+				extension == ".hxx";
+		}
+
+		void AppendUniqueHeaderExtension(std::vector<std::string>& extensions,
+										 std::string extension)
+		{
+			if (std::find(extensions.begin(), extensions.end(), extension) == extensions.end())
+			{
+				extensions.push_back(std::move(extension));
+			}
 		}
 
 		[[nodiscard]] bool IsDeferredValueOption(std::string_view option) noexcept
@@ -374,6 +390,7 @@ namespace mockfakegen
 		std::vector<std::string> seen_options;
 		bool strict_seen = false;
 		bool best_effort_seen = false;
+		bool header_extension_overridden = false;
 		bool option_scanning_enabled = true;
 
 		for (std::size_t index = 1U; index < arguments.size(); ++index)
@@ -502,16 +519,21 @@ namespace mockfakegen
 			}
 			else if (option == kHeaderExtensionOption)
 			{
-				if (*value != ".h")
+				if (!IsSupportedHeaderExtension(*value))
 				{
 					AddError(result.errors,
 							 ConfigErrorCode::InvalidOptionValue,
 							 kHeaderExtensionOption,
-							 "--header-extension must be .h.");
+							 "--header-extension must be one of .h, .hpp, .hh, or .hxx.");
 					continue;
 				}
 
-				config.header_extension = *value;
+				if (!header_extension_overridden)
+				{
+					config.header_extensions.clear();
+					header_extension_overridden = true;
+				}
+				AppendUniqueHeaderExtension(config.header_extensions, *value);
 			}
 			else if (option == kHeaderFilterOption)
 			{
@@ -981,7 +1003,7 @@ namespace mockfakegen
 			"--project-root <path> [options]\n"
 			"\n"
 			"Required path options:\n"
-			"  --input-root <path>     Root directory to scan for .h files.\n"
+			"  --input-root <path>     Root directory to scan for C++ headers.\n"
 			"  --output-dir <path>     Directory where generated files will be written.\n"
 			"  --build-path <path>     Directory containing compile_commands.json.\n"
 			"  --project-root <path>   Base directory for project-relative paths.\n"
@@ -990,7 +1012,7 @@ namespace mockfakegen
 			"  --help                  Show this help and exit.\n"
 			"  --std <value>           c++23 only.\n"
 			"  --config <path>         Deferred: external config file support.\n"
-			"  --header-extension <ext> .h only.\n"
+			"  --header-extension <ext> Repeatable override: .h, .hpp, .hh, or .hxx.\n"
 			"  --header-filter <regex> Filter project-relative header paths.\n"
 			"  --exclude <glob>        Repeatable project-relative header exclusion.\n"
 			"  --class-filter <regex>  Deferred: class name filter.\n"
