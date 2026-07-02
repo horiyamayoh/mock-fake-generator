@@ -369,6 +369,13 @@ namespace
 
 		Expect(result.ok(), "link validation should link generated fakes with gMock");
 		Expect(!result.skipped, "link validation should not be skipped");
+		Expect(result.mode == mockfakegen::ValidationMode::Link,
+			   "link validation result should record requested mode");
+		Expect(result.link_strategy ==
+				   mockfakegen::GeneratedCompileValidationLinkStrategy::GMockLinkInputs,
+			   "link validation with configured link files should record gMock link inputs");
+		Expect(result.link_input_count == GMockLinkFiles().size(),
+			   "link validation should record configured link input count");
 		Expect(result.commands.size() == 3U,
 			   "link validation should compile smoke, compile fake, and link executable");
 		Expect(Contains(result.commands.back().command, "generated_link_smoke"),
@@ -409,6 +416,11 @@ namespace
 			mockfakegen::ValidateGeneratedOutputCompile(options, SameStemFakeFiles());
 
 		Expect(result.ok(), "same-stem fake sources in different directories should link");
+		Expect(result.link_strategy ==
+				   mockfakegen::GeneratedCompileValidationLinkStrategy::SyntheticMainSmoke,
+			   "link validation without link files should record synthetic-main smoke strategy");
+		Expect(result.link_input_count == 0U,
+			   "synthetic-main smoke strategy should record zero configured link inputs");
 		Expect(result.commands.size() == 4U,
 			   "same-stem case should compile smoke, compile both fakes, and link");
 		const auto& link_command = result.commands.back().command;
@@ -494,6 +506,9 @@ namespace
 
 		Expect(result.ok(), "none validation should succeed");
 		Expect(result.skipped, "none validation should be marked skipped");
+		Expect(result.link_strategy ==
+				   mockfakegen::GeneratedCompileValidationLinkStrategy::NotApplicable,
+			   "none validation should not report a link strategy");
 		Expect(result.commands.empty(), "none validation should not run compile commands");
 	}
 

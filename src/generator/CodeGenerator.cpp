@@ -1823,6 +1823,11 @@ namespace mockfakegen
 			<< JsonString(FallbackPolicyName(metadata.fallback_policy)) << ",\n"
 			<< "    \"diagnostics\": " << diagnostic_summary.total << ",\n"
 			<< "    \"validation_commands\": " << metadata.validation_commands.size() << ",\n"
+			<< "    \"validation_mode\": " << JsonString(metadata.validation_mode) << ",\n"
+			<< "    \"validation_link_strategy\": " << JsonString(metadata.validation_link_strategy)
+			<< ",\n"
+			<< "    \"validation_link_input_count\": " << metadata.validation_link_input_count
+			<< ",\n"
 			<< "    \"usable_fake_sources\": ";
 		WriteJsonStringArray(out, usable_fake_sources, "    ");
 		out << ",\n"
@@ -1966,6 +1971,13 @@ namespace mockfakegen
 			<< "Registry mode: `" << RegistryModeName(metadata.registry_mode) << "` - "
 			<< RegistryModeUsage(metadata.registry_mode) << ".\n\n"
 			<< "Fallback policy: `" << FallbackPolicyName(metadata.fallback_policy) << "`.\n\n"
+			<< "Validation mode: `" << metadata.validation_mode << "`";
+		if (metadata.validation_link_strategy != "not-applicable")
+		{
+			out << " (link strategy: `" << metadata.validation_link_strategy
+				<< "`, link inputs: " << metadata.validation_link_input_count << ")";
+		}
+		out << ".\n\n"
 			<< "## Link Replacement Notice\n\n"
 			<< "Do not link generated `FakeXXX.cpp` files together with the corresponding "
 			   "product `.cpp` files in the same test target. Link each generated fake "

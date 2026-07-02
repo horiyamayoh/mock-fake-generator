@@ -11,6 +11,9 @@
     "fallback_policy": "abort",
     "diagnostics": 2,
     "validation_commands": 0,
+    "validation_mode": "none",
+    "validation_link_strategy": "not-applicable",
+    "validation_link_input_count": 0,
     "usable_fake_sources": [],
     "diagnostic_summary": {
       "total": 2,

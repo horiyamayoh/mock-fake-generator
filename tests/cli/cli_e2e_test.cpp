@@ -2261,6 +2261,53 @@ namespace
 			   "report should include link-substitution guidance");
 	}
 
+	void LinkValidationWithoutConfiguredLinkFilesReportsWeakSmoke(
+		const std::filesystem::path& temp_root,
+		const std::filesystem::path& product_dir,
+		const std::filesystem::path& build_dir)
+	{
+#if defined(__unix__)
+		setenv("MOCKFAKEGEN_GMOCK_LINK_FILES", "", 1);
+#endif
+		const auto output_dir = temp_root / "link-validation-no-link-files";
+		auto args = BaseArgs(product_dir, build_dir, output_dir);
+		Append(args,
+			   {
+				   "--validate",
+				   "link",
+				   "--format-style",
+				   "none",
+				   "--fake-special-members",
+				   "true",
+			   });
+
+		const auto result = RunMockfakegen(temp_root, args, "link_validation_no_link_files");
+#if defined(__unix__)
+		setenv("MOCKFAKEGEN_GMOCK_LINK_FILES", MOCKFAKEGEN_GMOCK_LINK_FILES, 1);
+#endif
+
+		Expect(result.exit_code == 1,
+			   "weak link smoke can fail when generated objects still reference gMock symbols");
+		Expect(std::filesystem::exists(output_dir / "manifest.json"),
+			   "weak link smoke run should emit manifest");
+		Expect(std::filesystem::exists(output_dir / "generation_report.md"),
+			   "weak link smoke run should emit report");
+		const auto manifest = ReadText(output_dir / "manifest.json");
+		Expect(Contains(manifest, "\"validation_mode\": \"link\""),
+			   "manifest should record link validation mode");
+		Expect(Contains(manifest, "\"validation_link_strategy\": \"synthetic-main-smoke\""),
+			   "manifest should record weak synthetic-main link smoke");
+		Expect(Contains(manifest, "\"validation_link_input_count\": 0"),
+			   "manifest should record zero configured link inputs");
+		Expect(Contains(manifest, "link_main_smoke.o"),
+			   "manifest should record the synthetic main smoke object in the link command");
+		const auto report = ReadText(output_dir / "generation_report.md");
+		Expect(Contains(report,
+						"Validation mode: `link` (link strategy: `synthetic-main-smoke`, "
+						"link inputs: 0)."),
+			   "report should make weak link smoke explicit");
+	}
+
 	void KetContaminatedGeneratedOutputFailsPolicy(const std::filesystem::path& temp_root)
 	{
 		const auto product_root = temp_root / "ket-contaminated-product";
@@ -2420,6 +2467,7 @@ int main()
 	FallbackIncompatibleOutputIsNotReportedUsable(temp_root);
 	PolicySuppressedRerunRemovesStaleGeneratedArtifacts(temp_root);
 	LinkValidationFailureAppearsAsLinkDiagnostic(temp_root, product_dir, build_dir);
+	LinkValidationWithoutConfiguredLinkFilesReportsWeakSmoke(temp_root, product_dir, build_dir);
 	KetContaminatedGeneratedOutputFailsPolicy(temp_root);
 	InvalidValidationArtifactDirAppearsInManifest(temp_root, product_dir, build_dir);
 

@@ -125,6 +125,20 @@ namespace mockfakegen
 			return GeneratedCompileValidationStage::Compile;
 		}
 
+		[[nodiscard]] GeneratedCompileValidationLinkStrategy
+		LinkStrategyForOptions(const GeneratedCompileValidationOptions& options) noexcept
+		{
+			if (options.mode != ValidationMode::Link)
+			{
+				return GeneratedCompileValidationLinkStrategy::NotApplicable;
+			}
+			if (options.link_files.empty())
+			{
+				return GeneratedCompileValidationLinkStrategy::SyntheticMainSmoke;
+			}
+			return GeneratedCompileValidationLinkStrategy::GMockLinkInputs;
+		}
+
 		[[nodiscard]] bool IsParentReference(const std::filesystem::path& component)
 		{
 			return component == "..";
@@ -1066,11 +1080,29 @@ namespace mockfakegen
 		return "compile";
 	}
 
+	std::string_view ToString(GeneratedCompileValidationLinkStrategy strategy) noexcept
+	{
+		switch (strategy)
+		{
+			case GeneratedCompileValidationLinkStrategy::NotApplicable:
+				return "not-applicable";
+			case GeneratedCompileValidationLinkStrategy::GMockLinkInputs:
+				return "gmock-link-inputs";
+			case GeneratedCompileValidationLinkStrategy::SyntheticMainSmoke:
+				return "synthetic-main-smoke";
+		}
+
+		return "not-applicable";
+	}
+
 	GeneratedCompileValidationResult
 	ValidateGeneratedOutputCompile(const GeneratedCompileValidationOptions& options,
 								   std::span<const GeneratedFile> files)
 	{
 		GeneratedCompileValidationResult result;
+		result.mode = options.mode;
+		result.link_strategy = LinkStrategyForOptions(options);
+		result.link_input_count = options.link_files.size();
 		if (options.mode == ValidationMode::None)
 		{
 			result.skipped = true;

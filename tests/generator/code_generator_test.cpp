@@ -1136,6 +1136,41 @@ namespace
 			   "report should include validation command section");
 	}
 
+	void ReportsValidationLinkStrategy()
+	{
+		const std::vector classes = {ReportBetaModel()};
+		const auto metadata = mockfakegen::GenerationReportMetadata{
+			.diagnostics = {},
+			.validation_commands =
+				{
+					mockfakegen::RunCommand{
+						.source_path = "generated_link_smoke",
+						.command = "c++ generated_link_smoke.o -o generated_link_smoke",
+						.exit_code = 0,
+					},
+				},
+			.registry_mode = mockfakegen::RegistryMode::ThreadLocal,
+			.fallback_policy = mockfakegen::FallbackPolicy::Abort,
+			.validation_mode = "link",
+			.validation_link_strategy = "synthetic-main-smoke",
+			.validation_link_input_count = 0U,
+		};
+
+		const auto manifest = mockfakegen::GenerateManifestJson(classes, metadata);
+		const auto report = mockfakegen::GenerateGenerationReport(classes, metadata);
+
+		Expect(Contains(manifest.content, "\"validation_mode\": \"link\""),
+			   "manifest should record validation mode");
+		Expect(Contains(manifest.content, "\"validation_link_strategy\": \"synthetic-main-smoke\""),
+			   "manifest should record weak link smoke strategy");
+		Expect(Contains(manifest.content, "\"validation_link_input_count\": 0"),
+			   "manifest should record empty configured link input count");
+		Expect(Contains(report.content,
+						"Validation mode: `link` (link strategy: `synthetic-main-smoke`, "
+						"link inputs: 0)."),
+			   "report should explain weak link smoke strategy");
+	}
+
 	void EscapesReportWriterText()
 	{
 		const std::vector classes = {EscapingReportModel()};
@@ -1260,6 +1295,7 @@ int main()
 	GeneratesInterfaceMockProject();
 	CMakeFragmentUsesOnlyLinkReadyFakeSources();
 	GeneratesGenerationReport();
+	ReportsValidationLinkStrategy();
 	EscapesReportWriterText();
 	ReportsParseDiagnosticLocations();
 	return 0;

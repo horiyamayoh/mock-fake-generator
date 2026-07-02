@@ -10,6 +10,8 @@ Registry mode: `thread-local` - per-thread mock stack; use when product code cal
 
 Fallback policy: `abort`.
 
+Validation mode: `none`.
+
 ## Link Replacement Notice
 
 Do not link generated `FakeXXX.cpp` files together with the corresponding product `.cpp` files in the same test target. Link each generated fake source instead of the product implementation it replaces.

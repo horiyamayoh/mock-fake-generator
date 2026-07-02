@@ -80,6 +80,9 @@ namespace mockfakegen
 		std::vector<GeneratedFilePublication> file_publications = {};
 		RegistryMode registry_mode = RegistryMode::ThreadLocal;
 		FallbackPolicy fallback_policy = FallbackPolicy::Abort;
+		std::string validation_mode = "none";
+		std::string validation_link_strategy = "not-applicable";
+		std::size_t validation_link_input_count = 0U;
 	};
 
 	[[nodiscard]] std::string_view ToString(DiagnosticSeverity severity) noexcept;

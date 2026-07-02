@@ -1141,6 +1141,9 @@ namespace mockfakegen
 			.unsupported_items = resolve_result.project.unsupported_items,
 			.registry_mode = config.registry_mode,
 			.fallback_policy = config.fallback_policy,
+			.validation_mode = std::string(ToString(validation_result.mode)),
+			.validation_link_strategy = std::string(ToString(validation_result.link_strategy)),
+			.validation_link_input_count = validation_result.link_input_count,
 		};
 		auto final_files = AppendDiagnosticArtifacts(
 			format_result.files, report_classes, report_metadata, config.emit_manifest);
@@ -1178,6 +1181,9 @@ namespace mockfakegen
 				.unsupported_items = resolve_result.project.unsupported_items,
 				.registry_mode = config.registry_mode,
 				.fallback_policy = config.fallback_policy,
+				.validation_mode = std::string(ToString(validation_result.mode)),
+				.validation_link_strategy = std::string(ToString(validation_result.link_strategy)),
+				.validation_link_input_count = validation_result.link_input_count,
 			};
 			final_report_metadata.file_publications =
 				BuildFilePublications(final_files, selected_files, &write_result);

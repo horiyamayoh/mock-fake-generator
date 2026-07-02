@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -17,6 +18,13 @@ namespace mockfakegen
 		Syntax,
 		Compile,
 		Link,
+	};
+
+	enum class GeneratedCompileValidationLinkStrategy
+	{
+		NotApplicable,
+		GMockLinkInputs,
+		SyntheticMainSmoke,
 	};
 
 	struct GeneratedCompileValidationOptions
@@ -54,6 +62,10 @@ namespace mockfakegen
 		std::vector<GeneratedCompileCommandResult> commands;
 		std::vector<GeneratedCompileDiagnostic> diagnostics;
 		std::filesystem::path artifact_root;
+		ValidationMode mode = ValidationMode::None;
+		GeneratedCompileValidationLinkStrategy link_strategy =
+			GeneratedCompileValidationLinkStrategy::NotApplicable;
+		std::size_t link_input_count = 0U;
 		bool skipped = false;
 
 		[[nodiscard]] bool ok() const noexcept
@@ -67,4 +79,6 @@ namespace mockfakegen
 								   std::span<const GeneratedFile> files);
 
 	[[nodiscard]] std::string_view ToString(GeneratedCompileValidationStage stage) noexcept;
+	[[nodiscard]] std::string_view
+	ToString(GeneratedCompileValidationLinkStrategy strategy) noexcept;
 } // namespace mockfakegen

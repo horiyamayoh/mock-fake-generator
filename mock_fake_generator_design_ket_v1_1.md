@@ -1689,11 +1689,21 @@ CI 差分を安定させるため、以下を守る。
 
 gMock include path は設定または CMake integration で与える。
 
-`--validate link` は上記 compile validation に加えて、生成 fake object と gMock を使った
-smoke executable をリンクする。これは生成物側のリンク可能性を検証するためのものであり、
-ユーザーの最終テストターゲットの source list を自動検査するものではない。製品 `.cpp` と
-`FakeXXX.cpp` が同じ link input に含まれた場合は duplicate symbol を diagnostic として
-報告する。
+`--validate link` は上記 compile validation に加えて、生成 fake object を含む smoke
+executable をリンクする。`MOCKFAKEGEN_GMOCK_LINK_FILES` または同等の設定で link input が
+明示されている場合は、その gMock/custom link input をそのまま link command に追加し、
+strategy を `gmock-link-inputs` として report/manifest に記録する。この場合、`main` を提供する
+`libgmock_main.a` なども利用者が link input に含める。
+
+link input が空の場合は、validator が `main()` を持つ smoke source を合成して link し、
+strategy を `synthetic-main-smoke` として report/manifest に記録する。このモードは object
+生成と一部の duplicate definition を確認する弱い smoke であり、gMock library との完全 link を
+証明しない。生成 object が gMock library symbol を必要とする場合は、この synthetic-main smoke
+自体も unresolved symbol で失敗し得る。
+
+これは生成物側のリンク可能性を検証するためのものであり、ユーザーの最終テストターゲットの
+source list を自動検査するものではない。製品 `.cpp` と `FakeXXX.cpp` が同じ link input に
+含まれた場合は duplicate symbol を diagnostic として報告する。
 
 ### 21.5 PolicyEngine failure / publication matrix
 

@@ -287,8 +287,10 @@ Validation modes:
 - `none`: skip generated-output compile validation.
 - `syntax`: run syntax-only validation where applicable.
 - `compile`: compile generated mock headers and fake sources as separate translation units.
-- `link`: do compile validation, then link a generated-fake smoke executable with gMock link
-  artifacts.
+- `link`: do compile validation, then link a generated-fake smoke executable. When
+  `MOCKFAKEGEN_GMOCK_LINK_FILES` is configured, the link command uses those gMock/custom link
+  inputs. When it is empty, mockfakegen runs a weaker synthetic-main link smoke with no gMock
+  link artifacts.
 
 `compile` is the default and catches invalid generated C++ early. It does not prove that
 your final test target performs link substitution correctly. Use `link` when gMock link
@@ -324,6 +326,13 @@ When `MOCKFAKEGEN_GMOCK_LINK_FILES` is non-empty, the validator appends exactly 
 artifacts and does not synthesize a `main()`. Include a main provider such as
 `libgmock_main.a`, or a custom object/library that defines `main`, in addition to the gMock
 and gTest libraries required by your installation.
+
+When `MOCKFAKEGEN_GMOCK_LINK_FILES` is empty, `--validate link` still compiles generated
+headers/fakes and links them with a generated `main()`. This catches some object and duplicate
+definition problems, but it does not prove full gMock linkage and may still fail if generated
+objects require gMock library symbols. The generated manifest summary records this as
+`"validation_link_strategy": "synthetic-main-smoke"` with `"validation_link_input_count": 0`;
+full configured link validation is recorded as `"validation_link_strategy": "gmock-link-inputs"`.
 
 ## Registry Modes
 
@@ -434,8 +443,8 @@ can appear only in diagnostics.
 
 `manifest.json` has `schema_version: 1` and contains:
 
-- `summary`: counts, registry mode, fallback policy, diagnostic summary, validation command
-  count, and `usable_fake_sources`.
+- `summary`: counts, registry mode, fallback policy, diagnostic summary, validation mode,
+  validation link strategy, validation command count, and `usable_fake_sources`.
 - `diagnostics`: severity, component, code, kind, path, source range, class, member,
   message, suggested action, command, stderr summary, and validation artifact path.
 - `validation_commands`: source path, command, and exit code for generated-output validation.
