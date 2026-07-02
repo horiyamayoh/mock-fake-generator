@@ -1635,10 +1635,13 @@ namespace mockfakegen
 	{
 		std::vector<GeneratedFile> files;
 		files.push_back(GenerateMockHeader(class_model));
+		if (!class_model.interface_mock)
+		{
+			files.push_back(MakeRuntimeHeader(class_model.registry_mode));
+		}
 		if (HasFakeSource(class_model))
 		{
 			files.push_back(GenerateFakeSource(class_model));
-			files.push_back(MakeRuntimeHeader(class_model.registry_mode));
 		}
 		SortGeneratedFiles(files);
 		return files;

@@ -505,6 +505,34 @@ namespace
 			   "fake should not emit invalid prefix return definition");
 	}
 
+	void MinimalGeneratorEmitsRuntimeForMockOnlyLinkReplacementHeader()
+	{
+		mockfakegen::SimpleClassModel model;
+		model.name = "OnlyMock";
+		model.header_include = "OnlyMock.h";
+		model.mock_methods = {
+			mockfakegen::SimpleMethodModel{
+				.return_type = "bool",
+				.name = "Run",
+				.parameters = {},
+			},
+		};
+		model.fake_methods = {};
+		model.interface_mock = false;
+
+		const auto files = mockfakegen::GenerateMinimalMockFake(model);
+
+		Expect(HasFile(files, "MockOnlyMock.h"), "mock-only header should be generated");
+		Expect(!HasFile(files, "FakeOnlyMock.cpp"),
+			   "mock-only minimal model should not invent a fake source");
+		Expect(HasFile(files, "MockFakeRuntime.h"),
+			   "non-interface mock header should be accompanied by runtime");
+
+		const auto& mock = FindFile(files, "MockOnlyMock.h");
+		Expect(Contains(mock.content, "#include \"MockFakeRuntime.h\""),
+			   "mock-only non-interface header should include runtime");
+	}
+
 	void GeneratedOutputDoesNotContainKetTokens()
 	{
 		const auto files = mockfakegen::GenerateMinimalMockFake(HogeModel());
@@ -1081,6 +1109,7 @@ int main()
 {
 	GeneratesMinimalHogeFiles();
 	GeneratesDeclaratorAwareReturnFakeDefinitions();
+	MinimalGeneratorEmitsRuntimeForMockOnlyLinkReplacementHeader();
 	GeneratedOutputDoesNotContainKetTokens();
 	GeneratesManifestJson();
 	ResolvesQualifiedFilenameCollisions();
