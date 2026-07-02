@@ -684,6 +684,8 @@ namespace
 			   "manifest should record shared-owner registry mode");
 		Expect(Contains(manifest.content, "keep the mock alive during fake calls"),
 			   "manifest should record shared-owner lifetime behavior");
+		Expect(Contains(manifest.content, "avoid concurrent same-type scopes"),
+			   "manifest should record shared-owner same-type scope limitation");
 	}
 
 	void MinimalGeneratorSelectsSharedOwnerRuntimeAndApi()

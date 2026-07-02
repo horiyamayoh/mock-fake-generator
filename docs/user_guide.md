@@ -322,7 +322,8 @@ Generated fakes use `MockFakeRuntime.h` to find the active mock for each type.
   threads can see the scoped mock, but tests must join workers before scope destruction and
   avoid concurrent same-type scopes.
 - `shared-owner`: one process-wide `std::shared_ptr` stack per mock type, protected by a
-  mutex. Generated fakes keep a `shared_ptr` copy during mock calls.
+  mutex. Generated fakes keep a `shared_ptr` copy during mock calls, but independent
+  concurrent scopes for the same mock type are not supported.
 
 For `thread-local` and `global-mutex`, the generated scoped alias takes a mock reference:
 

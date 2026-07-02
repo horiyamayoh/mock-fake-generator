@@ -232,7 +232,8 @@ namespace mockfakegen
 						   "and avoid concurrent same-type scopes";
 				case RegistryMode::SharedOwner:
 					return "process-wide shared_ptr mock stack protected by a mutex; worker "
-						   "threads keep the mock alive during fake calls";
+						   "threads keep the mock alive during fake calls, but tests must avoid "
+						   "concurrent same-type scopes";
 			}
 			return "per-thread mock stack";
 		}
