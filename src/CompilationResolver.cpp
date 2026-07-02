@@ -1302,6 +1302,32 @@ namespace mockfakegen
 			return value;
 		}
 
+		[[nodiscard]] std::string ConstructorFingerprint(const ConstructorModel& constructor)
+		{
+			std::string value = constructor.signature_for_report;
+			value += constructor.is_noexcept ? "|noexcept" : "|maythrow";
+			for (const auto& parameter : constructor.parameters)
+			{
+				value += "|param:";
+				value += parameter.type_spelling;
+				value += ":";
+				value += parameter.gmock_type_spelling;
+			}
+			for (const auto& initializer : constructor.member_initializers)
+			{
+				value += "|init:";
+				value += initializer;
+			}
+			return value;
+		}
+
+		[[nodiscard]] std::string DestructorFingerprint(const DestructorModel& destructor)
+		{
+			std::string value = destructor.signature_for_report;
+			value += destructor.is_noexcept ? "|noexcept" : "|maythrow";
+			return value;
+		}
+
 		[[nodiscard]] std::string ClassFingerprint(const ClassModel& class_model)
 		{
 			std::string value = class_model.qualified_name;
@@ -1310,6 +1336,16 @@ namespace mockfakegen
 			{
 				value += "\nmethod:";
 				value += MethodFingerprint(method);
+			}
+			for (const auto& constructor : class_model.fake_constructors)
+			{
+				value += "\nconstructor:";
+				value += ConstructorFingerprint(constructor);
+			}
+			for (const auto& destructor : class_model.fake_destructors)
+			{
+				value += "\ndestructor:";
+				value += DestructorFingerprint(destructor);
 			}
 			for (const auto& static_data : class_model.static_data_members)
 			{

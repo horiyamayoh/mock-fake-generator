@@ -1065,6 +1065,70 @@ namespace
 		Expect(result.project.headers[0].parsed_by_real_tu,
 			   "conflicting header should still record real TU parsing");
 	}
+
+	void ReportsConflictingFakeSpecialMembers()
+	{
+		TempTree tree;
+		tree.Write("include/Widget.h",
+				   "#pragma once\n"
+				   "class Widget { public:\n"
+				   "#ifdef USE_INT_CTOR\n"
+				   "  Widget(int value);\n"
+				   "#else\n"
+				   "  Widget(double value);\n"
+				   "#endif\n"
+				   "  ~Widget() noexcept;\n"
+				   "  bool Run();\n"
+				   "};\n");
+		tree.Write("src/first.cpp", "#include \"Widget.h\"\n");
+		tree.Write("src/second.cpp", "#include \"Widget.h\"\n");
+
+		const auto first = tree.root() / "src/first.cpp";
+		const auto second = tree.root() / "src/second.cpp";
+		const auto include_arg = "-I" + (tree.root() / "include").generic_string();
+		WriteCompileCommands(tree,
+							 {
+								 CompileEntry{
+									 .source = first,
+									 .args =
+										 {
+											 "c++",
+											 "-std=c++23",
+											 include_arg,
+											 "-DUSE_INT_CTOR",
+											 "-c",
+											 first.generic_string(),
+										 },
+								 },
+								 CompileEntry{
+									 .source = second,
+									 .args =
+										 {
+											 "c++",
+											 "-std=c++23",
+											 include_arg,
+											 "-c",
+											 second.generic_string(),
+										 },
+								 },
+							 });
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/Widget.h")},
+			.fake_special_members = true,
+		});
+
+		Expect(!result.ok(), "conflicting fake special members should fail resolver status");
+		Expect(HasDiagnostic(result.diagnostics,
+							 mockfakegen::CompilationResolverDiagnosticCode::CompileConfigConflict),
+			   "fake special member compile config conflict should be reported");
+		Expect(result.project.diagnostics.size() == 1U,
+			   "fake special member conflict should be mirrored into project diagnostics");
+		Expect(result.parse_attempts.size() == 2U,
+			   "both fake special member parse attempts should be reportable");
+	}
 } // namespace
 
 int main()
@@ -1083,5 +1147,6 @@ int main()
 	ParsesCrlfCompileDatabaseAndHeader();
 	RecordsRealTuParseFailuresAsAttempts();
 	ReportsConflictingCompileConfigs();
+	ReportsConflictingFakeSpecialMembers();
 	return 0;
 }
