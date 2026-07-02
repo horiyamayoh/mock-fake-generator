@@ -857,11 +857,7 @@ namespace
 	{
 		const std::vector classes = {InterfaceModel(), ReportBetaModel()};
 
-		const auto files =
-			mockfakegen::GenerateMockFakeProject(classes,
-												 mockfakegen::ProjectGenerationOptions{
-													 .interface_mock = true,
-												 });
+		const auto files = mockfakegen::GenerateMockFakeProject(classes);
 
 		Expect(HasFile(files, "MockIStorage.h"), "mixed project should emit interface mock");
 		Expect(HasFile(files, "MockBeta.h"), "mixed project should emit concrete mock");
@@ -894,6 +890,40 @@ namespace
 			   "manifest should record fake absence for interface class");
 		Expect(Contains(manifest.content, "\"fake_source\": \"FakeBeta.cpp\""),
 			   "manifest should record concrete fake source");
+	}
+
+	void ProjectOptionSelectsInterfaceMockMode()
+	{
+		auto model = InterfaceModel();
+		model.interface_mock = false;
+		const std::vector classes = {model};
+
+		const auto files =
+			mockfakegen::GenerateMockFakeProject(classes,
+												 mockfakegen::ProjectGenerationOptions{
+													 .interface_mock = true,
+												 });
+
+		Expect(HasFile(files, "MockIStorage.h"),
+			   "project interface option should emit mock header");
+		Expect(!HasFile(files, "FakeIStorage.cpp"),
+			   "project interface option should suppress link replacement fake");
+		Expect(!HasFile(files, "MockFakeRuntime.h"),
+			   "project interface option should suppress runtime header");
+		Expect(!HasFile(files, "CMakeLists.fragment.cmake"),
+			   "project interface option should suppress fake-source CMake fragment");
+
+		const auto& mock = FindFile(files, "MockIStorage.h");
+		Expect(Contains(mock.content, "class MockIStorage : public IStorage"),
+			   "project interface option should make mock inherit product interface");
+		Expect(!Contains(mock.content, "MockFakeRuntime.h"),
+			   "project interface option should keep mock header runtime-free");
+
+		const auto& manifest = FindFile(files, "manifest.json");
+		Expect(Contains(manifest.content, "\"generation_mode\": \"interface-mock\""),
+			   "project interface option should be reflected in manifest");
+		Expect(Contains(manifest.content, "\"fake_source\": \"\""),
+			   "project interface option should clear manifest fake source");
 	}
 
 	void GeneratesSpecialMemberFakes()
@@ -1121,6 +1151,7 @@ int main()
 	GeneratedProjectPreservesDeclarationOrderAfterProjectSort();
 	SeparatesMockAndFakeMethods();
 	GeneratesMixedInterfaceAndConcreteProject();
+	ProjectOptionSelectsInterfaceMockMode();
 	GeneratesSpecialMemberFakes();
 	GeneratesStaticDataDefinitions();
 	AvoidsMockLookupVariableParameterCollisions();

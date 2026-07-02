@@ -2082,12 +2082,20 @@ namespace mockfakegen
 	std::vector<GeneratedFile> GenerateMockFakeProject(std::span<const ClassModel> class_models,
 													   ProjectGenerationOptions options)
 	{
-		const auto resolved_class_models = ResolveGeneratedClassFilenames(class_models);
+		auto effective_class_models = ResolveGeneratedClassFilenames(class_models);
+		if (options.interface_mock)
+		{
+			for (auto& class_model : effective_class_models)
+			{
+				class_model.interface_mock = true;
+			}
+		}
+
 		std::vector<GeneratedFile> files;
-		files.reserve((resolved_class_models.size() * 2U) + 4U);
+		files.reserve((effective_class_models.size() * 2U) + 4U);
 		bool has_fake_source = false;
 		bool needs_runtime_header = false;
-		for (const auto& class_model : resolved_class_models)
+		for (const auto& class_model : effective_class_models)
 		{
 			auto simple_class = ToSimpleClassModel(class_model);
 			simple_class.registry_mode = options.registry_mode;
@@ -2118,9 +2126,9 @@ namespace mockfakegen
 		if (options.emit_manifest)
 		{
 			files.push_back(GenerateManifestJson(
-				resolved_class_models,
+				effective_class_models,
 				GenerationReportMetadata{
-					.diagnostics = BuildUnsupportedItemDiagnostics(resolved_class_models),
+					.diagnostics = BuildUnsupportedItemDiagnostics(effective_class_models),
 					.validation_commands = {},
 					.registry_mode = options.registry_mode,
 					.fallback_policy = options.fallback_policy,
@@ -2129,9 +2137,9 @@ namespace mockfakegen
 		if (options.emit_report)
 		{
 			files.push_back(GenerateGenerationReport(
-				resolved_class_models,
+				effective_class_models,
 				GenerationReportMetadata{
-					.diagnostics = BuildUnsupportedItemDiagnostics(resolved_class_models),
+					.diagnostics = BuildUnsupportedItemDiagnostics(effective_class_models),
 					.validation_commands = {},
 					.registry_mode = options.registry_mode,
 					.fallback_policy = options.fallback_policy,
