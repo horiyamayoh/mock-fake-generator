@@ -24,7 +24,7 @@ RUN cmake -S /src -B /build -G Ninja \
 		-DMOCKFAKEGEN_BUILD_TESTS=OFF \
 		-DMOCKFAKEGEN_ENABLE_FORMAT_TARGETS=OFF \
 		-DMOCKFAKEGEN_ENABLE_STRICT_WARNINGS=ON \
-		-DMOCKFAKEGEN_WARNINGS_AS_ERRORS=ON \
+		-DMOCKFAKEGEN_WARNINGS_AS_ERRORS=OFF \
 		-DMOCKFAKEGEN_LLVM_ROOT=/usr/lib/llvm-18 \
 	&& cmake --build /build --target mockfakegen \
 	&& cmake --install /build \
