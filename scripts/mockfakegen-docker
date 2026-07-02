@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+image="${MOCKFAKEGEN_DOCKER_IMAGE:-mockfakegen:local}"
+
+if [[ $# -eq 0 || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+	exec docker run --rm "${image}" --help
+fi
+
+project_root=""
+input_root=""
+build_path=""
+output_dir=""
+args=()
+original_args=("$@")
+
+read_option_value() {
+	local index="$1"
+	local option="$2"
+	local value=""
+	if [[ "${option}" == *=* ]]; then
+		value="${option#*=}"
+	else
+		local next_index=$((index + 1))
+		if [[ "${next_index}" -ge "${#original_args[@]}" ]]; then
+			printf 'mockfakegen-docker: %s requires a value\n' "${option}" >&2
+			exit 2
+		fi
+		value="${original_args[${next_index}]}"
+	fi
+	printf '%s' "${value}"
+}
+
+index=0
+while [[ "${index}" -lt "${#original_args[@]}" ]]; do
+	arg="${original_args[${index}]}"
+	case "${arg}" in
+		--project-root|--project-root=*)
+			project_root="$(read_option_value "${index}" "${arg}")"
+			;;
+		--input-root|--input-root=*)
+			input_root="$(read_option_value "${index}" "${arg}")"
+			;;
+		--build-path|--build-path=*)
+			build_path="$(read_option_value "${index}" "${arg}")"
+			;;
+		--output-dir|--output-dir=*)
+			output_dir="$(read_option_value "${index}" "${arg}")"
+			;;
+	esac
+	if [[ "${arg}" != *=* && ( "${arg}" == "--project-root" || "${arg}" == "--input-root" || "${arg}" == "--build-path" || "${arg}" == "--output-dir" ) ]]; then
+		index=$((index + 2))
+	else
+		index=$((index + 1))
+	fi
+done
+
+if [[ -z "${project_root}" || -z "${input_root}" || -z "${build_path}" || -z "${output_dir}" ]]; then
+	printf 'mockfakegen-docker: --project-root, --input-root, --build-path, and --output-dir are required\n' >&2
+	exit 2
+fi
+
+project_root="$(realpath -m "${project_root}")"
+input_root="$(realpath -m "${input_root}")"
+build_path="$(realpath -m "${build_path}")"
+output_dir="$(realpath -m "${output_dir}")"
+mkdir -p "${output_dir}"
+
+map_path() {
+	local path
+	path="$(realpath -m "$1")"
+	case "${path}" in
+		"${project_root}") printf '/workspace/project' ;;
+		"${project_root}"/*) printf '/workspace/project/%s' "${path#"${project_root}/"}" ;;
+		"${build_path}") printf '/workspace/build' ;;
+		"${build_path}"/*) printf '/workspace/build/%s' "${path#"${build_path}/"}" ;;
+		"${output_dir}") printf '/workspace/output' ;;
+		"${output_dir}"/*) printf '/workspace/output/%s' "${path#"${output_dir}/"}" ;;
+		*)
+			printf 'mockfakegen-docker: path is outside mounted roots: %s\n' "${path}" >&2
+			exit 2
+			;;
+	esac
+}
+
+index=0
+while [[ "${index}" -lt "${#original_args[@]}" ]]; do
+	arg="${original_args[${index}]}"
+	case "${arg}" in
+		--project-root|--input-root|--build-path|--output-dir)
+			next_index=$((index + 1))
+			args+=("${arg}" "$(map_path "${original_args[${next_index}]}")")
+			index=$((index + 2))
+			;;
+		--project-root=*|--input-root=*|--build-path=*|--output-dir=*)
+			option="${arg%%=*}"
+			value="${arg#*=}"
+			args+=("${option}=$(map_path "${value}")")
+			index=$((index + 1))
+			;;
+		*)
+			args+=("${arg}")
+			index=$((index + 1))
+			;;
+	esac
+done
+
+if [[ -n "${DOCKER_HOST:-}" && "${DOCKER_HOST}" != unix://* ]]; then
+	printf 'mockfakegen-docker: warning: bind mounts are resolved on the Docker daemon host; remote Docker daemons are not supported by this wrapper\n' >&2
+fi
+
+docker run --rm \
+	--user "$(id -u):$(id -g)" \
+	--read-only \
+	--tmpfs /tmp:rw,nosuid,nodev \
+	--network=none \
+	--cap-drop=ALL \
+	--security-opt no-new-privileges \
+	--mount "type=bind,src=${project_root},dst=/workspace/project,readonly" \
+	--mount "type=bind,src=${build_path},dst=/workspace/build,readonly" \
+	--mount "type=bind,src=${output_dir},dst=/workspace/output" \
+	"${image}" \
+	"${args[@]}" \
+	--path-map "${project_root}=/workspace/project" \
+	--path-map "${build_path}=/workspace/build"

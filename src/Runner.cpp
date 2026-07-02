@@ -293,6 +293,26 @@ namespace mockfakegen
 					return "compile_database_not_found";
 				case CompilationResolverDiagnosticCode::CompileDatabaseLoadFailure:
 					return "compile_database_load_failure";
+				case CompilationResolverDiagnosticCode::CompileDatabasePathMapped:
+					return "compile_database_path_mapped";
+				case CompilationResolverDiagnosticCode::CompileDatabaseUnmappedAbsolutePath:
+					return "compile_database_unmapped_absolute_path";
+				case CompilationResolverDiagnosticCode::CompileDatabaseMappedPathMissing:
+					return "compile_database_mapped_path_missing";
+				case CompilationResolverDiagnosticCode::CompileDatabaseCompilerMissing:
+					return "compile_database_compiler_missing";
+				case CompilationResolverDiagnosticCode::CompileDatabaseCompilerWrapper:
+					return "compile_database_compiler_wrapper";
+				case CompilationResolverDiagnosticCode::CompileDatabaseTargetMismatch:
+					return "compile_database_target_mismatch";
+				case CompilationResolverDiagnosticCode::CompileDatabaseSystemContextAssumption:
+					return "compile_database_system_context_assumption";
+				case CompilationResolverDiagnosticCode::CompileDatabasePathCaseMismatch:
+					return "compile_database_path_case_mismatch";
+				case CompilationResolverDiagnosticCode::CompileDatabaseCaseFoldCollision:
+					return "compile_database_case_fold_collision";
+				case CompilationResolverDiagnosticCode::CompileDatabaseSymlinkRisk:
+					return "compile_database_symlink_risk";
 				case CompilationResolverDiagnosticCode::TranslationUnitReadFailure:
 					return "translation_unit_read_failure";
 				case CompilationResolverDiagnosticCode::RealTuParseFailure:

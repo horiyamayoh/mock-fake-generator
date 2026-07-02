@@ -234,6 +234,21 @@ namespace
 		return nullptr;
 	}
 
+	[[nodiscard]] bool DiagnosticMessageContains(
+		const std::vector<mockfakegen::CompilationResolverDiagnostic>& diagnostics,
+		mockfakegen::CompilationResolverDiagnosticCode code,
+		std::string_view expected)
+	{
+		for (const auto& diagnostic : diagnostics)
+		{
+			if (diagnostic.code == code && diagnostic.message.find(expected) != std::string::npos)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void ParsesHeaderThroughRealTu()
 	{
 		TempTree tree;
@@ -654,6 +669,215 @@ namespace
 			   "validation args should not retain container include path");
 	}
 
+	void MapsVmProducedCompileDatabaseIntoConsumerBuildTree()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "consumer/project";
+		const auto build_dir = tree.root() / "consumer/build";
+		tree.Write("consumer/project/include/ImportedService.h",
+				   "#pragma once\n"
+				   "#ifndef GENERATED_FROM_VM_BUILD\n"
+				   "#error expected generated config from VM build path\n"
+				   "#endif\n"
+				   "class ImportedService { public: int Value(); };\n");
+		tree.Write("consumer/project/src/imported.cpp", "#include \"ImportedService.h\"\n");
+		tree.Write("consumer/build/generated/GeneratedConfig.h",
+				   "#pragma once\n#define GENERATED_FROM_VM_BUILD 1\n");
+
+		WriteCompileCommandsAt(tree,
+							   "consumer/build",
+							   {{
+								   .directory = "/vm/work/build",
+								   .source = "/vm/work/project/src/imported.cpp",
+								   .args =
+									   {
+										   "c++",
+										   "-std=c++23",
+										   "-I/vm/work/project/include",
+										   "-include",
+										   "/vm/work/build/generated/GeneratedConfig.h",
+										   "-c",
+										   "/vm/work/project/src/imported.cpp",
+									   },
+							   }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = project_root,
+			.build_path = build_dir,
+			.headers = {HeaderAt(project_root, "include/ImportedService.h")},
+			.path_maps =
+				{
+					{.from = "/vm/work/project", .to = project_root},
+					{.from = "/vm/work/build", .to = build_dir},
+				},
+		});
+
+		Expect(result.ok(), "VM-produced compile database should map into consumer tree");
+		Expect(result.project.headers[0].parsed_by_real_tu,
+			   "mapped VM compile command should parse through real TU");
+		Expect(result.project.classes.size() == 1U, "mapped VM fixture should extract class");
+		Expect(result.project.classes[0].qualified_name == "ImportedService",
+			   "mapped VM fixture should extract expected class");
+		Expect(HasAdjacentCompileArg(result.parse_attempts[0].compile_args,
+									 "-include",
+									 (build_dir / "generated/GeneratedConfig.h").generic_string()),
+			   "forced include should be remapped from VM build root");
+		Expect(HasDiagnostic(
+				   result.diagnostics,
+				   mockfakegen::CompilationResolverDiagnosticCode::CompileDatabasePathMapped),
+			   "path mapping should be reported as a preflight diagnostic");
+	}
+
+	void ReportsMissingCrossEnvironmentCompileDatabaseInputs()
+	{
+		TempTree tree;
+		tree.Write("include/PortableService.h",
+				   "#pragma once\nclass PortableService { public: int Value(); };\n");
+		tree.Write("src/portable.cpp", "#include \"PortableService.h\"\n");
+
+		const auto source = tree.root() / "src/portable.cpp";
+		WriteCompileCommands(tree,
+							 {{
+								 .source = source,
+								 .args =
+									 {
+										 "/producer/toolchain/bin/clang++",
+										 "-std=c++23",
+										 "-I" + (tree.root() / "include").generic_string(),
+										 "-target",
+										 "arm-none-eabi",
+										 "-isystem",
+										 "/producer/sysroot/include",
+										 "-resource-dir",
+										 "/producer/clang-resource",
+										 "--sysroot=/producer/sysroot",
+										 "-include",
+										 "/producer/build/generated/MissingConfig.h",
+										 "-c",
+										 source.generic_string(),
+									 },
+							 }});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/PortableService.h")},
+		});
+
+		Expect(!result.ok(), "missing producer environment paths should fail preflight");
+		Expect(HasDiagnostic(
+				   result.diagnostics,
+				   mockfakegen::CompilationResolverDiagnosticCode::CompileDatabaseCompilerMissing),
+			   "missing producer compiler should be diagnosed");
+		Expect(HasDiagnostic(result.diagnostics,
+							 mockfakegen::CompilationResolverDiagnosticCode::
+								 CompileDatabaseUnmappedAbsolutePath),
+			   "unmapped producer absolute paths should be diagnosed");
+		Expect(
+			HasDiagnostic(
+				result.diagnostics,
+				mockfakegen::CompilationResolverDiagnosticCode::CompileDatabaseMappedPathMissing),
+			"missing sysroot/resource-dir/generated include should be diagnosed");
+		Expect(HasDiagnostic(
+				   result.diagnostics,
+				   mockfakegen::CompilationResolverDiagnosticCode::CompileDatabaseTargetMismatch),
+			   "target triple mismatch should be diagnosed");
+		Expect(DiagnosticMessageContains(
+				   result.diagnostics,
+				   mockfakegen::CompilationResolverDiagnosticCode::CompileDatabaseMappedPathMissing,
+				   "/producer/build/generated/MissingConfig.h"),
+			   "missing generated forced include should be named in diagnostics");
+	}
+
+	void ReportsCaseAndSymlinkCarryoverRisks()
+	{
+		TempTree tree;
+		tree.Write("include/Foo.h", "#pragma once\nclass CaseService { public: int Value(); };\n");
+		tree.Write("include/foo.h", "#pragma once\nstruct lower_case_collision {};\n");
+		tree.Write("src/case.cpp", "#include \"Foo.h\"\n");
+		std::error_code symlink_error;
+		std::filesystem::create_directory_symlink(std::filesystem::temp_directory_path(),
+												  tree.root() / "include/ExternalLink",
+												  symlink_error);
+
+		const auto source = tree.root() / "src/case.cpp";
+		std::vector<std::string> args = {
+			"c++",
+			"-std=c++23",
+			"-I" + (tree.root() / "Include").generic_string(),
+		};
+		if (!symlink_error)
+		{
+			args.push_back("-I");
+			args.push_back((tree.root() / "include/ExternalLink").generic_string());
+		}
+		args.push_back("-c");
+		args.push_back(source.generic_string());
+
+		WriteCompileCommands(tree, {{.source = source, .args = args}});
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/Foo.h")},
+			.path_maps = {{.from = "/producer/project", .to = tree.root()}},
+		});
+
+		Expect(HasDiagnostic(
+				   result.diagnostics,
+				   mockfakegen::CompilationResolverDiagnosticCode::CompileDatabasePathCaseMismatch),
+			   "case-mismatched compile database path should be diagnosed");
+		Expect(
+			HasDiagnostic(
+				result.diagnostics,
+				mockfakegen::CompilationResolverDiagnosticCode::CompileDatabaseCaseFoldCollision),
+			"case-fold collisions should be diagnosed");
+		if (!symlink_error)
+		{
+			Expect(HasDiagnostic(
+					   result.diagnostics,
+					   mockfakegen::CompilationResolverDiagnosticCode::CompileDatabaseSymlinkRisk),
+				   "symlink include path escaping project/build should be diagnosed");
+		}
+	}
+
+	void ParsesCrlfCompileDatabaseAndHeader()
+	{
+		TempTree tree;
+		tree.Write("include/CrlfService.h",
+				   "#pragma once\r\nclass CrlfService { public: int Value(); };\r\n");
+		tree.Write("src/crlf.cpp", "#include \"CrlfService.h\"\r\n");
+
+		const auto source = tree.root() / "src/crlf.cpp";
+		const auto include_dir = tree.root() / "include";
+		const auto json = std::string("[\r\n"
+									  "  {\r\n"
+									  "    \"directory\": \"") +
+			JsonEscape(tree.root().generic_string()) +
+			"\",\r\n"
+			"    \"file\": \"" +
+			JsonEscape(source.generic_string()) +
+			"\",\r\n"
+			"    \"arguments\": [\"c++\", \"-std=c++23\", \"-I" +
+			JsonEscape(include_dir.generic_string()) + "\", \"-c\", \"" +
+			JsonEscape(source.generic_string()) +
+			"\"]\r\n"
+			"  }\r\n"
+			"]\r\n";
+		tree.Write("build/compile_commands.json", json);
+
+		const auto result = mockfakegen::ResolveCompilation({
+			.project_root = tree.root(),
+			.build_path = tree.root() / "build",
+			.headers = {Header(tree, "include/CrlfService.h")},
+		});
+
+		Expect(result.ok(), "CRLF compile database and header should parse");
+		Expect(result.project.classes.size() == 1U, "CRLF fixture should extract one class");
+		Expect(result.project.classes[0].qualified_name == "CrlfService",
+			   "CRLF fixture should extract expected class");
+	}
+
 	void RecordsRealTuParseFailuresAsAttempts()
 	{
 		TempTree tree;
@@ -782,6 +1006,10 @@ int main()
 	FallsBackToSyntheticTuWhenRealTuDoesNotIncludeHeader();
 	ParsesOutOfTreeCompileDatabaseWithCommandDirectoryRelativePaths();
 	MapsContainerCompileCommandPaths();
+	MapsVmProducedCompileDatabaseIntoConsumerBuildTree();
+	ReportsMissingCrossEnvironmentCompileDatabaseInputs();
+	ReportsCaseAndSymlinkCarryoverRisks();
+	ParsesCrlfCompileDatabaseAndHeader();
 	RecordsRealTuParseFailuresAsAttempts();
 	ReportsConflictingCompileConfigs();
 	return 0;

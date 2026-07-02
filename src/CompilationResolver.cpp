@@ -1,11 +1,13 @@
 #include "CompilationResolver.h"
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -17,6 +19,7 @@
 #include <clang/Tooling/CompilationDatabase.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/TargetParser/Host.h>
 
 #include "clang/ClassExtractor.h"
 
@@ -42,6 +45,24 @@ namespace mockfakegen
 			std::string fingerprint;
 			HeaderParseAttempt attempt;
 			SourceRange source_range;
+		};
+
+		struct PathMapApplication
+		{
+			std::filesystem::path path;
+			bool mapped = false;
+			std::filesystem::path from;
+			std::filesystem::path to;
+		};
+
+		struct CompileCommandPathObservation
+		{
+			std::string option;
+			std::filesystem::path original;
+			std::filesystem::path rewritten;
+			bool mapped = false;
+			bool must_exist = true;
+			bool directory_expected = false;
 		};
 
 		class SingleCompileCommandDatabase final : public clang::tooling::CompilationDatabase
@@ -154,8 +175,9 @@ namespace mockfakegen
 			return suffix;
 		}
 
-		[[nodiscard]] std::filesystem::path
-		ApplyPathMaps(const std::filesystem::path& path, const std::vector<PathMapEntry>& path_maps)
+		[[nodiscard]] PathMapApplication
+		ApplyPathMapsDetailed(const std::filesystem::path& path,
+							  const std::vector<PathMapEntry>& path_maps)
 		{
 			const auto candidate = LexicallyAbsolute(path);
 			const PathMapEntry* best_match = nullptr;
@@ -180,11 +202,27 @@ namespace mockfakegen
 
 			if (best_match == nullptr)
 			{
-				return AbsoluteNormalized(candidate);
+				return PathMapApplication{
+					.path = AbsoluteNormalized(candidate),
+					.mapped = false,
+					.from = {},
+					.to = {},
+				};
 			}
 
 			const auto suffix = RelativeSuffixAfterPrefix(candidate, best_from);
-			return AbsoluteNormalized(best_match->to / suffix);
+			return PathMapApplication{
+				.path = AbsoluteNormalized(best_match->to / suffix),
+				.mapped = true,
+				.from = best_from,
+				.to = best_match->to,
+			};
+		}
+
+		[[nodiscard]] std::filesystem::path
+		ApplyPathMaps(const std::filesystem::path& path, const std::vector<PathMapEntry>& path_maps)
+		{
+			return ApplyPathMapsDetailed(path, path_maps).path;
 		}
 
 		[[nodiscard]] std::filesystem::path
@@ -331,6 +369,221 @@ namespace mockfakegen
 			});
 		}
 
+		[[nodiscard]] std::string LowercaseAscii(std::string text)
+		{
+			for (auto& character : text)
+			{
+				character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+			}
+			return text;
+		}
+
+		[[nodiscard]] std::string Basename(const std::filesystem::path& path)
+		{
+			return path.filename().generic_string();
+		}
+
+		[[nodiscard]] bool IsCompilerWrapperName(std::string_view name) noexcept
+		{
+			return name == "ccache" || name == "sccache" || name == "distcc" || name == "icecc";
+		}
+
+		[[nodiscard]] bool PathExists(const std::filesystem::path& path)
+		{
+			std::error_code error;
+			return std::filesystem::exists(path, error);
+		}
+
+		[[nodiscard]] bool PathIsDirectory(const std::filesystem::path& path)
+		{
+			std::error_code error;
+			return std::filesystem::is_directory(path, error);
+		}
+
+		[[nodiscard]] bool PathIsRegularFile(const std::filesystem::path& path)
+		{
+			std::error_code error;
+			return std::filesystem::is_regular_file(path, error);
+		}
+
+		[[nodiscard]] bool IsKnownSystemRoot(const std::filesystem::path& path)
+		{
+			return IsSameOrUnderPath(path, std::filesystem::path("/usr")) ||
+				IsSameOrUnderPath(path, std::filesystem::path("/lib")) ||
+				IsSameOrUnderPath(path, std::filesystem::path("/opt"));
+		}
+
+		[[nodiscard]] bool IsUnderProjectOrBuild(const std::filesystem::path& path,
+												 const CompilationResolverOptions& options)
+		{
+			const auto project_root = AbsoluteNormalized(options.project_root);
+			const auto build_path = AbsoluteNormalized(options.build_path);
+			return IsSameOrUnderPath(path, project_root) || IsSameOrUnderPath(path, build_path);
+		}
+
+		[[nodiscard]] bool ShouldRequirePath(std::string_view option) noexcept
+		{
+			return option != "-fmodules-cache-path";
+		}
+
+		[[nodiscard]] bool ShouldExpectDirectory(std::string_view option) noexcept
+		{
+			return option == "directory" || option == "-I" || option == "-iquote" ||
+				option == "-isystem" || option == "-idirafter" || option == "-iframework" ||
+				option == "-F" || option == "-isysroot" || option == "--sysroot" ||
+				option == "--gcc-toolchain" || option == "-resource-dir" ||
+				option == "-fmodules-cache-path" || option == "-fprebuilt-module-path";
+		}
+
+		[[nodiscard]] std::optional<std::filesystem::path>
+		PathWithCaseMismatch(const std::filesystem::path& path)
+		{
+			if (path.empty())
+			{
+				return std::nullopt;
+			}
+
+			std::filesystem::path current;
+			std::filesystem::path mismatched;
+			for (const auto& component : path)
+			{
+				if (component == path.root_name() || component == path.root_directory())
+				{
+					current /= component;
+					mismatched /= component;
+					continue;
+				}
+
+				const auto parent = current.empty() ? std::filesystem::path(".") : current;
+				std::error_code directory_error;
+				if (!std::filesystem::is_directory(parent, directory_error))
+				{
+					return std::nullopt;
+				}
+
+				bool exact_match = false;
+				std::optional<std::filesystem::path> case_fold_match;
+				for (std::filesystem::directory_iterator entry(parent, directory_error), end;
+					 !directory_error && entry != end;
+					 entry.increment(directory_error))
+				{
+					const auto filename = entry->path().filename();
+					if (filename == component)
+					{
+						exact_match = true;
+						break;
+					}
+					if (LowercaseAscii(filename.generic_string()) ==
+						LowercaseAscii(component.generic_string()))
+					{
+						case_fold_match = filename;
+					}
+				}
+
+				if (!exact_match && case_fold_match.has_value())
+				{
+					mismatched /= *case_fold_match;
+					return mismatched;
+				}
+				current /= component;
+				mismatched /= component;
+			}
+
+			return std::nullopt;
+		}
+
+		void
+		AddPathCaseCollisionDiagnostics(std::vector<CompilationResolverDiagnostic>& diagnostics,
+										const std::filesystem::path& root)
+		{
+			if (root.empty() || !PathIsDirectory(root))
+			{
+				return;
+			}
+
+			std::map<std::string, std::filesystem::path> first_seen;
+			std::set<std::string> reported;
+			std::error_code iterator_error;
+			for (std::filesystem::recursive_directory_iterator
+					 entry(root,
+						   std::filesystem::directory_options::skip_permission_denied,
+						   iterator_error),
+				 end;
+				 !iterator_error && entry != end;
+				 entry.increment(iterator_error))
+			{
+				const auto relative = entry->path().lexically_relative(root).generic_string();
+				const auto key = LowercaseAscii(relative);
+				const auto [iterator, inserted] = first_seen.emplace(key, entry->path());
+				if (inserted || iterator->second == entry->path() || reported.contains(key))
+				{
+					continue;
+				}
+				reported.insert(key);
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Warning,
+					CompilationResolverDiagnosticCode::CompileDatabaseCaseFoldCollision,
+					{},
+					entry->path(),
+					"case-fold collision under compile database root: " +
+						iterator->second.generic_string() + " and " +
+						entry->path().generic_string(),
+					{},
+					{});
+			}
+		}
+
+		void AddSymlinkDiagnostics(std::vector<CompilationResolverDiagnostic>& diagnostics,
+								   const CompileCommandPathObservation& observation,
+								   const CompilationResolverOptions& options)
+		{
+			const auto symlink_path = observation.original.is_absolute()
+				? LexicallyAbsolute(observation.original)
+				: observation.rewritten;
+			std::error_code symlink_error;
+			const auto status = std::filesystem::symlink_status(symlink_path, symlink_error);
+			if (symlink_error || status.type() == std::filesystem::file_type::not_found)
+			{
+				return;
+			}
+			if (status.type() != std::filesystem::file_type::symlink)
+			{
+				return;
+			}
+
+			std::error_code target_error;
+			const auto target = std::filesystem::weakly_canonical(symlink_path, target_error);
+			if (target_error || target.empty())
+			{
+				AddResolverDiagnostic(diagnostics,
+									  DiagnosticSeverity::Error,
+									  CompilationResolverDiagnosticCode::CompileDatabaseSymlinkRisk,
+									  {},
+									  symlink_path,
+									  "compile database path contains a broken symlink for " +
+										  observation.option + ": " + symlink_path.generic_string(),
+									  {},
+									  target_error.message());
+				return;
+			}
+
+			if (!IsUnderProjectOrBuild(target, options))
+			{
+				AddResolverDiagnostic(diagnostics,
+									  DiagnosticSeverity::Warning,
+									  CompilationResolverDiagnosticCode::CompileDatabaseSymlinkRisk,
+									  {},
+									  symlink_path,
+									  "compile database path symlink for " + observation.option +
+										  " resolves outside --project-root and --build-path: " +
+										  symlink_path.generic_string() + " -> " +
+										  target.generic_string(),
+									  {},
+									  {});
+			}
+		}
+
 		[[nodiscard]] bool IsSourcePathArgument(const std::string& argument,
 												const clang::tooling::CompileCommand& command,
 												const std::vector<PathMapEntry>& path_maps)
@@ -448,6 +701,10 @@ namespace mockfakegen
 			{
 				return rewritten;
 			}
+			if (auto rewritten = rewrite_after_equals("--gcc-toolchain="); rewritten.has_value())
+			{
+				return rewritten;
+			}
 			if (auto rewritten = rewrite_after_equals("-fmodule-map-file="); rewritten.has_value())
 			{
 				return rewritten;
@@ -464,6 +721,376 @@ namespace mockfakegen
 			}
 
 			return std::nullopt;
+		}
+
+		[[nodiscard]] std::optional<std::pair<std::string, std::string>>
+		SplitJoinedPathOption(const std::string& arg)
+		{
+			const auto split_after_prefix =
+				[&](std::string_view prefix) -> std::optional<std::pair<std::string, std::string>>
+			{
+				if (!arg.starts_with(prefix) || arg.size() == prefix.size())
+				{
+					return std::nullopt;
+				}
+				return std::pair{std::string(prefix), arg.substr(prefix.size())};
+			};
+
+			for (const auto prefix : {"-I", "-F", "-isystem"})
+			{
+				if (auto result = split_after_prefix(prefix); result.has_value())
+				{
+					return result;
+				}
+			}
+
+			const auto split_after_equals =
+				[&](std::string_view prefix,
+					std::string_view option) -> std::optional<std::pair<std::string, std::string>>
+			{
+				if (!arg.starts_with(prefix))
+				{
+					return std::nullopt;
+				}
+				return std::pair{std::string(option), arg.substr(prefix.size())};
+			};
+
+			if (auto result = split_after_equals("--sysroot=", "--sysroot"); result.has_value())
+			{
+				return result;
+			}
+			if (auto result = split_after_equals("--gcc-toolchain=", "--gcc-toolchain");
+				result.has_value())
+			{
+				return result;
+			}
+			if (auto result = split_after_equals("-fmodule-map-file=", "-fmodule-map-file");
+				result.has_value())
+			{
+				return result;
+			}
+			if (auto result = split_after_equals("-fmodules-cache-path=", "-fmodules-cache-path");
+				result.has_value())
+			{
+				return result;
+			}
+			if (auto result =
+					split_after_equals("-fprebuilt-module-path=", "-fprebuilt-module-path");
+				result.has_value())
+			{
+				return result;
+			}
+
+			return std::nullopt;
+		}
+
+		[[nodiscard]] CompileCommandPathObservation
+		MakePathObservation(const clang::tooling::CompileCommand& command,
+							std::string option,
+							const std::filesystem::path& value,
+							const std::vector<PathMapEntry>& path_maps)
+		{
+			CompileCommandPathObservation observation;
+			observation.option = std::move(option);
+			observation.original = value;
+			observation.must_exist = ShouldRequirePath(observation.option);
+			observation.directory_expected = ShouldExpectDirectory(observation.option);
+
+			if (value.is_absolute())
+			{
+				const auto mapped = ApplyPathMapsDetailed(value, path_maps);
+				observation.rewritten = mapped.path;
+				observation.mapped = mapped.mapped;
+				return observation;
+			}
+
+			observation.rewritten = CommandRelativePath(command, value, path_maps);
+			return observation;
+		}
+
+		[[nodiscard]] std::vector<CompileCommandPathObservation>
+		ObserveCompileCommandPaths(const clang::tooling::CompileCommand& command,
+								   const CompilationResolverOptions& options)
+		{
+			std::vector<CompileCommandPathObservation> observations;
+			const auto add_observation = [&](std::string option,
+											 const std::filesystem::path& value,
+											 bool must_exist,
+											 bool directory_expected)
+			{
+				auto observation =
+					MakePathObservation(command, std::move(option), value, options.path_maps);
+				observation.must_exist = must_exist;
+				observation.directory_expected = directory_expected;
+				observations.push_back(std::move(observation));
+			};
+
+			add_observation("directory", command.Directory, true, true);
+			add_observation("file", command.Filename, true, false);
+
+			for (std::size_t index = 1U; index < command.CommandLine.size(); ++index)
+			{
+				const auto& arg = command.CommandLine[index];
+				if (arg == "-o" || arg == "-MF" || arg == "-MT" || arg == "-MQ")
+				{
+					++index;
+					continue;
+				}
+				if (arg.starts_with("-o") && arg.size() > 2U)
+				{
+					continue;
+				}
+				if (arg == "-MD" || arg == "-MMD" || arg == "-M" || arg == "-MM" || arg == "-c" ||
+					IsSourcePathArgument(arg, command, options.path_maps))
+				{
+					continue;
+				}
+
+				if (IsSeparatePathOption(arg) && index + 1U < command.CommandLine.size())
+				{
+					++index;
+					observations.push_back(MakePathObservation(
+						command, arg, command.CommandLine[index], options.path_maps));
+					continue;
+				}
+				if (auto joined = SplitJoinedPathOption(arg); joined.has_value())
+				{
+					observations.push_back(MakePathObservation(
+						command, joined->first, joined->second, options.path_maps));
+				}
+			}
+
+			return observations;
+		}
+
+		[[nodiscard]] bool IsFileLikeOption(std::string_view option) noexcept
+		{
+			return option == "file" || option == "-include" || option == "-imacros" ||
+				option == "-include-pch" || option == "-ivfsoverlay" ||
+				option == "-fmodule-map-file";
+		}
+
+		[[nodiscard]] bool HasSystemContextArg(const std::vector<std::string>& args)
+		{
+			for (std::size_t index = 0U; index < args.size(); ++index)
+			{
+				const auto& arg = args[index];
+				if (arg == "-resource-dir" || arg == "-isysroot" || arg == "--sysroot")
+				{
+					return true;
+				}
+				if (arg == "--gcc-toolchain" && index + 1U < args.size())
+				{
+					return true;
+				}
+				if (arg.starts_with("--sysroot=") || arg.starts_with("--gcc-toolchain="))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		[[nodiscard]] std::optional<std::string>
+		TargetTripleArg(const std::vector<std::string>& args)
+		{
+			for (std::size_t index = 0U; index < args.size(); ++index)
+			{
+				const auto& arg = args[index];
+				if ((arg == "-target" || arg == "--target") && index + 1U < args.size())
+				{
+					return args[index + 1U];
+				}
+				if (arg.starts_with("-target="))
+				{
+					return arg.substr(std::string_view("-target=").size());
+				}
+				if (arg.starts_with("--target="))
+				{
+					return arg.substr(std::string_view("--target=").size());
+				}
+			}
+			return std::nullopt;
+		}
+
+		void
+		AddCompileCommandPathDiagnostics(std::vector<CompilationResolverDiagnostic>& diagnostics,
+										 const CompileCommandPathObservation& observation,
+										 const CompilationResolverOptions& options)
+		{
+			if (observation.mapped)
+			{
+				AddResolverDiagnostic(diagnostics,
+									  DiagnosticSeverity::Info,
+									  CompilationResolverDiagnosticCode::CompileDatabasePathMapped,
+									  {},
+									  observation.rewritten,
+									  "compile database path mapped for " + observation.option +
+										  ": " + observation.original.generic_string() + " -> " +
+										  observation.rewritten.generic_string(),
+									  {},
+									  {});
+			}
+
+			if (observation.original.is_absolute() && !observation.mapped)
+			{
+				const auto original = LexicallyAbsolute(observation.original);
+				if (!IsUnderProjectOrBuild(original, options) && !IsKnownSystemRoot(original))
+				{
+					AddResolverDiagnostic(
+						diagnostics,
+						DiagnosticSeverity::Warning,
+						CompilationResolverDiagnosticCode::CompileDatabaseUnmappedAbsolutePath,
+						{},
+						original,
+						"compile database absolute path for " + observation.option +
+							" was not remapped: " + original.generic_string(),
+						{},
+						{});
+				}
+			}
+
+			if (const auto mismatch = PathWithCaseMismatch(observation.rewritten);
+				mismatch.has_value())
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Warning,
+					CompilationResolverDiagnosticCode::CompileDatabasePathCaseMismatch,
+					{},
+					observation.rewritten,
+					"compile database path casing does not match the filesystem for " +
+						observation.option + ": " + observation.rewritten.generic_string() +
+						" differs from " + mismatch->generic_string(),
+					{},
+					{});
+			}
+
+			AddSymlinkDiagnostics(diagnostics, observation, options);
+
+			if (!observation.must_exist)
+			{
+				return;
+			}
+
+			if (!PathExists(observation.rewritten))
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Error,
+					CompilationResolverDiagnosticCode::CompileDatabaseMappedPathMissing,
+					{},
+					observation.rewritten,
+					"compile database path for " + observation.option +
+						" does not exist after path mapping: " +
+						observation.rewritten.generic_string(),
+					{},
+					{});
+				return;
+			}
+
+			if (observation.directory_expected && !PathIsDirectory(observation.rewritten))
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Error,
+					CompilationResolverDiagnosticCode::CompileDatabaseMappedPathMissing,
+					{},
+					observation.rewritten,
+					"compile database path for " + observation.option +
+						" is expected to be a directory: " + observation.rewritten.generic_string(),
+					{},
+					{});
+			}
+			else if (IsFileLikeOption(observation.option) &&
+					 !PathIsRegularFile(observation.rewritten))
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Error,
+					CompilationResolverDiagnosticCode::CompileDatabaseMappedPathMissing,
+					{},
+					observation.rewritten,
+					"compile database path for " + observation.option +
+						" is expected to be a regular file: " +
+						observation.rewritten.generic_string(),
+					{},
+					{});
+			}
+		}
+
+		void AddCompileCommandPreflightDiagnostics(
+			std::vector<CompilationResolverDiagnostic>& diagnostics,
+			const clang::tooling::CompileCommand& command,
+			const CompilationResolverOptions& options)
+		{
+			const auto compiler = CommandCompilerPath(command, options.path_maps);
+			const auto compiler_name =
+				command.CommandLine.empty() ? std::string{} : Basename(command.CommandLine.front());
+			if (IsCompilerWrapperName(compiler_name))
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Warning,
+					CompilationResolverDiagnosticCode::CompileDatabaseCompilerWrapper,
+					{},
+					CommandRelativePath(command, command.Filename, options.path_maps),
+					"compile database compiler appears to be a wrapper: " + compiler_name +
+						". Use an explicit compiler override if wrapper paths are not available.",
+					{},
+					{});
+			}
+			else if (!compiler.empty() && compiler.has_parent_path() && !PathExists(compiler))
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Warning,
+					CompilationResolverDiagnosticCode::CompileDatabaseCompilerMissing,
+					{},
+					compiler,
+					"compile database compiler path does not exist after path mapping: " +
+						compiler.generic_string(),
+					{},
+					{});
+			}
+
+			for (const auto& observation : ObserveCompileCommandPaths(command, options))
+			{
+				AddCompileCommandPathDiagnostics(diagnostics, observation, options);
+			}
+
+			const auto target = TargetTripleArg(command.CommandLine);
+			if (target.has_value() && *target != llvm::sys::getDefaultTargetTriple())
+			{
+				const auto context_note = HasSystemContextArg(command.CommandLine)
+					? std::string(
+						  "verify that mapped sysroot/resource-dir/gcc-toolchain paths exist.")
+					: std::string("no sysroot/resource-dir/gcc-toolchain path was provided.");
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Warning,
+					CompilationResolverDiagnosticCode::CompileDatabaseTargetMismatch,
+					{},
+					CommandRelativePath(command, command.Filename, options.path_maps),
+					"compile database target triple `" + *target + "` differs from host triple `" +
+						llvm::sys::getDefaultTargetTriple() + "`; " + context_note,
+					{},
+					{});
+			}
+
+			if (!options.path_maps.empty() && !HasSystemContextArg(command.CommandLine))
+			{
+				AddResolverDiagnostic(
+					diagnostics,
+					DiagnosticSeverity::Info,
+					CompilationResolverDiagnosticCode::CompileDatabaseSystemContextAssumption,
+					{},
+					CommandRelativePath(command, command.Filename, options.path_maps),
+					"compile database was path-mapped without explicit sysroot/resource-dir/"
+					"gcc-toolchain paths; producer and consumer system headers may differ.",
+					{},
+					{});
+			}
 		}
 
 		[[nodiscard]] std::vector<std::string>
@@ -1000,9 +1627,16 @@ namespace mockfakegen
 
 		const auto project_root = AbsoluteNormalized(options.project_root);
 		const auto commands = LoadCompileCommands(options, result);
+		if (!options.path_maps.empty())
+		{
+			AddPathCaseCollisionDiagnostics(result.diagnostics, project_root);
+			AddPathCaseCollisionDiagnostics(result.diagnostics,
+											AbsoluteNormalized(options.build_path));
+		}
 
 		for (const auto& command : commands)
 		{
+			AddCompileCommandPreflightDiagnostics(result.diagnostics, command, options);
 			auto parsed = ParseTranslationUnit(command, options);
 			if (!ParseSucceeded(parsed))
 			{

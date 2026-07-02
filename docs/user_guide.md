@@ -88,6 +88,64 @@ repository's fixtures.
 
 The CLI accepts both `--option value` and `--option=value` for value options.
 
+## Docker Usage
+
+The Docker image is intended for Linux/WSL2 hosts that can run Docker but do not want to
+install LLVM/Clang development packages locally. Build the local image from a checkout with
+the ket submodule present:
+
+```sh
+docker build -f docker/Dockerfile -t mockfakegen:local .
+docker run --rm mockfakegen:local --help
+```
+
+The runtime image uses Ubuntu 24.04 with LLVM/Clang 18 packages, runs as a non-root user by
+default, and sets `MOCKFAKEGEN_CXX_COMPILER=/usr/bin/clang++-18` plus the default gMock
+include path. The entrypoint discovers `libgmock.a` and `libgtest.a` for `--validate link`
+when the distro package layout exposes them under `/usr/lib`.
+
+For host projects, prefer the wrapper. It mounts source and build trees read-only, mounts
+only the generated output directory read-write, uses the host uid/gid, disables networking,
+drops capabilities, and injects the required path maps:
+
+```sh
+scripts/mockfakegen-docker \
+  --project-root "$PWD" \
+  --input-root "$PWD/include" \
+  --build-path "$PWD/build" \
+  --output-dir "$PWD/build/mockfakegen" \
+  --overwrite \
+  --validate compile
+```
+
+Equivalent hardened `docker run` shape:
+
+```sh
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --read-only \
+  --tmpfs /tmp:rw,nosuid,nodev \
+  --network=none \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  --mount "type=bind,src=$PWD,dst=/workspace/project,readonly" \
+  --mount "type=bind,src=$PWD/build,dst=/workspace/build,readonly" \
+  --mount "type=bind,src=$PWD/build/mockfakegen,dst=/workspace/output" \
+  mockfakegen:local \
+  --project-root /workspace/project \
+  --input-root /workspace/project/include \
+  --build-path /workspace/build \
+  --output-dir /workspace/output \
+  --path-map "$PWD=/workspace/project" \
+  --path-map "$PWD/build=/workspace/build" \
+  --overwrite \
+  --validate compile
+```
+
+The generated `FakeXXX.cpp` files still replace product `.cpp` files at link time when run
+from Docker. Do not link both a generated fake and the corresponding product implementation
+into the same test target.
+
 ## CLI Options
 
 | Option | Status | Default | Meaning |
@@ -134,14 +192,35 @@ Boolean values must be `true` or `false`. `--strict` and `--best-effort` are mut
 exclusive. Deferred options fail with a `deferred_option` diagnostic instead of being
 silently ignored.
 
-For container-generated compile databases, use `--path-map FROM=TO` to translate
-compile-command paths back to the host checkout. The mapping is applied to compile
-command `directory`, `file`, path-like include/sysroot/forced-include arguments, and
-the validation arguments inherited from the compile database:
+For container-generated or imported compile databases, use `--path-map FROM=TO` to
+translate producer paths to paths visible in the current execution environment. The mapping
+is applied to compile-command `directory`, `file`, compiler paths with directory
+components, path-like include/sysroot/resource-dir/toolchain/forced-include/module
+arguments, and the validation arguments inherited from the compile database. Mapping uses
+longest-prefix matching:
 
 ```sh
 mockfakegen ... --path-map /workspace="$PWD"
 ```
+
+Supported workflows:
+
+- Same-container mode: generate `compile_commands.json` and run `mockfakegen` in the same
+  container paths. This is the highest-fidelity mode and normally needs no `--path-map`.
+- Mapped-container mode: build on the host or another container path, then run the Docker
+  image with stable paths such as `/workspace/project` and `/workspace/build`. Pass separate
+  maps for source root, build root, generated headers, sysroot, and toolchain roots that
+  appear in the database.
+- Imported-db mode: copy a VM-produced build tree and `compile_commands.json` into WSL2 or
+  another Linux host. Run only after every producer absolute path needed by parsing has a
+  `--path-map` and the mapped target exists.
+
+The resolver records preflight diagnostics for path rewrites, unmapped absolute paths,
+missing mapped paths such as generated headers, missing sysroot/resource-dir/toolchain
+inputs, compiler wrappers or missing compiler paths, target triple mismatch, case mismatch,
+case-fold collisions, and risky symlinks. These diagnostics are written to stderr,
+`generation_report.md`, and `manifest.json`; they are the source of truth for deciding
+whether an imported compile database is safe to use.
 
 ## Generated Files
 
@@ -414,6 +493,24 @@ members.
 - `compile_database_not_found`, `compile_database_load_failure`: configure the product
   project with `CMAKE_EXPORT_COMPILE_COMMANDS=ON` and pass the build directory through
   `--build-path`.
+- `compile_database_path_mapped`: an absolute producer path was rewritten by `--path-map`.
+- `compile_database_unmapped_absolute_path`: a compile DB path stayed outside
+  `--project-root`, `--build-path`, and known system roots. Add a specific `--path-map` or
+  mount the path into the runtime environment.
+- `compile_database_mapped_path_missing`: a semantic compile DB input such as an include
+  directory, forced include, sysroot, resource dir, source file, or command directory is
+  missing after path mapping.
+- `compile_database_compiler_missing`, `compile_database_compiler_wrapper`: the compiler
+  recorded in the database is missing or appears to be a wrapper such as ccache/sccache.
+  Use `MOCKFAKEGEN_CXX_COMPILER` for validation and fix mounted toolchain paths for parsing
+  fidelity when needed.
+- `compile_database_target_mismatch`,
+  `compile_database_system_context_assumption`: target or system header context may differ
+  between the producer and the current runtime. Mount/map the producer sysroot, resource dir,
+  and GCC toolchain when parse fidelity depends on them.
+- `compile_database_path_case_mismatch`, `compile_database_case_fold_collision`,
+  `compile_database_symlink_risk`: fix path casing, colliding file names, or symlinks that
+  break when moving between VM/WSL2/Docker filesystems.
 - `real_tu_parse_failure`, `synthetic_tu_parse_failure`: inspect the recorded command and
   stderr summary in the report. Missing include paths usually need to be fixed in the
   product build configuration.

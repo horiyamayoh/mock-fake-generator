@@ -54,6 +54,16 @@ namespace
 		return count;
 	}
 
+	[[nodiscard]] std::string_view
+	SliceBetween(std::string_view text, std::string_view begin_token, std::string_view end_token)
+	{
+		const auto begin = text.find(begin_token);
+		Expect(begin != std::string_view::npos, "begin token should exist");
+		const auto end = text.find(end_token, begin + begin_token.size());
+		Expect(end != std::string_view::npos, "end token should exist");
+		return text.substr(begin, end - begin);
+	}
+
 	[[nodiscard]] std::string ReadText(const std::filesystem::path& path)
 	{
 		std::ifstream stream(path, std::ios::binary);
@@ -1882,9 +1892,11 @@ namespace
 		const auto manifest = ReadText(output_dir / "manifest.json");
 		Expect(Contains(manifest, "\"parse_mode\": \"real-tu\""),
 			   "manifest should record real TU parsing through path map");
-		Expect(Contains(manifest, (product_root / "include").generic_string()),
+		const auto validation_commands =
+			SliceBetween(manifest, "\"validation_commands\": [", "\"classes\": [");
+		Expect(Contains(validation_commands, (product_root / "include").generic_string()),
 			   "manifest validation commands should use host-mapped include path");
-		Expect(!Contains(manifest, "/workspace/"),
+		Expect(!Contains(validation_commands, "/workspace/"),
 			   "manifest validation commands should not retain container paths");
 	}
 

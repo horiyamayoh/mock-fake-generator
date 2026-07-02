@@ -63,6 +63,14 @@ cmake --install build/dev --prefix /tmp/mockfakegen-install
 /tmp/mockfakegen-install/bin/mockfakegen --help
 ```
 
+Build a local Docker image when you want to run the CLI without installing LLVM/Clang
+development packages on the host:
+
+```sh
+docker build -f docker/Dockerfile -t mockfakegen:local .
+docker run --rm mockfakegen:local --help
+```
+
 ## Basic Use
 
 Run the tool against a project root with a build directory that contains
@@ -82,6 +90,9 @@ and generated `MockFakeRuntime.h`. It must not include ket.
 
 For complete CLI option semantics, validation setup, generated file schemas, and a small
 copyable integration example, see [`docs/user_guide.md`](docs/user_guide.md).
+
+For Docker/WSL2 path-map workflows, use [`scripts/mockfakegen-docker`](scripts/mockfakegen-docker)
+or the hardened `docker run` examples in the user guide.
 
 ## Link Substitution
 

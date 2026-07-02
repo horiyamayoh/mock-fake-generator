@@ -7,10 +7,32 @@
 - Install support: `install(TARGETS mockfakegen RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})`.
 - Install smoke: CTest runs `cmake --install` into a temporary prefix and executes the installed
   `mockfakegen --help`.
+- Docker support: `docker/Dockerfile` builds a Release CLI in a build stage and copies only the
+  installed CLI into a runtime stage with Clang 18 and gMock runtime/validation dependencies.
+  The image runs as non-root by default and build-time smoke runs `mockfakegen --help`, fixture
+  generation, and `--validate compile`.
 - Package metadata: CPack/export config packages are intentionally not emitted yet. The current
   distribution scope is a built CLI executable installed from this source tree. Revisit CPack and
   CMake package exports when the project needs binary archives, relocatable SDK metadata, or
   installed libraries.
+
+## Docker image
+
+- Base image: `ubuntu:24.04@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54`
+  (Docker Hub manifest list inspected on 2026-07-02).
+- Package mode: release rebuild mode. Apt package names pin the LLVM major (`clang-18`,
+  `llvm-18-dev`, `libclang-18-dev`, `libllvm18`) while security updates are picked up by
+  rebuilding with the pinned Ubuntu base digest after an intentional digest update.
+- Snapshot mode: not enabled. If bit-reproducible package sets become required, add Ubuntu
+  Snapshot Service configuration and record the snapshot ID here and in `/etc/mockfakegen-image.json`.
+- Runtime validation defaults: `MOCKFAKEGEN_CXX_COMPILER=/usr/bin/clang++-18`,
+  `MOCKFAKEGEN_GMOCK_INCLUDE_DIRS=/usr/include`; the entrypoint discovers static gMock/gtest
+  libraries for `MOCKFAKEGEN_GMOCK_LINK_FILES` when present.
+- Metadata: runtime images include OCI source/description/revision/version/base labels and
+  `/etc/mockfakegen-image.json` with base digest, LLVM major, Ubuntu release, and revision.
+- Hardening docs: `scripts/mockfakegen-docker` and the user guide use read-only source/build
+  mounts, a writable output mount, host uid/gid, `--network=none`, `--cap-drop=ALL`,
+  `--security-opt no-new-privileges`, and tmpfs `/tmp`.
 
 ## LLVM / Clang
 
