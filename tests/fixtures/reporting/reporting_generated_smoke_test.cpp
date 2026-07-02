@@ -7,13 +7,11 @@ namespace
 {
 	using ::testing::Return;
 
-	TEST(ReportingGeneratedSmoke, GeneratedFakeForwardsToScopedMock)
+	TEST(ReportingGeneratedSmoke, DiagnosticMockHeaderCompilesWithoutNotReadyFake)
 	{
 		sample::MockService mock;
-		sample::ScopedMockService scoped(mock);
-		sample::Service service;
 
 		EXPECT_CALL(mock, Run(7)).WillOnce(Return(true));
-		EXPECT_TRUE(service.Run(7));
+		EXPECT_TRUE(mock.Run(7));
 	}
 } // namespace

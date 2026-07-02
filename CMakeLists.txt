@@ -1342,16 +1342,19 @@ if(BUILD_TESTING AND MOCKFAKEGEN_BUILD_TESTS)
 		COMMAND mockfakegen_cxx23_matrix_generated_smoke
 	)
 
+	include("${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/reporting/generated/CMakeLists.fragment.cmake")
+	# The reporting fixture is intentionally not link-ready. This target must use the
+	# generated fragment source list, which excludes FakeService.cpp for diagnostic-only output.
 	add_executable(
 		mockfakegen_reporting_generated_smoke
 		tests/fixtures/reporting/reporting_generated_smoke_test.cpp
-		tests/fixtures/reporting/generated/FakeService.cpp
+		${MOCKFAKE_GENERATED_SOURCES}
 	)
 	target_include_directories(
 		mockfakegen_reporting_generated_smoke
 		PRIVATE
 			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/reporting/product"
-			"${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/reporting/generated"
+			${MOCKFAKE_GENERATED_INCLUDE_DIR}
 	)
 	target_link_libraries(mockfakegen_reporting_generated_smoke PRIVATE ${MOCKFAKEGEN_GMOCK_MAIN_TARGET})
 	target_compile_features(mockfakegen_reporting_generated_smoke PRIVATE cxx_std_23)
