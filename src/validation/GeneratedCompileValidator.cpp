@@ -521,6 +521,26 @@ namespace mockfakegen
 			return tree_root / object_relative_path;
 		}
 
+		[[nodiscard]] std::filesystem::path
+		AllMocksHeaderSmokeSourcePath(const std::filesystem::path& tree_root,
+									  const std::filesystem::path& header_relative_path)
+		{
+			auto source_relative_path =
+				std::filesystem::path("all_mocks_header_smoke") / header_relative_path;
+			source_relative_path.replace_extension(".cpp");
+			return tree_root / source_relative_path;
+		}
+
+		[[nodiscard]] std::filesystem::path
+		AllMocksHeaderObjectPath(const std::filesystem::path& tree_root,
+								 const std::filesystem::path& header_relative_path)
+		{
+			auto object_relative_path =
+				std::filesystem::path("objects/all_mocks_header") / header_relative_path;
+			object_relative_path.replace_extension(".o");
+			return tree_root / object_relative_path;
+		}
+
 		[[nodiscard]] std::string BuildMockHeaderSmokeSource(const GeneratedFile& file)
 		{
 			std::ostringstream out;
@@ -528,6 +548,17 @@ namespace mockfakegen
 				<< "\nnamespace\n"
 				<< "{\n"
 				<< "\tvoid mockfakegen_validate_mock_header() {}\n"
+				<< "} // namespace\n";
+			return out.str();
+		}
+
+		[[nodiscard]] std::string BuildAllMocksHeaderSmokeSource(const GeneratedFile& file)
+		{
+			std::ostringstream out;
+			out << "#include \"" << file.relative_path.generic_string() << "\"\n"
+				<< "\nnamespace\n"
+				<< "{\n"
+				<< "\tvoid mockfakegen_validate_all_mocks_header() {}\n"
 				<< "} // namespace\n";
 			return out.str();
 		}
@@ -997,6 +1028,40 @@ namespace mockfakegen
 			}
 
 			const auto object_path = MockHeaderObjectPath(tree.root, file.relative_path);
+			RunCompileCommand(result,
+							  options,
+							  generated_root,
+							  smoke_source,
+							  object_path,
+							  artifact_path,
+							  ValidationArgsForFile(options, file),
+							  ValidationCompilerForFile(options, file));
+			if (options.mode != ValidationMode::Syntax)
+			{
+				object_paths.push_back(object_path);
+			}
+		}
+
+		for (const auto& file : sorted_files)
+		{
+			if (file.kind != GeneratedFileKind::AllMocksHeader)
+			{
+				continue;
+			}
+
+			const auto smoke_source = AllMocksHeaderSmokeSourcePath(tree.root, file.relative_path);
+			if (!WriteText(smoke_source, BuildAllMocksHeaderSmokeSource(file)))
+			{
+				AddDiagnostic(result,
+							  StageForMode(options.mode),
+							  smoke_source,
+							  artifact_path,
+							  "failed to write AllMocks header smoke source.");
+				tree.keep = options.keep_failed_artifacts;
+				return result;
+			}
+
+			const auto object_path = AllMocksHeaderObjectPath(tree.root, file.relative_path);
 			RunCompileCommand(result,
 							  options,
 							  generated_root,

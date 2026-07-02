@@ -314,7 +314,8 @@ namespace
 
 		Expect(result.ok(), "generated shared-owner output should compile");
 		Expect(!result.skipped, "shared-owner compile validation should not be skipped");
-		Expect(result.commands.size() == 2U, "mock header smoke and fake source should compile");
+		Expect(result.commands.size() == 3U,
+			   "mock header, AllMocks header, and fake source should compile");
 	}
 
 	void LinkValidationBuildsSmokeExecutable()
@@ -496,11 +497,45 @@ namespace
 		const auto result = mockfakegen::ValidateGeneratedOutputCompile(CompileOptions(), files);
 
 		Expect(!result.ok(), "AllMocks.h should not hide a broken mock header");
-		Expect(result.commands.size() == 1U, "broken mock header should fail smoke command");
+		Expect(result.commands.size() == 2U,
+			   "broken mock header and AllMocks smoke commands should run");
 		Expect(result.diagnostics.size() == 1U,
 			   "broken mock header with AllMocks should produce one diagnostic");
 		Expect(Contains(result.diagnostics[0].stderr_summary, "MockBroken.h"),
 			   "diagnostic stderr should mention the directly included broken mock header");
+	}
+
+	void AllMocksHeaderIsCompileValidated()
+	{
+		const std::vector files = {
+			mockfakegen::MakeGeneratedFile("AllMocks.h",
+										   "#pragma once\n"
+										   "#include \"MockAlpha.h\"\n"
+										   "#include \"MockBeta.h\"\n",
+										   mockfakegen::GeneratedFileKind::AllMocksHeader),
+			mockfakegen::MakeGeneratedFile("MockAlpha.h",
+										   "#pragma once\n"
+										   "namespace n { struct Duplicate { int alpha; }; }\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+			mockfakegen::MakeGeneratedFile("MockBeta.h",
+										   "#pragma once\n"
+										   "namespace n { struct Duplicate { double beta; }; }\n",
+										   mockfakegen::GeneratedFileKind::MockHeader),
+		};
+
+		const auto result = mockfakegen::ValidateGeneratedOutputCompile(CompileOptions(), files);
+
+		Expect(!result.ok(), "AllMocks aggregate include failure should fail validation");
+		Expect(result.commands.size() == 3U,
+			   "two individual mock headers and AllMocks should be validated");
+		Expect(result.diagnostics.size() == 1U,
+			   "AllMocks aggregate failure should produce one diagnostic");
+		Expect(result.diagnostics[0].stage == mockfakegen::GeneratedCompileValidationStage::Compile,
+			   "AllMocks aggregate failure should be a compile validation failure");
+		Expect(Contains(result.diagnostics[0].command, "all_mocks_header_smoke"),
+			   "AllMocks failure should come from the aggregate smoke source");
+		Expect(Contains(result.diagnostics[0].stderr_summary, "Duplicate"),
+			   "AllMocks diagnostic should mention the duplicate declaration");
 	}
 
 	void CompileValidationTimesOut()
@@ -710,6 +745,7 @@ int main()
 	NoneValidationSkipsCompiler();
 	CompileValidationReportsCxxFailure();
 	AllMocksDoesNotHideBrokenMockHeader();
+	AllMocksHeaderIsCompileValidated();
 	CompileValidationTimesOut();
 	KeepsFailedArtifactsWhenRequested();
 	InvalidArtifactDirectoryReportsDiagnostic();
