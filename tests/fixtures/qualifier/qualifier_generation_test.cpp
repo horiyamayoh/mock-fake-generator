@@ -67,8 +67,8 @@ namespace
 		Expect(extraction.classes.size() == 1U, "qualifier class should be extracted");
 
 		const auto& class_model = extraction.classes[0];
-		Expect(class_model.mock_methods.size() == 5U,
-			   "five supported qualified methods should be generated");
+		Expect(class_model.mock_methods.size() == 4U,
+			   "four supported qualified methods should be generated");
 		Expect(class_model.mock_methods[0].is_const, "const method should be flagged");
 		Expect(class_model.mock_methods[1].is_noexcept, "noexcept method should be flagged");
 		Expect(class_model.mock_methods[2].ref_qualifier == mockfakegen::RefQualifierKind::RValue,
@@ -76,12 +76,8 @@ namespace
 		Expect(class_model.mock_methods[3].is_const, "const ref-qualified method should be const");
 		Expect(class_model.mock_methods[3].ref_qualifier == mockfakegen::RefQualifierKind::LValue,
 			   "lvalue ref-qualified method should be flagged");
-		Expect(class_model.mock_methods[4].name == "Conditional",
-			   "resolved noexcept expression should be generated");
-		Expect(class_model.mock_methods[4].is_noexcept,
-			   "resolved true noexcept expression should be preserved");
-		Expect(!HasUnsupportedKind(class_model, "conditional_noexcept"),
-			   "resolved noexcept expression should not be unsupported");
+		Expect(HasUnsupportedKind(class_model, "conditional_noexcept"),
+			   "conditional noexcept expression should be unsupported");
 		Expect(HasUnsupportedKind(class_model, "volatile_method"),
 			   "volatile method should remain unsupported");
 

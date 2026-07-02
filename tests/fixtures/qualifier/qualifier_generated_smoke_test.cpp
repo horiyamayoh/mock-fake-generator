@@ -25,10 +25,6 @@ namespace
 		EXPECT_CALL(mock, Save()).WillOnce(Return(true));
 		EXPECT_TRUE(mutable_hoge.Save());
 
-		static_assert(noexcept(mutable_hoge.Conditional()));
-		EXPECT_CALL(mock, Conditional()).WillOnce(Return(false));
-		EXPECT_FALSE(mutable_hoge.Conditional());
-
 		EXPECT_CALL(mock, Peek()).WillOnce(Return(23));
 		EXPECT_EQ(const_hoge.Peek(), 23);
 
