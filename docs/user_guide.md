@@ -300,12 +300,17 @@ The validator uses these optional environment variables:
 ```sh
 MOCKFAKEGEN_CXX_COMPILER=/path/to/c++
 MOCKFAKEGEN_GMOCK_INCLUDE_DIRS=/path/to/googlemock/include\|/path/to/googletest/include
-MOCKFAKEGEN_GMOCK_LINK_FILES=/path/to/libgmock.a\|/path/to/libgtest.a
+MOCKFAKEGEN_GMOCK_LINK_FILES=/path/to/libgmock_main.a\|/path/to/libgmock.a\|/path/to/libgtest.a
 ```
 
 `MOCKFAKEGEN_GMOCK_INCLUDE_DIRS` and `MOCKFAKEGEN_GMOCK_LINK_FILES` accept separated path
-lists. `|` is recommended in shell examples because it avoids ambiguity with Unix path
-names containing `:`.
+lists using `|` or `:` separators. The current parser splits on both separators, so a path
+element containing a literal `|` or `:` cannot be represented in these variables.
+
+When `MOCKFAKEGEN_GMOCK_LINK_FILES` is non-empty, the validator appends exactly those link
+artifacts and does not synthesize a `main()`. Include a main provider such as
+`libgmock_main.a`, or a custom object/library that defines `main`, in addition to the gMock
+and gTest libraries required by your installation.
 
 ## Registry Modes
 
@@ -318,6 +323,23 @@ Generated fakes use `MockFakeRuntime.h` to find the active mock for each type.
   avoid concurrent same-type scopes.
 - `shared-owner`: one process-wide `std::shared_ptr` stack per mock type, protected by a
   mutex. Generated fakes keep a `shared_ptr` copy during mock calls.
+
+For `thread-local` and `global-mutex`, the generated scoped alias takes a mock reference:
+
+```cpp
+MockHoge mock;
+ScopedMockHoge scoped(mock);
+```
+
+For `shared-owner`, the same alias names `ScopedSharedMock` and takes
+`std::shared_ptr<MockHoge>`:
+
+```cpp
+#include <memory>
+
+auto mock = std::make_shared<MockHoge>();
+ScopedMockHoge scoped(mock);
+```
 
 ## Fallback Policies
 
