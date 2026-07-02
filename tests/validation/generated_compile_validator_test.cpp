@@ -607,6 +607,28 @@ namespace
 			"traversal path should not write outside generated root");
 	}
 
+	void ValidationCompilerRunsWithStableCLocale()
+	{
+		TempTree tree;
+		tree.Write("compiler.sh",
+				   "#!/bin/sh\n"
+				   "printf 'LC_ALL=%s\\n' \"$LC_ALL\" >&2\n"
+				   "exit 1\n");
+		std::filesystem::permissions(tree.root() / "compiler.sh",
+									 std::filesystem::perms::owner_exec,
+									 std::filesystem::perm_options::add);
+		auto options = CompileOptions();
+		options.compiler = tree.root() / "compiler.sh";
+
+		const auto result =
+			mockfakegen::ValidateGeneratedOutputCompile(options, HogeGeneratedFiles());
+
+		Expect(!result.ok(), "wrapper compiler failure should fail validation");
+		Expect(!result.diagnostics.empty(), "wrapper compiler failure should produce diagnostic");
+		Expect(Contains(result.diagnostics[0].stderr_summary, "LC_ALL=C"),
+			   "validation compiler should run with stable C locale");
+	}
+
 	void MissingGMockIncludePathIsClear()
 	{
 		auto options = CompileOptions();
@@ -670,6 +692,7 @@ int main()
 	KeepsFailedArtifactsWhenRequested();
 	InvalidArtifactDirectoryReportsDiagnostic();
 	UnsafeGeneratedPathsAreRejectedBeforeStaging();
+	ValidationCompilerRunsWithStableCLocale();
 	MissingGMockIncludePathIsClear();
 	MentioningGMockHeaderDoesNotImplyMissingIncludePath();
 	return 0;

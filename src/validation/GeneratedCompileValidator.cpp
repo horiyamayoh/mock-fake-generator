@@ -7,6 +7,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -368,6 +369,7 @@ namespace mockfakegen
 				(void)::dup2(pipe_fds[1], STDOUT_FILENO);
 				(void)::dup2(pipe_fds[1], STDERR_FILENO);
 				::close(pipe_fds[1]);
+				(void)::setenv("LC_ALL", "C", 1);
 				auto argv = ArgvPointers(arguments);
 				::execvp(argv[0], argv.data());
 				::_exit(127);
