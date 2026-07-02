@@ -221,19 +221,76 @@ namespace mockfakegen
 			return false;
 		}
 
-		[[nodiscard]] std::string FirstAvailableGeneratedName(const clang::DeclContext* context,
-															  std::string default_name,
-															  const std::string& fallback_base)
+		using ReservedGeneratedNames = std::vector<std::pair<std::string, std::string>>;
+
+		[[nodiscard]] std::string NamespaceKey(const std::vector<std::string>& namespaces)
 		{
-			if (!HasNameInDeclContext(context, default_name))
+			std::string key;
+			for (const auto& namespace_part : namespaces)
+			{
+				if (!key.empty())
+				{
+					key += "::";
+				}
+				key += namespace_part;
+			}
+			return key;
+		}
+
+		[[nodiscard]] bool HasReservedGeneratedName(const ReservedGeneratedNames& reserved_names,
+													std::string_view namespace_key,
+													std::string_view name)
+		{
+			return std::any_of(reserved_names.begin(),
+							   reserved_names.end(),
+							   [namespace_key, name](const auto& reserved)
+							   {
+								   return reserved.first == namespace_key &&
+									   reserved.second == name;
+							   });
+		}
+
+		[[nodiscard]] bool HasGeneratedNameCollision(const clang::DeclContext* context,
+													 const ReservedGeneratedNames& reserved_names,
+													 std::string_view namespace_key,
+													 std::string_view name)
+		{
+			return HasNameInDeclContext(context, name) ||
+				HasReservedGeneratedName(reserved_names, namespace_key, name);
+		}
+
+		[[nodiscard]] std::string
+		FirstAvailableGeneratedName(const clang::DeclContext* context,
+									std::string default_name,
+									const std::string& fallback_base,
+									const ReservedGeneratedNames& reserved_names,
+									std::string_view namespace_key)
+		{
+			const auto default_collides_with_product = HasNameInDeclContext(context, default_name);
+			if (!default_collides_with_product &&
+				!HasReservedGeneratedName(reserved_names, namespace_key, default_name))
 			{
 				return default_name;
 			}
 
-			auto candidate = fallback_base;
-			for (int suffix = 2; HasNameInDeclContext(context, candidate); ++suffix)
+			if (default_collides_with_product)
 			{
-				candidate = fallback_base + std::to_string(suffix);
+				auto candidate = fallback_base;
+				for (int suffix = 2;
+					 HasGeneratedNameCollision(context, reserved_names, namespace_key, candidate);
+					 ++suffix)
+				{
+					candidate = fallback_base + std::to_string(suffix);
+				}
+				return candidate;
+			}
+
+			auto candidate = default_name + "2";
+			for (int suffix = 3;
+				 HasGeneratedNameCollision(context, reserved_names, namespace_key, candidate);
+				 ++suffix)
+			{
+				candidate = default_name + std::to_string(suffix);
 			}
 			return candidate;
 		}
@@ -505,13 +562,21 @@ namespace mockfakegen
 				}
 
 				const auto namespaces = NamespaceParts(declaration->getDeclContext());
+				const auto namespace_key = NamespaceKey(namespaces);
 				const auto name = declaration->getNameAsString();
-				const auto mock_name = FirstAvailableGeneratedName(
-					declaration->getDeclContext(), DefaultMockName(name), "MockFake" + name);
+				const auto mock_name = FirstAvailableGeneratedName(declaration->getDeclContext(),
+																   DefaultMockName(name),
+																   "MockFake" + name,
+																   reserved_generated_names_,
+																   namespace_key);
+				reserved_generated_names_.emplace_back(namespace_key, mock_name);
 				const auto scoped_mock_name =
 					FirstAvailableGeneratedName(declaration->getDeclContext(),
 												DefaultScopedMockName(name),
-												"ScopedMockFake" + name);
+												"ScopedMockFake" + name,
+												reserved_generated_names_,
+												namespace_key);
+				reserved_generated_names_.emplace_back(namespace_key, scoped_mock_name);
 				const auto interface_mock = ShouldUseInterfaceMockMode(*declaration);
 				auto class_model = ClassModel{
 					.name = name,
@@ -2075,6 +2140,7 @@ namespace mockfakegen
 			std::filesystem::path target_path_;
 			ClassExtractionOptions options_;
 			ClassExtractionResult result_;
+			ReservedGeneratedNames reserved_generated_names_;
 		};
 	} // namespace
 

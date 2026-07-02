@@ -256,6 +256,7 @@ namespace
 				   "class Service { public: void Run(); };\n"
 				   "class MockService {};\n"
 				   "using ScopedMockService = int;\n"
+				   "class FakeService { public: void Run(); };\n"
 				   "} // namespace app\n");
 
 		const auto result = ParseAndExtract(tree, "include/CollidingNames.h");
@@ -267,6 +268,11 @@ namespace
 			   "mock class name should avoid product declaration collision");
 		Expect(service.scoped_mock_name == "ScopedMockFakeService",
 			   "scoped mock alias should avoid product alias collision");
+		const auto& fake_service = FindClass(result, "FakeService");
+		Expect(fake_service.mock_name == "MockFakeService2",
+			   "mock class name should avoid previously reserved generated name");
+		Expect(fake_service.scoped_mock_name == "ScopedMockFakeService2",
+			   "scoped mock alias should avoid previously reserved generated alias");
 	}
 
 	void RecordsClassTemplateSpecializationsAsUnsupported()
