@@ -629,6 +629,14 @@ namespace mockfakegen
 			for (const auto& diagnostic : SortedRunDiagnostics(diagnostics))
 			{
 				err << ToString(diagnostic.severity) << " [" << diagnostic.component << "]";
+				if (!diagnostic.code.empty())
+				{
+					err << " [" << diagnostic.code << "]";
+				}
+				if (!diagnostic.kind.empty())
+				{
+					err << " [" << diagnostic.kind << "]";
+				}
 				const auto path = !diagnostic.source_range.begin.file.empty() &&
 						diagnostic.source_range.begin.line != 0U
 					? diagnostic.source_range.begin.file
@@ -660,6 +668,13 @@ namespace mockfakegen
 					err << "  stderr:\n" << diagnostic.stderr_summary << '\n';
 				}
 			}
+		}
+
+		void PrintWriterDiagnostics(std::ostream& err, const OutputWriteResult& write_result)
+		{
+			std::vector<RunDiagnostic> writer_diagnostics;
+			AppendRunDiagnostics(writer_diagnostics, write_result.diagnostics);
+			PrintRunDiagnostics(err, writer_diagnostics);
 		}
 
 		void PrintOutputSummary(std::ostream& out, const OutputWriteResult& result)
@@ -965,6 +980,7 @@ namespace mockfakegen
 						.overwrite = result.config->overwrite,
 					},
 					diagnostic_files);
+				PrintWriterDiagnostics(err, write_result);
 				PrintOutputSummary(out, write_result);
 			}
 			return 2;
@@ -1009,6 +1025,7 @@ namespace mockfakegen
 					.overwrite = config.overwrite,
 				},
 				diagnostic_files);
+			PrintWriterDiagnostics(err, write_result);
 			PrintOutputSummary(out, write_result);
 			return 1;
 		}
@@ -1072,6 +1089,7 @@ namespace mockfakegen
 					.overwrite = config.overwrite,
 				},
 				diagnostic_files);
+			PrintWriterDiagnostics(err, write_result);
 			PrintOutputSummary(out, write_result);
 			return 1;
 		}

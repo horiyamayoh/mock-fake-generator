@@ -954,6 +954,32 @@ namespace
 			   "usage should include build path option");
 	}
 
+	void HelpValueErrorDoesNotRequirePaths()
+	{
+		const std::vector<std::string> args{"mockfakegen", "--help=false"};
+		const auto result = mockfakegen::ParseConfig(args);
+
+		Expect(result.help_requested, "invalid help value should still suppress required paths");
+		Expect(result.errors.size() == 1U, "invalid help value should be the only error");
+		Expect(result.errors[0].code == mockfakegen::ConfigErrorCode::InvalidOptionValue,
+			   "invalid help value should report value error");
+		Expect(result.errors[0].option == "--help", "invalid help value should name help option");
+
+		const char* const argv[] = {"mockfakegen", "--help=false"};
+		std::ostringstream out;
+		std::ostringstream err;
+		const auto exit_code = mockfakegen::RunCli(2, argv, out, err);
+
+		Expect(exit_code == 2, "invalid help value should return config failure");
+		Expect(out.str().empty(), "invalid help value should not write stdout usage");
+		Expect(Contains(err.str(), "[invalid_option_value]"),
+			   "invalid help value should print stable code");
+		Expect(Contains(err.str(), "[--help]"), "invalid help value should print option kind");
+		Expect(!Contains(err.str(), "missing_required_option"),
+			   "invalid help value should not also report missing required paths");
+		Expect(Contains(err.str(), "Usage:"), "invalid help value should print usage to stderr");
+	}
+
 	void RunCliHelpWithErrorsPrintsErrorsAndUsage()
 	{
 		const char* const args[] = {"mockfakegen", "--help", "--jobs", "0"};
@@ -966,6 +992,10 @@ namespace
 		Expect(out.str().empty(), "help with errors should not write usage to stdout");
 		Expect(Contains(err.str(), "--jobs must be a positive integer."),
 			   "help with errors should print diagnostic");
+		Expect(Contains(err.str(), "[invalid_option_value]"),
+			   "help with errors should print stable diagnostic code");
+		Expect(Contains(err.str(), "[--jobs]"),
+			   "help with errors should print stable diagnostic kind");
 		Expect(Contains(err.str(), "Usage:"), "help with errors should print usage to stderr");
 	}
 
@@ -1020,6 +1050,50 @@ namespace
 			   "report should include stable deferred option code");
 	}
 
+	void RunCliConfigArtifactWriteFailurePrintsWriterDiagnostic()
+	{
+		TempTree tree;
+		const auto project_root = tree.root() / "product";
+		const auto input_root = project_root / "include";
+		const auto output_file = tree.root() / "generated";
+		const auto build_path = tree.root() / "build";
+		std::filesystem::create_directories(input_root);
+		std::filesystem::create_directories(build_path);
+		WriteText(output_file, "not a directory\n");
+		const std::vector<std::string> args = {
+			"mockfakegen",
+			"--input-root",
+			input_root.string(),
+			"--output-dir",
+			output_file.string(),
+			"--build-path",
+			build_path.string(),
+			"--project-root",
+			project_root.string(),
+			"--config",
+			"mockfakegen.yml",
+		};
+		std::vector<const char*> argv;
+		argv.reserve(args.size());
+		for (const auto& arg : args)
+		{
+			argv.push_back(arg.c_str());
+		}
+		std::ostringstream out;
+		std::ostringstream err;
+
+		const auto exit_code =
+			mockfakegen::RunCli(static_cast<int>(argv.size()), argv.data(), out, err);
+
+		Expect(exit_code == 2, "config error with artifact write failure should stay config error");
+		Expect(Contains(err.str(), "[config] [deferred_option] [--config]"),
+			   "config diagnostic should include stable code and kind");
+		Expect(Contains(err.str(), "[writer] [output_directory_failure] [create_output_dir]"),
+			   "artifact write failure should print stable writer code and kind");
+		Expect(Contains(err.str(), "failed to create output directory"),
+			   "artifact write failure should print writer reason");
+	}
+
 	void RunCliReturnsDeterministicExitCodes()
 	{
 		const char* const help_args[] = {"mockfakegen", "--help"};
@@ -1037,6 +1111,10 @@ namespace
 		Expect(invalid_out.str().empty(), "invalid config should not write stdout");
 		Expect(invalid_err.str().find("--jobs must be a positive integer.") != std::string::npos,
 			   "invalid config should print jobs diagnostic");
+		Expect(Contains(invalid_err.str(), "[invalid_option_value]"),
+			   "invalid config should print stable diagnostic code");
+		Expect(Contains(invalid_err.str(), "[--jobs]"),
+			   "invalid config should print stable diagnostic kind");
 	}
 } // namespace
 
@@ -1082,8 +1160,10 @@ int main()
 	RunCliRejectsSymlinkedInputRootEscapeBeforeScanning();
 	RunCliRejectsOutputDirSameAsInputRootBeforeScanning();
 	HelpDoesNotRequirePaths();
+	HelpValueErrorDoesNotRequirePaths();
 	RunCliHelpWithErrorsPrintsErrorsAndUsage();
 	RunCliConfigErrorsEmitDiagnosticArtifacts();
+	RunCliConfigArtifactWriteFailurePrintsWriterDiagnostic();
 	RunCliReturnsDeterministicExitCodes();
 	return 0;
 }

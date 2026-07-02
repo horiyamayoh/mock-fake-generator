@@ -411,6 +411,10 @@ namespace mockfakegen
 			{
 				if (inline_value.has_value())
 				{
+					if (option == kHelpOption)
+					{
+						result.help_requested = true;
+					}
 					AddError(result.errors,
 							 ConfigErrorCode::InvalidOptionValue,
 							 option,
