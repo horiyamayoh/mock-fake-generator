@@ -355,10 +355,18 @@ namespace mockfakegen
 	ParameterModel TypeSpellingService::SpellParameter(const clang::ParmVarDecl& parameter,
 													   std::size_t parameter_index) const
 	{
-		const auto type = SpellType(parameter.getType());
 		const auto original_name = parameter.getNameAsString();
 		const auto generated_name =
 			original_name.empty() ? "arg" + std::to_string(parameter_index) : original_name;
+		return SpellParameterWithName(parameter, generated_name);
+	}
+
+	ParameterModel
+	TypeSpellingService::SpellParameterWithName(const clang::ParmVarDecl& parameter,
+												std::string_view generated_name) const
+	{
+		const auto type = SpellType(parameter.getType());
+		const auto original_name = parameter.getNameAsString();
 		return ParameterModel{
 			.type_spelling = type.spelling,
 			.gmock_type_spelling = type.gmock_spelling,
@@ -366,7 +374,7 @@ namespace mockfakegen
 				? SpellDeclaration(parameter.getType(), generated_name)
 				: JoinTypeAndName(type.spelling, generated_name),
 			.original_name = original_name,
-			.generated_name = generated_name,
+			.generated_name = std::string(generated_name),
 			.has_default_argument = parameter.hasDefaultArg(),
 			.is_rvalue_ref = parameter.getType()->isRValueReferenceType(),
 			.is_nonconst_by_value = IsNonConstByValue(parameter.getType()),

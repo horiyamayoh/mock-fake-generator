@@ -33,6 +33,8 @@ namespace mockfakegen
 												   std::string_view name) const;
 		[[nodiscard]] ParameterModel SpellParameter(const clang::ParmVarDecl& parameter,
 													std::size_t parameter_index) const;
+		[[nodiscard]] ParameterModel SpellParameterWithName(const clang::ParmVarDecl& parameter,
+															std::string_view generated_name) const;
 
 		[[nodiscard]] static bool NeedsDeclaratorAwareSpelling(clang::QualType type);
 		[[nodiscard]] static bool NeedsGMockParens(std::string_view spelling);

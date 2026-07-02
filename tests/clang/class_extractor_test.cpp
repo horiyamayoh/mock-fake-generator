@@ -539,6 +539,35 @@ namespace
 			   "private/protected methods should be recorded as unsupported");
 	}
 
+	void SynthesizesUniqueUnnamedParameterNames()
+	{
+		TempTree tree;
+		tree.Write("include/Parameters.h",
+				   "#pragma once\n"
+				   "class Parameters {\n"
+				   "public:\n"
+				   "  void Set(int arg1, int, int arg3, int);\n"
+				   "};\n");
+
+		const auto result = ParseAndExtract(tree, "include/Parameters.h");
+
+		Expect(result.classes.size() == 1U, "parameter fixture class should be extracted");
+		const auto& method = result.classes[0].mock_methods[0];
+		Expect(method.parameters.size() == 4U, "all parameters should be extracted");
+		Expect(method.parameters[0].generated_name == "arg1",
+			   "existing first parameter name should be preserved");
+		Expect(method.parameters[1].generated_name == "arg1_2",
+			   "unnamed parameter should avoid colliding with arg1");
+		Expect(method.parameters[1].declaration_spelling == "int arg1_2",
+			   "renamed parameter declaration should use unique name");
+		Expect(method.parameters[2].generated_name == "arg3",
+			   "existing third parameter name should be preserved");
+		Expect(method.parameters[3].generated_name == "arg3_2",
+			   "unnamed parameter should avoid colliding with arg3");
+		Expect(method.parameters[3].declaration_spelling == "int arg3_2",
+			   "second renamed parameter declaration should use unique name");
+	}
+
 	void RecordsUnsupportedMethodConstructs()
 	{
 		TempTree tree;
@@ -1074,6 +1103,7 @@ int main()
 	ReportsUnsupportedTypeSpellingCases();
 	ReportsPrivateAliasesAndTemplateArguments();
 	ExtractsPublicMethodsAndQualifiersInDeclarationOrder();
+	SynthesizesUniqueUnnamedParameterNames();
 	RecordsUnsupportedMethodConstructs();
 	ExtractsSpecialMembersWhenEnabled();
 	ReportsUnsafeSpecialMemberConstructor();

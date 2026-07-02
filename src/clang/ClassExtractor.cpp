@@ -1544,12 +1544,43 @@ namespace mockfakegen
 			[[nodiscard]] std::vector<ParameterModel>
 			BuildParameters(const clang::FunctionDecl& function) const
 			{
+				std::vector<std::string> reserved_names;
+				reserved_names.reserve(function.parameters().size() * 2U);
+				for (const auto* parameter : function.parameters())
+				{
+					if (parameter == nullptr)
+					{
+						continue;
+					}
+					const auto name = parameter->getNameAsString();
+					if (!name.empty())
+					{
+						reserved_names.push_back(name);
+					}
+				}
+
 				std::vector<ParameterModel> parameters;
 				parameters.reserve(function.parameters().size());
 				for (std::size_t index = 0U; index < function.parameters().size(); ++index)
 				{
 					const auto* parameter = function.parameters()[index];
-					parameters.push_back(type_spelling_.SpellParameter(*parameter, index));
+					auto generated_name = parameter->getNameAsString();
+					if (generated_name.empty())
+					{
+						const auto base = "arg" + std::to_string(index);
+						generated_name = base;
+						for (std::size_t suffix = 2U;
+							 std::find(reserved_names.begin(),
+									   reserved_names.end(),
+									   generated_name) != reserved_names.end();
+							 ++suffix)
+						{
+							generated_name = base + "_" + std::to_string(suffix);
+						}
+					}
+					reserved_names.push_back(generated_name);
+					parameters.push_back(
+						type_spelling_.SpellParameterWithName(*parameter, generated_name));
 				}
 				return parameters;
 			}
