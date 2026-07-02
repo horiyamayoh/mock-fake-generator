@@ -33,18 +33,24 @@ namespace mockfake
 	template <typename Mock>
 	class MockRegistry
 	{
+		struct Entry
+		{
+			Mock* mock;
+			const void* scope_token;
+		};
+
 	  public:
-		static void Push(Mock& mock)
+		static void Push(Mock& mock, const void* scope_token)
 		{
 			std::lock_guard<std::mutex> lock(Mutex());
-			Stack().push_back(&mock);
+			Stack().push_back(Entry{&mock, scope_token});
 		}
 
-		static void Pop(Mock& mock) noexcept
+		static void Pop(const void* scope_token) noexcept
 		{
 			std::lock_guard<std::mutex> lock(Mutex());
 			auto& stack = Stack();
-			if (stack.empty() || stack.back() != &mock)
+			if (stack.empty() || stack.back().scope_token != scope_token)
 			{
 				detail::AbortWithMessage("mockfake: ScopedMock destruction order mismatch");
 			}
@@ -59,7 +65,7 @@ namespace mockfake
 			{
 				return nullptr;
 			}
-			return stack.back();
+			return stack.back().mock;
 		}
 
 	  private:
@@ -69,9 +75,9 @@ namespace mockfake
 			return mutex;
 		}
 
-		[[nodiscard]] static std::vector<Mock*>& Stack()
+		[[nodiscard]] static std::vector<Entry>& Stack()
 		{
-			static std::vector<Mock*> stack;
+			static std::vector<Entry> stack;
 			return stack;
 		}
 	};
@@ -80,9 +86,9 @@ namespace mockfake
 	class ScopedMock
 	{
 	  public:
-		explicit ScopedMock(Mock& mock) : mock_(&mock)
+		explicit ScopedMock(Mock& mock)
 		{
-			MockRegistry<Mock>::Push(mock);
+			MockRegistry<Mock>::Push(mock, this);
 		}
 
 		ScopedMock(const ScopedMock&) = delete;
@@ -93,11 +99,8 @@ namespace mockfake
 
 		~ScopedMock() noexcept
 		{
-			MockRegistry<Mock>::Pop(*mock_);
+			MockRegistry<Mock>::Pop(this);
 		}
-
-	  private:
-		Mock* mock_;
 	};
 
 	template <typename Mock>

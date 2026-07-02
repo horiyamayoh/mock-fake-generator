@@ -48,6 +48,23 @@ namespace
 		EXPECT_EQ(mockfake::CurrentMock<MockThing>(), nullptr);
 	}
 
+	TEST(MockFakeRuntimeHeaderSmoke, DestructionOrderMismatchUsesScopeIdentityNotMockPointer)
+	{
+		::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+		MockThing mock{3};
+		std::optional<mockfake::ScopedMock<MockThing>> outer_scope;
+		std::optional<mockfake::ScopedMock<MockThing>> inner_scope;
+		outer_scope.emplace(mock);
+		inner_scope.emplace(mock);
+
+		EXPECT_DEATH(outer_scope.reset(), "ScopedMock destruction order mismatch");
+
+		inner_scope.reset();
+		outer_scope.reset();
+		EXPECT_EQ(mockfake::CurrentMock<MockThing>(), nullptr);
+	}
+
 	TEST(MockFakeRuntimeHeaderSmoke, MissingMockReturnAborts)
 	{
 		::testing::FLAGS_gtest_death_test_style = "threadsafe";

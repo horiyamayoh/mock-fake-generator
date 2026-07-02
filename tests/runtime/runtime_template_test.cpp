@@ -43,8 +43,10 @@ namespace
 			   "runtime generated file should not have source class");
 		Expect(Contains(file.content, "template <typename Mock>"),
 			   "runtime should define templates");
-		Expect(Contains(file.content, "thread_local std::vector<Mock*> stack;"),
+		Expect(Contains(file.content, "thread_local std::vector<Entry> stack;"),
 			   "runtime should use thread-local stack");
+		Expect(Contains(file.content, "const void* scope_token"),
+			   "runtime should distinguish nested scopes by scope identity");
 		Expect(Contains(file.content, "ScopedMock destruction order mismatch"),
 			   "runtime should detect destruction order mismatch");
 		Expect(Contains(file.content, "MissingMockReturn"),
@@ -68,8 +70,10 @@ namespace
 		Expect(Contains(file.content, "#include <mutex>"), "global runtime should include mutex");
 		Expect(Contains(file.content, "static std::mutex mutex;"),
 			   "global runtime should use a static mutex");
-		Expect(Contains(file.content, "static std::vector<Mock*> stack;"),
+		Expect(Contains(file.content, "static std::vector<Entry> stack;"),
 			   "global runtime should use a process-global stack");
+		Expect(Contains(file.content, "const void* scope_token"),
+			   "global runtime should distinguish nested scopes by scope identity");
 		Expect(!Contains(file.content, "thread_local"),
 			   "global runtime should not use thread-local storage");
 		Expect(!Contains(file.content, "ket::"), "global runtime should not contain ket namespace");
