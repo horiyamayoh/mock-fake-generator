@@ -30,6 +30,12 @@
   libraries for `MOCKFAKEGEN_GMOCK_LINK_FILES` when present.
 - Metadata: runtime images include OCI source/description/revision/version/base labels and
   `/etc/mockfakegen-image.json` with base digest, LLVM major, Ubuntu release, and revision.
+- Publishing: release tags and manual dispatch use `.github/workflows/release-container.yml` to
+  push `ghcr.io/horiyamayoh/mockfakegen` with semver, `sha-<shortsha>`,
+  `llvm18-ubuntu24.04`, and release-only `latest` tags. The workflow enables BuildKit SBOM and
+  provenance attestations and signs the pushed digest with keyless cosign.
+- GHCR permissions: normal PR/push CI has `contents: read`; release publish has
+  `contents: read`, `packages: write`, `id-token: write`, and `attestations: write`.
 - Hardening docs: `scripts/mockfakegen-docker` and the user guide use read-only source/build
   mounts, a writable output mount, host uid/gid, `--network=none`, `--cap-drop=ALL`,
   `--security-opt no-new-privileges`, and tmpfs `/tmp`.

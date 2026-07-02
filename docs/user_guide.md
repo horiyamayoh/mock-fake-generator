@@ -104,6 +104,15 @@ default, and sets `MOCKFAKEGEN_CXX_COMPILER=/usr/bin/clang++-18` plus the defaul
 include path. The entrypoint discovers `libgmock.a` and `libgtest.a` for `--validate link`
 when the distro package layout exposes them under `/usr/lib`.
 
+Release tags publish `ghcr.io/horiyamayoh/mockfakegen` with tags such as `vX.Y.Z`,
+`vX.Y`, `sha-<shortsha>`, `llvm18-ubuntu24.04`, and `latest` for release tags only. For
+repeatable automation, pin the digest shown by GHCR instead of a moving tag:
+
+```sh
+docker pull ghcr.io/horiyamayoh/mockfakegen@sha256:<digest>
+docker run --rm ghcr.io/horiyamayoh/mockfakegen@sha256:<digest> --help
+```
+
 For host projects, prefer the wrapper. It mounts source and build trees read-only, mounts
 only the generated output directory read-write, uses the host uid/gid, disables networking,
 drops capabilities, and injects the required path maps:

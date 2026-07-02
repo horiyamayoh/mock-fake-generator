@@ -71,6 +71,14 @@ docker build -f docker/Dockerfile -t mockfakegen:local .
 docker run --rm mockfakegen:local --help
 ```
 
+Release tags publish `ghcr.io/horiyamayoh/mockfakegen`. Prefer digest pulls in pinned
+automation:
+
+```sh
+docker pull ghcr.io/horiyamayoh/mockfakegen@sha256:<digest>
+docker run --rm ghcr.io/horiyamayoh/mockfakegen@sha256:<digest> --help
+```
+
 ## Basic Use
 
 Run the tool against a project root with a build directory that contains
