@@ -152,6 +152,8 @@ namespace mockfakegen
 				return "nested_class";
 			case UnsupportedReasonCode::AnonymousNamespace:
 				return "anonymous_namespace";
+			case UnsupportedReasonCode::StructRecord:
+				return "struct_record";
 			case UnsupportedReasonCode::StaticDataMember:
 				return "static_data_member";
 			case UnsupportedReasonCode::InterfaceConstruct:

@@ -117,7 +117,7 @@ namespace
 			   "namespace parts should be extracted");
 	}
 
-	void SkipsForwardDeclarationAnonymousStructAndSystemHeaders()
+	void RecordsTopLevelStructAsUnsupported()
 	{
 		TempTree tree;
 		tree.Write("include/Mixed.h",
@@ -133,6 +133,13 @@ namespace
 		Expect(result.classes.size() == 1U,
 			   "only concrete named class definitions from target header should be extracted");
 		Expect(result.classes[0].qualified_name == "Defined", "defined class should be extracted");
+		Expect(result.unsupported_items.size() == 1U,
+			   "top-level struct should be recorded unsupported");
+		Expect(result.unsupported_items[0].kind == "struct_record",
+			   "unsupported kind should identify struct");
+		Expect(result.unsupported_items[0].name == "StructOptInLater",
+			   "unsupported item should record struct name");
+		Expect(!result.diagnostics.empty(), "unsupported struct should emit diagnostics");
 	}
 
 	void IgnoresDefaultedSpecialMembersWithoutFakeSpecialMembers()
@@ -1051,7 +1058,7 @@ int main()
 	ExtractsGlobalClass();
 	ExtractsNamespacedClass();
 	AvoidsGeneratedNameCollisionsInProductScope();
-	SkipsForwardDeclarationAnonymousStructAndSystemHeaders();
+	RecordsTopLevelStructAsUnsupported();
 	IgnoresDefaultedSpecialMembersWithoutFakeSpecialMembers();
 	RecordsClassTemplateAsUnsupported();
 	RecordsClassTemplateSpecializationsAsUnsupported();

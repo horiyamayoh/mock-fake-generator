@@ -494,6 +494,11 @@ namespace mockfakegen
 					RecordUnsupportedAnonymousNamespaceClass(*declaration);
 					return true;
 				}
+				if (IsUnsupportedTopLevelStruct(declaration))
+				{
+					RecordUnsupportedTopLevelStruct(*declaration);
+					return true;
+				}
 				if (!ShouldExtract(declaration))
 				{
 					return true;
@@ -623,6 +628,32 @@ namespace mockfakegen
 					return false;
 				}
 
+				return IsInTargetHeader(declaration);
+			}
+
+			[[nodiscard]] bool
+			IsUnsupportedTopLevelStruct(const clang::CXXRecordDecl* declaration) const
+			{
+				if (declaration->isImplicit() || !declaration->isThisDeclarationADefinition() ||
+					!declaration->isStruct())
+				{
+					return false;
+				}
+				if (declaration->getDescribedClassTemplate() != nullptr ||
+					llvm::isa<clang::ClassTemplateSpecializationDecl>(declaration))
+				{
+					return false;
+				}
+				if (declaration->getDeclContext() != nullptr &&
+					declaration->getDeclContext()->isRecord())
+				{
+					return false;
+				}
+				if (declaration->getIdentifier() == nullptr ||
+					declaration->getNameAsString().empty())
+				{
+					return false;
+				}
 				return IsInTargetHeader(declaration);
 			}
 
@@ -1904,6 +1935,24 @@ namespace mockfakegen
 							  "link-replaced",
 					.suggested_action =
 						"move it into a named namespace or provide a hand-authored fake",
+					.source_range = ToSourceRange(source_manager_, declaration.getSourceRange()),
+				};
+				result_.diagnostics.push_back(UnsupportedDiagnostic(item));
+				result_.unsupported_items.push_back(std::move(item));
+			}
+
+			void RecordUnsupportedTopLevelStruct(const clang::CXXRecordDecl& declaration)
+			{
+				const auto name = declaration.getQualifiedNameAsString();
+				auto item = UnsupportedItem{
+					.reason_code = UnsupportedReasonCode::StructRecord,
+					.kind = "struct_record",
+					.class_name = name,
+					.name = declaration.getNameAsString(),
+					.member_signature = name,
+					.reason = "struct declaration generation is deferred; --include-struct true "
+							  "is not implemented",
+					.suggested_action = "convert the API to class or provide a hand-authored mock",
 					.source_range = ToSourceRange(source_manager_, declaration.getSourceRange()),
 				};
 				result_.diagnostics.push_back(UnsupportedDiagnostic(item));

@@ -57,6 +57,7 @@ namespace mockfakegen
 		PrivateNestedType,
 		NestedClass,
 		AnonymousNamespace,
+		StructRecord,
 		StaticDataMember,
 		InterfaceConstruct,
 		UnsafeParameterForwarding,
