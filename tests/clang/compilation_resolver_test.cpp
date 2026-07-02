@@ -220,6 +220,19 @@ namespace
 		return false;
 	}
 
+	[[nodiscard]] bool HasUnsupportedKind(const mockfakegen::ClassModel& class_model,
+										  std::string_view kind)
+	{
+		for (const auto& item : class_model.unsupported_items)
+		{
+			if (item.kind == kind)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	[[nodiscard]] const mockfakegen::CompilationResolverDiagnostic*
 	FindDiagnostic(const std::vector<mockfakegen::CompilationResolverDiagnostic>& diagnostics,
 				   mockfakegen::CompilationResolverDiagnosticCode code)
@@ -258,7 +271,9 @@ namespace
 				   "#error expected real TU compile flag\n"
 				   "#endif\n"
 				   "class RealService { public: int Value(); };\n");
-		tree.Write("src/real.cpp", "#include \"RealService.h\"\n");
+		tree.Write("src/real.cpp",
+				   "#include \"RealService.h\"\n"
+				   "int RealService::Value() { return 42; }\n");
 
 		const auto source = tree.root() / "src/real.cpp";
 		WriteCompileCommands(tree,
@@ -290,6 +305,8 @@ namespace
 		Expect(result.project.classes.size() == 1U, "one class should be extracted");
 		Expect(result.project.classes[0].qualified_name == "RealService",
 			   "real TU class should be extracted");
+		Expect(!HasUnsupportedKind(result.project.classes[0], "inline_body"),
+			   "product source body should not be treated as header-included inline body");
 		Expect(result.project.classes[0].source_header.parsed_by_real_tu,
 			   "class source header should record real TU parse mode");
 		Expect(result.parse_attempts.size() == 1U, "real TU parse attempt should be reportable");

@@ -675,16 +675,17 @@ namespace mockfakegen
 				return false;
 			}
 
-			[[nodiscard]] bool IsInTargetHeader(const clang::Decl* declaration) const
+			[[nodiscard]] bool IsLocationInTargetHeader(clang::SourceLocation location) const
 			{
-				const auto location = source_manager_.getExpansionLoc(declaration->getLocation());
-				if (location.isInvalid() || source_manager_.isInSystemHeader(location))
+				const auto expansion_location = source_manager_.getExpansionLoc(location);
+				if (expansion_location.isInvalid() ||
+					source_manager_.isInSystemHeader(expansion_location))
 				{
 					return false;
 				}
 
-				if (const auto file_entry_ref =
-						source_manager_.getFileEntryRefForID(source_manager_.getFileID(location)))
+				if (const auto file_entry_ref = source_manager_.getFileEntryRefForID(
+						source_manager_.getFileID(expansion_location)))
 				{
 					const auto real_path = file_entry_ref->getFileEntry().tryGetRealPathName();
 					if (!real_path.empty() && AbsoluteNormalized(real_path.str()) == target_path_)
@@ -697,7 +698,7 @@ namespace mockfakegen
 					}
 				}
 
-				const auto filename = source_manager_.getFilename(location);
+				const auto filename = source_manager_.getFilename(expansion_location);
 				if (filename.empty())
 				{
 					return false;
@@ -706,12 +707,48 @@ namespace mockfakegen
 				return AbsoluteNormalized(filename.str()) == target_path_;
 			}
 
+			[[nodiscard]] bool IsInTargetHeader(const clang::Decl* declaration) const
+			{
+				return IsLocationInTargetHeader(declaration->getLocation());
+			}
+
+			[[nodiscard]] bool IsInTargetHeaderIncludeGraph(clang::SourceLocation location) const
+			{
+				auto expansion_location = source_manager_.getExpansionLoc(location);
+				if (expansion_location.isInvalid() ||
+					source_manager_.isInSystemHeader(expansion_location))
+				{
+					return false;
+				}
+				if (IsLocationInTargetHeader(expansion_location))
+				{
+					return true;
+				}
+
+				auto file_id = source_manager_.getFileID(expansion_location);
+				for (;;)
+				{
+					const auto include_location = source_manager_.getIncludeLoc(file_id);
+					if (include_location.isInvalid())
+					{
+						return false;
+					}
+					if (IsLocationInTargetHeader(include_location))
+					{
+						return true;
+					}
+					file_id = source_manager_.getFileID(
+						source_manager_.getExpansionLoc(include_location));
+				}
+			}
+
 			[[nodiscard]] bool IsMacroOrigin(const clang::Decl& declaration) const
 			{
 				return declaration.getLocation().isMacroID();
 			}
 
-			[[nodiscard]] bool HasBodyInTargetHeader(const clang::FunctionDecl& function) const
+			[[nodiscard]] bool
+			HasBodyInTargetHeaderIncludeGraph(const clang::FunctionDecl& function) const
 			{
 				const clang::FunctionDecl* definition = nullptr;
 				if (!function.hasBody(definition) || definition == nullptr)
@@ -719,7 +756,7 @@ namespace mockfakegen
 					return false;
 				}
 
-				return IsInTargetHeader(definition);
+				return IsInTargetHeaderIncludeGraph(definition->getLocation());
 			}
 
 			[[nodiscard]] bool HasUnsupportedAttributes(const clang::Decl& declaration) const
@@ -1250,7 +1287,7 @@ namespace mockfakegen
 												"method has attributes that are not supported");
 						continue;
 					}
-					if (HasBodyInTargetHeader(*method))
+					if (HasBodyInTargetHeaderIncludeGraph(*method))
 					{
 						RecordUnsupportedMethod(class_model,
 												*method,
@@ -1619,7 +1656,7 @@ namespace mockfakegen
 											type_issue->reason);
 					return;
 				}
-				if (HasBodyInTargetHeader(constructor))
+				if (HasBodyInTargetHeaderIncludeGraph(constructor))
 				{
 					RecordUnsupportedMethod(class_model,
 											constructor,
@@ -1696,7 +1733,7 @@ namespace mockfakegen
 											"destructor exception specification is not supported");
 					return;
 				}
-				if (HasBodyInTargetHeader(destructor))
+				if (HasBodyInTargetHeaderIncludeGraph(destructor))
 				{
 					RecordUnsupportedMethod(class_model,
 											destructor,

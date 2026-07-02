@@ -326,9 +326,14 @@ namespace
 				   "class OutOfClassInline {\n"
 				   "public:\n"
 				   "  void HeaderBody();\n"
+				   "  void IncludedBody();\n"
 				   "  void Supported();\n"
 				   "};\n"
-				   "inline void OutOfClassInline::HeaderBody() {}\n");
+				   "inline void OutOfClassInline::HeaderBody() {}\n"
+				   "#include \"OutOfClassInline.inl\"\n");
+		tree.Write("include/OutOfClassInline.inl",
+				   "#pragma once\n"
+				   "inline void OutOfClassInline::IncludedBody() {}\n");
 
 		const auto result = ParseAndExtract(tree, "include/OutOfClassInline.h");
 
@@ -338,8 +343,8 @@ namespace
 			   "header-local out-of-class definition should not be generated");
 		Expect(class_model.mock_methods[0].name == "Supported",
 			   "declaration-only method should still be generated");
-		Expect(HasUnsupportedKind(class_model, "inline_body"),
-			   "out-of-class inline definition should be reported as inline_body");
+		Expect(UnsupportedKindCount(class_model, "inline_body") == 2U,
+			   "header-local and included inline definitions should be reported as inline_body");
 	}
 
 	void ReportsMacroOriginMethod()
